@@ -1,0 +1,157 @@
+#--------------------------------------------------------------
+CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0 FATAL_ERROR)
+
+IF(POLICY CMP0053)
+  CMAKE_POLICY(SET CMP0053 NEW) # CMake 3.1
+ENDIF()
+
+PROJECT(StreamVorti VERSION 1.0.0)
+
+
+# Set project's CMake modules path
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules")
+
+# Library compilation options.
+OPTION(STREAMVORTI_BUILD_SHARED_LIBS "Build as shared library" OFF )
+OPTION(STREAMVORTI_BUILD_STATIC_LIBS "Build as static library" ON )
+
+# Set the version of C++.
+SET(CMAKE_CXX_STANDARD 14)
+
+
+# Set additional C++ flags for supported compilers.
+IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Ob2")
+ELSEIF (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
+ELSEIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
+ENDIF ()
+
+# Include path to the headers of StreamVorti.
+INCLUDE_DIRECTORIES( ${CMAKE_SOURCE_DIR}/include )
+
+
+# Set the headers of the StreamVorti library.
+SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/stream_vorti.hpp )
+
+
+# Find dependencies of StreamVorti.
+# -------------------------
+
+# Find CGAL.
+FIND_PACKAGE(CGAL  REQUIRED COMPONENTS Core)
+INCLUDE(${CGAL_USE_FILE})
+
+# Find Eigen
+FIND_PACKAGE(Eigen3  REQUIRED)
+INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIRS})
+
+FIND_PACKAGE(Boost REQUIRED COMPONENTS system filesystem program_options)
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+LINK_DIRECTORIES(${Boost_LIBRARY_DIR})
+
+# Find TinyXML2
+FIND_PACKAGE(TINYXML2 REQUIRED)
+INCLUDE_DIRECTORIES(${TINYXML2_INCLUDE_DIRS})
+
+# -------------------------
+
+
+# Subdirectories of StreamVorti.
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
+#ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/conditions)
+#ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/elements)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/exporters)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/grid)
+#ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/materials)
+#ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh)
+#ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh_io)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/models)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/options_configuration)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/sets)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/solvers)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/support_domain)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/utilities)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/vectors)
+
+
+# Compilation of the shared library.
+IF( STREAMVORTI_BUILD_SHARED_LIBS )
+    ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}  $<TARGET_OBJECTS:Exporters>       $<TARGET_OBJECTS:Grid>
+                                                     $<TARGET_OBJECTS:Models>          $<TARGET_OBJECTS:OptionsConfiguration>
+                                                     $<TARGET_OBJECTS:Sets>            $<TARGET_OBJECTS:Approximants>
+                                                     $<TARGET_OBJECTS:Solvers>         $<TARGET_OBJECTS:SupportDomain>
+                                                     $<TARGET_OBJECTS:Utilities>       $<TARGET_OBJECTS:Vectors>)
+
+    # Link with dependencies
+    TARGET_LINK_LIBRARIES(${PROJECT_NAME}  ${CGAL_LIBRARIES}  ${Boost_LIBRARIES}  ${TINYXML2_LIBRARIES})
+
+    # Set build folders.
+    SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES
+                                          LINKER_LANGUAGE CXX
+                                          ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
+                                          LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
+                                          RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/StreamVorti")
+                              
+    # Install the executable to 'bin' directory under CMAKE_INSTALL_PREFIX.
+    INSTALL(TARGETS ${PROJECT_NAME} ARCHIVE DESTINATION lib/StreamVorti
+                                    LIBRARY DESTINATION lib/StreamVorti
+                                    RUNTIME DESTINATION bin/StreamVorti)
+ENDIF()
+
+
+# Compilation of the static library.
+IF( STREAMVORTI_BUILD_STATIC_LIBS )
+    ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}  $<TARGET_OBJECTS:Exporters>       $<TARGET_OBJECTS:Grid>
+                                                            $<TARGET_OBJECTS:Models>          $<TARGET_OBJECTS:OptionsConfiguration>
+                                                            $<TARGET_OBJECTS:Sets>            $<TARGET_OBJECTS:Approximants>
+                                                            $<TARGET_OBJECTS:Solvers>         $<TARGET_OBJECTS:SupportDomain>
+                                                            $<TARGET_OBJECTS:Utilities>       $<TARGET_OBJECTS:Vectors>)
+    
+    # Link with dependencies
+    TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static  ${CGAL_LIBRARIES}  ${Boost_LIBRARIES}  ${TINYXML2_LIBRARIES})
+    
+    # Set build folders   
+    SET_TARGET_PROPERTIES(${PROJECT_NAME}_static PROPERTIES
+                                                 LINKER_LANGUAGE CXX
+                                                 ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
+                                                 LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
+                                                 RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/StreamVorti" )
+                                     
+    # Install the executable to 'bin' directory under CMAKE_INSTALL_PREFIX
+    INSTALL(TARGETS ${PROJECT_NAME}_static ARCHIVE DESTINATION lib/StreamVorti
+                                           LIBRARY DESTINATION lib/StreamVorti
+                                           RUNTIME DESTINATION bin/StreamVorti)
+                        
+ENDIF()
+
+
+# StreamVorti simulation executable.
+ADD_EXECUTABLE(StreamVortiRun  main.cpp)
+IF(STREAMVORTI_BUILD_SHARED_LIBS)
+    TARGET_LINK_LIBRARIES(StreamVortiRun  ${PROJECT_NAME})
+ELSE()
+    TARGET_LINK_LIBRARIES(StreamVortiRun  ${PROJECT_NAME}_static)
+ENDIF()
+
+# Install the StreamVorti simulation executable.
+INSTALL(TARGETS StreamVortiRun RUNTIME DESTINATION bin/StreamVorti)
+
+# Development testing executable.
+ADD_EXECUTABLE(streamvort_dev  dev.cpp )
+IF(STREAMVORTI_BUILD_SHARED_LIBS)
+    TARGET_LINK_LIBRARIES(streamvort_dev  ${PROJECT_NAME})
+ELSE()
+    TARGET_LINK_LIBRARIES(streamvort_dev  ${PROJECT_NAME}_static)
+ENDIF()
+
+										   
+# Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
+INSTALL(FILES ${HEADERS} DESTINATION include/StreamVorti)
+
+# Install the StreamVorti finding module in the cmake folder under the installation directory.
+#INSTALL(FILES cmake/FindStreamVorti.cmake DESTINATION cmake)
