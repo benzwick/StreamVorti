@@ -9,14 +9,13 @@ PROJECT(Solvers)
 
 
 # Module source files.
-SET(SOURCES dyn_relax_prop.cpp  mtled.cpp)
+SET(SOURCES  mtled.cpp)
 
 # Include the headers directory.
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Module header files.
 SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/solvers/solvers.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/solvers/dyn_relax_prop.hpp
             ${CMAKE_SOURCE_DIR}/include/StreamVorti/solvers/mtled.hpp)
 
 ADD_LIBRARY(${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )

@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,14 +17,13 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
-#include "ExplicitSim/support_domain/support_domain.hpp"
+#include "StreamVorti/support_domain/support_domain.hpp"
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 SupportDomain::SupportDomain()
 {}
@@ -305,4 +304,4 @@ int SupportDomain::MaxSupportNodesIn(const std::vector<std::vector<int> > &neigh
 }
 
 
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti

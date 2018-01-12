@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,15 +17,14 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
 
-#include "ExplicitSim/utilities/timer.hpp"
+#include "StreamVorti/utilities/timer.hpp"
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 Timer::Timer() : beg_(timer_clock_::now())
 {}
@@ -80,4 +79,4 @@ std::string Timer::PrintElapsedTime() const
 }
 
 
-}  //end of namespace ExplicitSim
+}  //end of namespace StreamVorti

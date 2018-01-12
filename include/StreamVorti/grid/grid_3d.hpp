@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -26,18 +25,18 @@
    \file grid_3d.hpp
    \brief Grid3D class header file.
    \author Konstantinos A. Mountris
-   \date 16/11/2017
+   \date 12/01/2018
 */
 
-#ifndef EXPLICITSIM_GRID_GRID_3D_HPP_
-#define EXPLICITSIM_GRID_GRID_3D_HPP_
+#ifndef STREAMVORTI_GRID_GRID_3D_HPP_
+#define STREAMVORTI_GRID_GRID_3D_HPP_
 
-#include "ExplicitSim/elements/node.hpp"
-#include "ExplicitSim/mesh/tetramesh.hpp"
+#include "StreamVorti/elements/node.hpp"
+#include "StreamVorti/mesh/tetramesh.hpp"
 
 #include <vector>
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
  *  \addtogroup Grid
@@ -138,6 +137,6 @@ private:
 
 
 /*! @} End of Doxygen Groups*/
-} // End of namespace ExplicitSim
+} // End of namespace StreamVorti
 
-#endif //EXPLICITSIM_GRID_GRID_3D_HPP_
+#endif //STREAMVORTI_GRID_GRID_3D_HPP_

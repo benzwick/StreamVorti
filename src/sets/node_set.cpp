@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,14 +17,13 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
-#include "ExplicitSim/sets/node_set.hpp"
+#include "StreamVorti/sets/node_set.hpp"
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 
 NodeSet::NodeSet() : name_("")
@@ -70,4 +69,4 @@ NodeSet & NodeSet::operator = (const NodeSet &node_set)
 }
 
 
-} // End of namespace ExplicitSim
+} // End of namespace StreamVorti

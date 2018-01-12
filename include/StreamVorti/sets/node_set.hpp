@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -26,12 +25,12 @@
    \file node_set.hpp
    \brief NodeSet class header file.
    \author Konstantinos A. Mountris
-   \date 30/11/2017
+   \date 12/01/2018
 */
 
 
-#ifndef EXPLICITSIM_SETS_NODE_SET_HPP_
-#define EXPLICITSIM_SETS_NODE_SET_HPP_
+#ifndef STREAMVORTI_SETS_NODE_SET_HPP_
+#define STREAMVORTI_SETS_NODE_SET_HPP_
 
 #include <vector>
 #include <string>
@@ -39,7 +38,7 @@
 #include <exception>
 #include <stdexcept>
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
  *  \addtogroup Sets
@@ -127,6 +126,6 @@ private:
 
 
 /*! @} End of Doxygen Groups*/
-} //namespace ExplicitSim
+} //namespace StreamVorti
 
-#endif //EXPLICITSIM_SETS_NODE_SET_HPP_
+#endif //STREAMVORTI_SETS_NODE_SET_HPP_

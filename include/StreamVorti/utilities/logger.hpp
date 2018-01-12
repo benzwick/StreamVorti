@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -25,15 +24,15 @@
    \file logger.hpp
    \brief Logger class header file.
    \author Konstantinos A. Mountris
-   \date 04/01/2018
+   \date 12/01/2018
 */
 
-#ifndef EXPLICITSIM_UTILITIES_LOGGER_HPP_
-#define EXPLICITSIM_UTILITIES_LOGGER_HPP_
+#ifndef STREAMVORTI_UTILITIES_LOGGER_HPP_
+#define STREAMVORTI_UTILITIES_LOGGER_HPP_
 
 #include <string>
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
  *  \addtogroup Utilities
@@ -43,7 +42,7 @@ namespace ExplicitSim {
 
 /*!
  * \class Logger
- * \brief Class implemmenting output messages for logging of ExplicitSim.
+ * \brief Class implemmenting output messages for logging of StreamVorti.
  */
 
 class Logger
@@ -63,32 +62,32 @@ public:
 
 
     /*!
-     * \brief Log an ExplicitSim message.
+     * \brief Log an StreamVorti message.
      * \param [in] msg The message to be logged.
      * \return [std::string] The logged message.
      */
     inline static std::string Message(const std::string &msg) {
-        return "[ExplicitSim] " + msg;
+        return "[StreamVorti] " + msg;
     }
 
 
     /*!
-     * \brief Log an ExplicitSim error.
+     * \brief Log an StreamVorti error.
      * \param [in] err The error to be logged.
      * \return [std::string] The logged error.
      */
     inline static std::string Error(const std::string &err) {
-        return "[ExplicitSim ERROR] " + err;
+        return "[StreamVorti ERROR] " + err;
     }
 
 
     /*!
-     * \brief Log an ExplicitSim warning.
+     * \brief Log an StreamVorti warning.
      * \param [in] wrng The warning to be logged.
      * \return [std::string] The logged warning.
      */
     inline static std::string Warning(const std::string &wrng) {
-        return "[ExplicitSim WARNING] " + wrng;
+        return "[StreamVorti WARNING] " + wrng;
     }
 
 
@@ -96,6 +95,6 @@ public:
 
 /*! @} End of Doxygen Groups*/
 
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti
 
-#endif //EXPLICITSIM_UTILITIES_LOGGER_HPP_
+#endif //STREAMVORTI_UTILITIES_LOGGER_HPP_

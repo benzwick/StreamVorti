@@ -64,12 +64,12 @@ INCLUDE_DIRECTORIES(${TINYXML2_INCLUDE_DIRS})
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
 #ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/conditions)
-#ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/elements)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/elements)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/exporters)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/grid)
 #ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/materials)
-#ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh)
-#ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh_io)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh_io)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/models)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/options_configuration)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/sets)
@@ -82,6 +82,8 @@ ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/vectors)
 # Compilation of the shared library.
 IF( STREAMVORTI_BUILD_SHARED_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}  $<TARGET_OBJECTS:Exporters>       $<TARGET_OBJECTS:Grid>
+                                                     $<TARGET_OBJECTS:Elements>
+                                                     $<TARGET_OBJECTS:Mesh>            $<TARGET_OBJECTS:MeshIO>
                                                      $<TARGET_OBJECTS:Models>          $<TARGET_OBJECTS:OptionsConfiguration>
                                                      $<TARGET_OBJECTS:Sets>            $<TARGET_OBJECTS:Approximants>
                                                      $<TARGET_OBJECTS:Solvers>         $<TARGET_OBJECTS:SupportDomain>
@@ -107,6 +109,8 @@ ENDIF()
 # Compilation of the static library.
 IF( STREAMVORTI_BUILD_STATIC_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}  $<TARGET_OBJECTS:Exporters>       $<TARGET_OBJECTS:Grid>
+                                                            $<TARGET_OBJECTS:Elements>
+                                                            $<TARGET_OBJECTS:Mesh>            $<TARGET_OBJECTS:MeshIO>
                                                             $<TARGET_OBJECTS:Models>          $<TARGET_OBJECTS:OptionsConfiguration>
                                                             $<TARGET_OBJECTS:Sets>            $<TARGET_OBJECTS:Approximants>
                                                             $<TARGET_OBJECTS:Solvers>         $<TARGET_OBJECTS:SupportDomain>

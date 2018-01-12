@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -25,15 +24,15 @@
    \file support_domain.hpp
    \brief SupportDomain class header file.
    \author Konstantinos A. Mountris
-   \date 21/05/2017
+   \date 12/01/2018
 */
 
-#ifndef EXPLICITSIM_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
-#define EXPLICITSIM_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
+#ifndef STREAMVORTI_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
+#define STREAMVORTI_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
 
 
-#include "ExplicitSim/elements/elements.hpp"
-#include "ExplicitSim/vectors/vectors.hpp"
+#include "StreamVorti/elements/elements.hpp"
+#include "StreamVorti/vectors/vectors.hpp"
 
 #include <CGAL/Fuzzy_sphere.h>
 #include <CGAL/Simple_cartesian.h>
@@ -52,10 +51,10 @@
 #include <limits>
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
- *  \addtogroup ShapeFunctions
+ *  \addtogroup Approximants
  *  @{
  */
 
@@ -169,6 +168,6 @@ private:
 
 
 /*! @} End of Doxygen Groups*/
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti
 
-#endif //EXPLICITSIM_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
+#endif //STREAMVORTI_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_

@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -26,13 +25,13 @@
    \file utilities.hpp
    \brief Header file collecting the header files of the various utility classes.
    \author Konstantinos A. Mountris
-   \date 04/01/2018
+   \date 12/01/2018
 */
 
-#ifndef EXPLICITSIM_UTILITIES_UTILITIES_HPP_
-#define EXPLICITSIM_UTILITIES_UTILITIES_HPP_
+#ifndef STREAMVORTI_UTILITIES_UTILITIES_HPP_
+#define STREAMVORTI_UTILITIES_UTILITIES_HPP_
 
-#include "ExplicitSim/utilities/logger.hpp"
-#include "ExplicitSim/utilities/timer.hpp"
+#include "StreamVorti/utilities/logger.hpp"
+#include "StreamVorti/utilities/timer.hpp"
 
-#endif //EXPLICITSIM_UTILITIES_UTILITIES_HPP_
+#endif //STREAMVORTI_UTILITIES_UTILITIES_HPP_

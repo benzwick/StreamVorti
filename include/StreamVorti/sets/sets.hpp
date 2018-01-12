@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -26,12 +25,12 @@
    \file sets.hpp
    \brief Header file collecting the header files of the various sets classes.
    \author Konstantinos A. Mountris
-   \date 30/11/2017
+   \date 12/01/2018
 */
 
-#ifndef EXPLICITSIM_SETS_SETS_HPP_
-#define EXPLICITSIM_SETS_SETS_HPP_
+#ifndef STREAMVORTI_SETS_SETS_HPP_
+#define STREAMVORTI_SETS_SETS_HPP_
 
-#include "ExplicitSim/sets/node_set.hpp"
+#include "StreamVorti/sets/node_set.hpp"
 
-#endif //EXPLICITSIM_SETS_SETS_HPP_
+#endif //STREAMVORTI_SETS_SETS_HPP_
