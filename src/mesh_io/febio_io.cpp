@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,15 +17,14 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
 
-#include "ExplicitSim/mesh_io/febio_io.hpp"
+#include "StreamVorti/mesh_io/febio_io.hpp"
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 
 FebioIO::FebioIO() : is_mesh_loaded(false), boundaries_exist(false)
@@ -427,4 +426,4 @@ void FebioIO::LoadBoundarySetsIn(std::vector<NodeSet> &node_sets)
 
 
 
-} // End of namespace ExplicitSim
+} // End of namespace StreamVorti

@@ -90,7 +90,7 @@ void Dcpse2d::ComputeShFuncAndDerivs(const std::vector<Node> &geom_nodes,
 
     // Reserve triplet vector to store shape function y derivative values.
     std::vector<Eigen::Triplet<double> > triplet_sh_func_y;
-    triplet_sh_func_y.resExplicitSimerve(geom_nodes.size()*estim_support_size);
+    triplet_sh_func_y.reserve(geom_nodes.size()*estim_support_size);
 
     // Reserve triplet vector to store shape function z derivative values.
     std::vector<Eigen::Triplet<double> > triplet_sh_func_z;
@@ -111,7 +111,7 @@ void Dcpse2d::ComputeShFuncAndDerivs(const std::vector<Node> &geom_nodes,
 
         // The weight function vector for the evaluation node.
         Eigen::VectorXd weight(support_nodes_ids[eval_id].size());
-ExplicitSim
+
         // Initialize weighted moment matrix A, B matrix, and px vector.
         Eigen::MatrixXd a = Eigen::MatrixXd::Zero(m, m);
         Eigen::MatrixXd b(m, support_nodes_ids[eval_id].size());
@@ -309,7 +309,7 @@ ExplicitSim
             for (auto &neigh_id : support_nodes_ids[eval_id]) {
                 // The index of the ith iteration.
                 auto i = &neigh_id - &support_nodes_ids[eval_id][0];
-ExplicitSim
+
                 // Store the shape function and derivatives values in triplets.
                 triplet_sh_func.emplace_back(Eigen::Triplet<double>(neigh_id, eval_id, sh_func_value[i]));
                 triplet_sh_func_x.emplace_back(Eigen::Triplet<double>(neigh_id, eval_id, sh_func_x_value[i]));

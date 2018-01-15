@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -30,10 +29,10 @@
    \date 16/11/2017
 */
 
-#ifndef EXPLICITSIM_MESH_IO_MESH_IO_HPP_
-#define EXPLICITSIM_MESH_IO_MESH_IO_HPP_
+#ifndef STREAMVORTI_MESH_IO_MESH_IO_HPP_
+#define STREAMVORTI_MESH_IO_MESH_IO_HPP_
 
-#include "ExplicitSim/mesh_io/abaqus_io.hpp"
-#include "ExplicitSim/mesh_io/febio_io.hpp"
+#include "StreamVorti/mesh_io/abaqus_io.hpp"
+#include "StreamVorti/mesh_io/febio_io.hpp"
 
-#endif //EXPLICITSIM_MESH_IO_MESH_IO_HPP_
+#endif //STREAMVORTI_MESH_IO_MESH_IO_HPP_

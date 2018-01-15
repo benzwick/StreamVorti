@@ -29,11 +29,11 @@
    \date 16/11/2017
 */
 
-#ifndef EXPLICITSIM_MESH_MESH_PROPERTIES_HPP_
-#define EXPLICITSIM_MESH_MESH_PROPERTIES_HPP_
+#ifndef STREAMVORTI_MESH_MESH_PROPERTIES_HPP_
+#define STREAMVORTI_MESH_MESH_PROPERTIES_HPP_
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
  *  \addtogroup Mesh
@@ -54,6 +54,6 @@ enum struct MeshType: int {triangular = 1,          /*!< Mesh type -> triangular
 
 /*! @} End of Doxygen Groups*/
 
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti
 
-#endif //EXPLICITSIM_MESH_MESH_PROPERTIES_HPP_
+#endif //STREAMVORTI_MESH_MESH_PROPERTIES_HPP_

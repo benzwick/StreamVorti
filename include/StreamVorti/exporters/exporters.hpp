@@ -25,16 +25,16 @@
 
 /*!
    \file exporters.hpp
-   \brief ExplicitSim exporters module's header file. Collection of exporters' header files for various post-processors.
+   \brief StreamVorti exporters module's header file. Collection of exporters' header files for various post-processors.
    \author Konstantinos A. Mountris
    \date 11/10/2017
 */
 
-#ifndef EXPLICITSIM_EXPORTERS_EXPORTERS_HPP_
-#define EXPLICITSIM_EXPORTERS_EXPORTERS_HPP_
+#ifndef STREAMVORTI_EXPORTERS_EXPORTERS_HPP_
+#define STREAMVORTI_EXPORTERS_EXPORTERS_HPP_
 
 // Collection of exporters' header files for various post-processors.
 
-#include "ExplicitSim/exporters/paraview_exporter.hpp"
+#include "StreamVorti/exporters/paraview_exporter.hpp"
 
-#endif //EXPLICITSIM_EXPORTERS_EXPORTERS_HPP_
+#endif //STREAMVORTI_EXPORTERS_EXPORTERS_HPP_

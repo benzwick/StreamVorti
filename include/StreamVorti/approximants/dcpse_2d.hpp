@@ -114,7 +114,7 @@ public:
      * \return [std::string]
      */
     inline const std::string & BaseFunctionType() const { return this->base_function_type_; }
-mmls_3d
+
 
     /*!
      * \brief UseExactDerivatives

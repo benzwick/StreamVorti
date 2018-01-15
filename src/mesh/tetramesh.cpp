@@ -22,12 +22,12 @@
  */
 
 
-#include "ExplicitSim/mesh/tetramesh.hpp"
+#include "StreamVorti/mesh/tetramesh.hpp"
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 
-TetraMesh::TetraMesh() : mesh_type_(ExplicitSim::MeshType::tetrahedral)
+TetraMesh::TetraMesh() : mesh_type_(StreamVorti::MeshType::tetrahedral)
 {}
 
 
@@ -143,4 +143,4 @@ TetraMesh & TetraMesh::operator = (const TetraMesh &tetramesh)
 }
 
 
-}  //end of namespace ExplicitSim
+}  //end of namespace StreamVorti

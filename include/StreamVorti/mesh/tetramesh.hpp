@@ -30,22 +30,22 @@
 */
 
 
-#ifndef EXPLICITSIM_MESH_TETRAMESH_HPP_
-#define EXPLICITSIM_MESH_TETRAMESH_HPP_
+#ifndef STREAMVORTI_MESH_TETRAMESH_HPP_
+#define STREAMVORTI_MESH_TETRAMESH_HPP_
 
-#include "ExplicitSim/mesh_io/mesh_io.hpp"
-#include "ExplicitSim/mesh/mesh_properties.hpp"
-#include "ExplicitSim/vectors/vectors.hpp"
-#include "ExplicitSim/elements/elements.hpp"
-#include "ExplicitSim/sets/node_set.hpp"
-#include "ExplicitSim/utilities/logger.hpp"
+#include "StreamVorti/mesh_io/mesh_io.hpp"
+#include "StreamVorti/mesh/mesh_properties.hpp"
+#include "StreamVorti/vectors/vectors.hpp"
+#include "StreamVorti/elements/elements.hpp"
+#include "StreamVorti/sets/node_set.hpp"
+#include "StreamVorti/utilities/logger.hpp"
 
 #include <vector>
 
 #include <exception>
 #include <stdexcept>
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
  *  \addtogroup Mesh
@@ -96,21 +96,21 @@ public:
 
     /*!
      * \brief Write access to the nodes of the mesh.
-     * \return [std::vector<ExplicitSim::Node>] the mesh nodes with write access.
+     * \return [std::vector<StreamVorti::Node>] the mesh nodes with write access.
      */
     inline std::vector<Node> & EditNodes() { return this->nodes_; }
 
 
     /*!
      * \brief Write access to the elements of the mesh.
-     * \return [std::vector<ExplicitSim::Tetrahedron>] The mesh elements with write access.
+     * \return [std::vector<StreamVorti::Tetrahedron>] The mesh elements with write access.
      */
     inline std::vector<Tetrahedron> & EditElements() { return this->tetras_; }
 
 
     /*!
      * \brief Read-only access to the nodes of the mesh.
-     * \return [std::vector<ExplicitSim::Node>] The mesh nodes with read-only access.
+     * \return [std::vector<StreamVorti::Node>] The mesh nodes with read-only access.
      */
     inline const std::vector<Node> & Nodes() const { return this->nodes_; }
 
@@ -122,7 +122,7 @@ public:
      * increase computational burden if called multiple times. In such a case it is prefered
      * to get the nodes of the mesh using TetraMesh::Nodes() and iterate through the nodes to get Node::Coordinates()
      *
-     * \return [std::vector<ExplicitSim::Vec3<double> >] The coordinates of the mesh's nodes.
+     * \return [std::vector<StreamVorti::Vec3<double> >] The coordinates of the mesh's nodes.
      */
     inline std::vector<Vec3<double> > NodeCoordinates() const
     {
@@ -147,23 +147,23 @@ public:
      *
      * These correspond to groups of nodes where a boundary condition could be specified.
      *
-     * \return [std::vector<ExplicitSim::NodeSet>] The sets of nodes of the mesh.
+     * \return [std::vector<StreamVorti::NodeSet>] The sets of nodes of the mesh.
      */
     inline const std::vector<NodeSet> NodeSets() const { return this->node_sets_; }
 
 
     /*!
      * \brief Read-ony access to the elements of the mesh.
-     * \return [std::vector<ExplicitSim::Tetrahedron>] the mesh elements with read-only access.
+     * \return [std::vector<StreamVorti::Tetrahedron>] the mesh elements with read-only access.
      */
     inline const std::vector<Tetrahedron> & Elements() const { return this->tetras_; }
 
 
     /*!
      * \brief The type of the mesh (tetrahedral).
-     * \return [ExplicitSim::MeshType] the mesh type of the given mesh (tetrahedral).
+     * \return [StreamVorti::MeshType] the mesh type of the given mesh (tetrahedral).
      */
-    inline const ExplicitSim::MeshType & MeshType() const { return this->mesh_type_; }
+    inline const StreamVorti::MeshType & MeshType() const { return this->mesh_type_; }
 
 
     /*!
@@ -206,11 +206,11 @@ private:
 
     std::vector<Tetrahedron> tetras_;                     /*!< The mesh tetrahedral elements. */
 
-    ExplicitSim::MeshType mesh_type_;                     /*!< The mesh type (tetrahedral). */
+    StreamVorti::MeshType mesh_type_;                     /*!< The mesh type (tetrahedral). */
 };
 
 
 /*! @} End of Doxygen Groups*/
-} //namespace ExplicitSim
+} //namespace StreamVorti
 
-#endif //EXPLICITSIM_MESH_TETRAMESH_HPP_
+#endif //STREAMVORTI_MESH_TETRAMESH_HPP_

@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -26,15 +25,15 @@
    \file element_properties.hpp
    \brief Collection of element properties header file.
    \author Konstantinos A. Mountris
-   \date 16/11/2017
+   \date 15/01/2018
 */
 
-#ifndef EXPLICITSIM_ELEMENTS_ELEMENT_PROPERTIES_HPP_
-#define EXPLICITSIM_ELEMENTS_ELEMENT_PROPERTIES_HPP_
+#ifndef STREAMVORTI_ELEMENTS_ELEMENT_PROPERTIES_HPP_
+#define STREAMVORTI_ELEMENTS_ELEMENT_PROPERTIES_HPP_
 
 #include <string>
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
  *  \addtogroup Elements
@@ -121,6 +120,6 @@ typedef struct Boundary {
 
 /*! @} End of Doxygen Groups*/
 
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti
 
-#endif //EXPLICITSIM_ELEMENTS_ELEMENT_PROPERTIES_HPP_
+#endif //STREAMVORTI_ELEMENTS_ELEMENT_PROPERTIES_HPP_

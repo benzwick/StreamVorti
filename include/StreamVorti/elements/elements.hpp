@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -26,14 +25,14 @@
    \file elements.hpp
    \brief Header file collecting the header files of the various elements classes.
    \author Konstantinos A. Mountris
-   \date 16/11/2017
+   \date 15/01/2018
 */
 
-#ifndef EXPLICITSIM_ELEMENTS_ELEMENTS_HPP_
-#define EXPLICITSIM_ELEMENTS_ELEMENTS_HPP_
+#ifndef STREAMVORTI_ELEMENTS_ELEMENTS_HPP_
+#define STREAMVORTI_ELEMENTS_ELEMENTS_HPP_
 
-#include "ExplicitSim/elements/element_properties.hpp"
-#include "ExplicitSim/elements/node.hpp"
-#include "ExplicitSim/elements/tetrahedron.hpp"
+#include "StreamVorti/elements/element_properties.hpp"
+#include "StreamVorti/elements/node.hpp"
+#include "StreamVorti/elements/tetrahedron.hpp"
 
-#endif //EXPLICITSIM_ELEMENTS_ELEMENTS_HPP_
+#endif //STREAMVORTI_ELEMENTS_ELEMENTS_HPP_

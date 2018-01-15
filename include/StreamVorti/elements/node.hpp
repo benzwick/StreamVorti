@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -26,16 +25,17 @@
    \file node.hpp
    \brief Node class header file.
    \author Konstantinos A. Mountris
-   \date 16/11/2017
+   \date 15/01/2018
 */
 
-#ifndef EXPLICITSIM_ELEMENTS_NODE_HPP_
-#define EXPLICITSIM_ELEMENTS_NODE_HPP_
+#ifndef STREAMVORTI_ELEMENTS_NODE_HPP_
+#define STREAMVORTI_ELEMENTS_NODE_HPP_
 
-#include "ExplicitSim/vectors/vectors.hpp"
-#include "ExplicitSim/elements/element_properties.hpp"
+#include "StreamVorti/vectors/vectors.hpp"
+#include "StreamVorti/elements/element_properties.hpp"
 
-namespace ExplicitSim {
+
+namespace StreamVorti {
 
 /*!
  *  \addtogroup Elements
@@ -258,7 +258,7 @@ public:
      * \brief Get the element type of the node.
      * \return [ElementType] The node's element type.
      */
-    inline const ExplicitSim::ElementType & ElementType() const { return this->element_type_; }
+    inline const StreamVorti::ElementType & ElementType() const { return this->element_type_; }
 
 
     /*!
@@ -305,14 +305,14 @@ private:
 
     Boundary boundary_;            /*!< The node's boundary. */
 
-    ExplicitSim::ElementType element_type_;     /*!< The node's element type is set during construction. */
+    StreamVorti::ElementType element_type_;     /*!< The node's element type is set during construction. */
 
 };
 
 
 /*! @} End of Doxygen Groups*/
 
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti
 
 
-#endif //EXPLICITSIM_ELEMENTS_NODE_HPP_
+#endif //STREAMVORTI_ELEMENTS_NODE_HPP_

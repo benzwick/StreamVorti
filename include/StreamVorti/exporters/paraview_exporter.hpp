@@ -30,8 +30,8 @@
    \date 11/10/2017
 */
 
-#ifndef EXPLICITSIM_PARAVIEW_EXPORTER_PARAVIEW_EXPORTER_HPP_
-#define EXPLICITSIM_PARAVIEW_EXPORTER_PARAVIEW_EXPORTER_HPP_
+#ifndef STREAMVORTI_PARAVIEW_EXPORTER_PARAVIEW_EXPORTER_HPP_
+#define STREAMVORTI_PARAVIEW_EXPORTER_PARAVIEW_EXPORTER_HPP_
 
 #include <boost/filesystem.hpp>
 #include <boost/range.hpp>
@@ -49,12 +49,12 @@
 #include <stdexcept>
 #include <exception>
 
-#include "ExplicitSim/vectors/vectors.hpp"
+#include "StreamVorti/vectors/vectors.hpp"
 
-#include "ExplicitSim/models/models.hpp"
+#include "StreamVorti/models/models.hpp"
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
  *  \addtogroup Exporters
@@ -88,7 +88,7 @@ public:
      * \param [in] weak_model_3d The 3D weak formulation model to be exported.
      * \return [void]
      */
-    void CreateVtu(const WeakModel3D &weak_model_3d);
+    void CreateVtu();
     
     
     //void AddPointNormals();
@@ -137,12 +137,12 @@ public:
 private:
     tinyxml2::XMLDocument output_;      /*!< The xml file that will be exported in Paraview (.vtu) format. */
     
-    WeakModel3D weak_model_3d_;         /*!< The 3D weak formulation model to be represented by the Paraview (.vtu) xml file. */
+    StrongModel2d weak_model_3d_;         /*!< The 3D weak formulation model to be represented by the Paraview (.vtu) xml file. */
 };
 
 
 
 /*! @} End of Doxygen Groups*/
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti
 
-#endif  //EXPLICITSIM_PARAVIEW_EXPORTER_PARAVIEW_EXPORTER_HPP_
+#endif  //STREAMVORTI_PARAVIEW_EXPORTER_PARAVIEW_EXPORTER_HPP_

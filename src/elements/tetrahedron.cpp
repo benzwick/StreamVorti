@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,19 +17,18 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
 
-#include "ExplicitSim/elements/tetrahedron.hpp"
+#include "StreamVorti/elements/tetrahedron.hpp"
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 
 Tetrahedron::Tetrahedron() : id_(-1), n1_(-1), n2_(-1), n3_(-1), n4_(-1),
-                                  element_type_(ExplicitSim::ElementType::tetrahedron)
+                                  element_type_(StreamVorti::ElementType::tetrahedron)
 {
     // Id and vertices are initialized to -1 to indicate that tetrahedron is not listed and invalid.
 
@@ -204,4 +203,4 @@ Tetrahedron & Tetrahedron::operator = (const Tetrahedron &tetrahedron)
 }
 
 
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti

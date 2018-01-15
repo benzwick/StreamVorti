@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,15 +17,14 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
 
 
-#include "ExplicitSim/mesh_io/abaqus_io.hpp"
+#include "StreamVorti/mesh_io/abaqus_io.hpp"
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 
 AbaqusIO::AbaqusIO() : nodes_startline_(0), elems_startline_(0),
@@ -464,4 +463,4 @@ void AbaqusIO::LoadBoundarySetsIn(std::vector<NodeSet> &node_sets)
 
 
 
-} // end of namespace ExplicitSim
+} // end of namespace StreamVorti

@@ -1,5 +1,5 @@
 /*
- * ExplicitSim - Software for solving PDEs using explicit methods.
+ * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
  *
  * Contributors (alphabetically):
  *      George C. BOURANTAS
- *      Grand R. JOLDES
  *      Konstantinos A. MOUNTRIS
  */
 
@@ -27,17 +26,17 @@
    \file abaqus_io.hpp
    \brief Abaqus input/output class header file.
    \author Konstantinos A. Mountris
-   \date 16/11/2017
+   \date 15/01/2018
 */
 
-#ifndef EXPLICITSIM_MESH_IO_ABAQUS_IO_HPP_
-#define EXPLICITSIM_MESH_IO_ABAQUS_IO_HPP_
+#ifndef STREAMVORTI_MESH_IO_ABAQUS_IO_HPP_
+#define STREAMVORTI_MESH_IO_ABAQUS_IO_HPP_
 
 
-#include "ExplicitSim/vectors/vectors.hpp"
-#include "ExplicitSim/elements/elements.hpp"
-#include "ExplicitSim/sets/node_set.hpp"
-#include "ExplicitSim/mesh/mesh_properties.hpp"
+#include "StreamVorti/vectors/vectors.hpp"
+#include "StreamVorti/elements/elements.hpp"
+#include "StreamVorti/sets/node_set.hpp"
+#include "StreamVorti/mesh/mesh_properties.hpp"
 
 #include <vector>
 #include <map>
@@ -55,7 +54,7 @@
 #include <algorithm>
 #include <string>
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 /*!
  *  \addtogroup MeshIO
@@ -152,8 +151,6 @@ public:
 private:
     std::vector<std::string> input_mesh_;                    /*!< The parsed mesh with an index per line for easy access. */
 
-    //ExplicitSim::MeshType input_mesh_type_;                  /*!< The type of the parsed mesh. */
-
     int nodes_startline_;                                /*!< The index of the starting line of the nodes set in the mesh file. */
 
     int elems_startline_;                                  /*!< The index of the starting line of the elements set in the mesh file. */
@@ -174,9 +171,9 @@ private:
 
 /*! @} End of Doxygen Groups*/
 
-} //end of namespace ExplicitSim
+} //end of namespace StreamVorti
 
 
-#include "ExplicitSim/mesh_io/abaqus_io.tpp"
+#include "StreamVorti/mesh_io/abaqus_io.tpp"
 
-#endif // EXPLICITSIM_MESH_IO_ABAQUS_IO_HPP_
+#endif //STREAMVORTI_MESH_IO_ABAQUS_IO_HPP_

@@ -22,13 +22,13 @@
  */
 
 
-#ifndef EXPLICITSIM_OPTIONS_CONFIGURATION_CONFIG_MANAGER_TPP_
-#define EXPLICITSIM_OPTIONS_CONFIGURATION_CONFIG_MANAGER_TPP_
+#ifndef STREAMVORTI_OPTIONS_CONFIGURATION_CONFIG_MANAGER_TPP_
+#define STREAMVORTI_OPTIONS_CONFIGURATION_CONFIG_MANAGER_TPP_
 
-#include "ExplicitSim/options_configuration/config_manager.hpp"
+#include "StreamVorti/options_configuration/config_manager.hpp"
 
 
-namespace ExplicitSim {
+namespace StreamVorti {
 
 template <class DATATYPE>
 DATATYPE ConfigManager::RetrieveArgument(const std::string &argument)
@@ -78,6 +78,6 @@ OUTDATATYPE ConfigManager::Convert( const INDATATYPE &value)
 }
 
 
-} // End of namespace ExplicitSim
+} // End of namespace StreamVorti
 
-#endif //EXPLICITSIM_OPTIONS_CONFIGURATION_CONFIG_MANAGER_TPP_
+#endif //STREAMVORTI_OPTIONS_CONFIGURATION_CONFIG_MANAGER_TPP_

@@ -29,12 +29,12 @@
    \date 16/11/2017
 */
 
-#ifndef EXPLICITSIM_MESH_MESH_HPP_
-#define EXPLICITSIM_MESH_MESH_HPP_
+#ifndef STREAMVORTI_MESH_MESH_HPP_
+#define STREAMVORTI_MESH_MESH_HPP_
 
 // Collection of mesh header files.
 
-#include "ExplicitSim/mesh/mesh_properties.hpp"
-#include "ExplicitSim/mesh/tetramesh.hpp"
+#include "StreamVorti/mesh/mesh_properties.hpp"
+#include "StreamVorti/mesh/tetramesh.hpp"
 
-#endif //EXPLICITSIM_MESH_MESH_HPP_
+#endif //STREAMVORTI_MESH_MESH_HPP_
