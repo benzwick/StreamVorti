@@ -40,6 +40,7 @@
 #include <CGAL/Orthogonal_k_neighbor_search.h>
 #include <CGAL/Search_traits_2.h>
 #include <CGAL/Search_traits_adapter.h>
+#include <CGAL/Fuzzy_sphere.h>
 #include <boost/iterator/zip_iterator.hpp>
 
 #include <list>
@@ -99,8 +100,7 @@ public:
     inline const std::vector<double> & SupportRadiuses() const { return this->support_radiuses_; }
 
 
-    const std::vector<std::vector<int> > CgalNeighborIdsTo(const std::vector<Vec3<double> > &eval_nodes_coords,
-                                                           const size_t &neigs_num);
+    const std::vector<std::vector<int> > NeighborIndices();
 
 
     int MinSupportNodesIn(const std::vector<std::vector<int> > &neighbor_ids) const;

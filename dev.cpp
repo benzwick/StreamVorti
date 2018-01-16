@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <fstream>
+#include <algorithm>
 
 using namespace StreamVorti;
 
@@ -21,9 +22,12 @@ int main()
        support.SetSupportNodes(model.Grid().Nodes());
        support.ComputeCutOffRadiuses(30);
        support.ComputeSupportRadiuses(5);
+       auto neighs = support.NeighborIndices();
 
-       for (auto &radius : support.SupportRadiuses()) {
-           std::cout << std::setprecision(15) << radius << std::endl;
+       for (auto &o_it : neighs) {
+           std::sort(o_it.begin(), o_it.end());
+           for (auto &i_it : o_it) { std::cout << i_it+1 << " "; }
+           std::cout << std::endl << std::endl;
        }
 
 

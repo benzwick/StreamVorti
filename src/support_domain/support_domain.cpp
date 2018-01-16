@@ -129,20 +129,80 @@ void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
 }
 
 
-const std::vector<std::vector<int> > SupportDomain::CgalNeighborIdsTo(const std::vector<Vec3<double> > &eval_nodes_coords,
-                                                                      const size_t &neigs_num)
+const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
 {
 
+    if (this->support_nodes_.empty()) {
+        throw std::runtime_error(Logger::Error("Could not find neighbor nodes to given points."
+                                               " Should set the support nodes first").c_str());
+    }
 
-//    if (this->support_nodes_.empty()) {
-//        throw std::runtime_error(Logger::Error("Could not find neighbor nodes to given points."
-//                                               " Should set the support nodes first").c_str());
-//    }
+    if (this->cutoff_radiuses_.empty()) {
+        throw std::runtime_error(Logger::Error("Could not find neighbor nodes to given points."
+                                               " Should compute the cutoff radiuses first").c_str());
+    }
 
 
+    typedef CGAL::Simple_cartesian<double> K;
+    typedef K::Point_2 Point_2d;
+    typedef boost::tuple<Point_2d,int> Point_and_int;
+    typedef CGAL::Search_traits_2<K> Traits_base;
+    typedef CGAL::Search_traits_adapter<Point_and_int,
+                                        CGAL::Nth_of_tuple_property_map<0, Point_and_int>, Traits_base> Traits;
+    typedef CGAL::Kd_tree<Traits> Tree;
+    typedef CGAL::Fuzzy_sphere<Traits> Fuzzy_sphere;
 
-//    // Return the indices of the closest nodes to each evaluation point.
-//    return closest_nodes_ids;
+
+    // Create container of neighbors indices for each node.
+    std::vector<std::vector<int> > closest_nodes_ids;
+
+    //Vectors to store coordinates and ids of point to be passed in tree tuples.
+    std::vector<Point_2d> points;
+    std::vector<int> points_indices;
+
+    for (const auto &node : this->support_nodes_) {
+        auto id = &node - &this->support_nodes_[0];
+        points.emplace_back(Point_2d(node.Coordinates().X(), node.Coordinates().Y()));
+        points_indices.emplace_back(id);
+    }
+
+    //Insert <point,id> tuples in the searching tree.
+    Tree tree(boost::make_zip_iterator(boost::make_tuple(points.begin(), points_indices.begin() )),
+              boost::make_zip_iterator(boost::make_tuple(points.end(), points_indices.end() )) );
+
+    //Vector containing the domain nodes for a given grid node.
+    std::vector<Point_and_int> domain_nodes;
+
+    //Search domain_nodes for each grid node.
+    for (auto &node : this->support_nodes_) {
+        auto id = &node - &this->support_nodes_[0];
+
+        Point_2d center(node.Coordinates().X(), node.Coordinates().Y());
+
+        // Searching sphere.
+        Fuzzy_sphere fs(center, this->cutoff_radiuses_[id]);
+
+        //Neighbors search
+        tree.search( std::back_inserter(domain_nodes), fs);
+
+        // Vector to store domain_nodes indices.
+        std::vector<int> neigh_indices;
+
+        //Iterate over domain nodes.
+        for (auto d_node : domain_nodes) {
+            //Store domain nodes indices.
+            neigh_indices.emplace_back(boost::get<1>(d_node));
+        }
+
+        closest_nodes_ids.emplace_back(neigh_indices);
+
+        //Empty domain_nodes vector for next iteration.
+        domain_nodes.clear();
+    }
+
+
+    // Return the indices of the closest nodes to each evaluation point.
+    return closest_nodes_ids;
 
 }
 
