@@ -33,17 +33,16 @@
 
 #include "StreamVorti/elements/elements.hpp"
 #include "StreamVorti/vectors/vectors.hpp"
+#include "StreamVorti/utilities/logger.hpp"
 
-#include <CGAL/Fuzzy_sphere.h>
-#include <CGAL/Simple_cartesian.h>
-#include <CGAL/Kd_tree.h>
-#include <CGAL/algorithm.h>
-#include <CGAL/Fuzzy_iso_box.h>
-#include <CGAL/Search_traits_3.h>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/point_generators_2.h>
+#include <CGAL/Orthogonal_k_neighbor_search.h>
+#include <CGAL/Search_traits_2.h>
 #include <CGAL/Search_traits_adapter.h>
-#include <CGAL/property_map.h>
 #include <boost/iterator/zip_iterator.hpp>
 
+#include <list>
 #include <cmath>
 #include <string>
 #include <stdexcept>
@@ -82,88 +81,40 @@ public:
     virtual ~SupportDomain();
 
 
-    /*!
-     * \brief Set the influence nodes of the support domain.
-     * \param[in] nodes The influence nodes of the support domain.
-     * \return [void]
-     */
-    void SetInfluenceNodes(const std::vector<Node> &nodes);
+    inline void SetSupportNodes(const std::vector<Node> &support_nodes) { this->support_nodes_ = support_nodes; }
 
 
-    /*!
-     * \brief Set the influence tetrahedra of the support domain.
-     * \param[in] tetras The influence tetrahedra of the support domain.
-     * \return [void]
-     */
-    void SetInfluenceTetrahedra(const std::vector<Tetrahedron> &tetras);
+    void ComputeCutOffRadiuses(const std::size_t &neighs_num);
 
 
-    /*!
-     * \brief Compute the radiuses of influence of the influence nodes in the support domain.
-     * \param[in] dilation_coeff A dilatation coefficient to increase the influence radiuses of the nodes.
-     * \return [void]
-     */
-    void ComputeInfluenceNodesRadiuses(double dilatation_coeff = std::numeric_limits<double>::min());
+    void ComputeSupportRadiuses(const std::size_t &neighs_num);
 
 
-    /*!
-     * \brief Get the influence nodes of the support domain.
-     * \return [std::vector<ExplicitSim::Node>] The influence nodes of the support domain.
-     */
-    inline const std::vector<Node> & InfluenceNodes() const { return this->influence_nodes_; }
+    inline const std::vector<Node> & SupportNodes() const { return this->support_nodes_; }
 
 
-    /*!
-     * \brief Get the influence tetrahedra of the support domain.
-     * \return [std::vector<ExplicitSim::Tetrahedron>] The influence tetrahedra of the support domain.
-     */
-    inline const std::vector<Tetrahedron> & InfluenceTetrahedra() const { return this->influence_tetras_; }
+    inline const std::vector<double> & CutoffRadiuses() const { return this->cutoff_radiuses_; }
 
 
-    /*!
-     * \brief Get the influence radiuses of the influence nodes of the support domain.
-     * \return [std::vector<double>] The influence radiuses of the influence nodes of the support domain.
-     */
-    inline const std::vector<double> & InfluenceNodesRadiuses() const { return this->influence_radiuses_; }
+    inline const std::vector<double> & SupportRadiuses() const { return this->support_radiuses_; }
 
 
-    /*!
-     * \brief Get the indices of the closest influence nodes to each of the given evaluation nodes using exhaustive search.
-     * \param[in] eval_nodes_coords The coordinates of the evaluation nodes for which the closest influence nodes indices will be returned.
-     * \return [std::vector<std::vector<int> >] The indices of the influence nodes closest to each of the given evaluation node.
-     */
-    const std::vector<std::vector<int> > ClosestNodesIdsTo(const std::vector<Vec3<double> > &eval_nodes_coords) const;
+    const std::vector<std::vector<int> > CgalNeighborIdsTo(const std::vector<Vec3<double> > &eval_nodes_coords,
+                                                           const size_t &neigs_num);
 
 
-    /*!
-     * \brief Get the indices of the closest influence nodes to each of the given evaluation nodes using CGAL kNN search in sphere.
-     * \param[in] eval_nodes_coords The coordinates of the evaluation nodes for which the closest influence nodes indices will be returned.
-     * \return [std::vector<std::vector<int> >] The indices of the influence nodes closest to each of the given evaluation node.
-     */
-    const std::vector<std::vector<int> > CgalClosestNodesIdsTo(const std::vector<Vec3<double> > &eval_nodes_coords) const;
-
-
-    /*!
-     * \brief Get the number of support nodes contained in the smallest support domain.
-     * \return [int] The number of support nodes contained in the smallest support domain.
-     */
     int MinSupportNodesIn(const std::vector<std::vector<int> > &neighbor_ids) const;
 
 
-    /*!
-     * \brief Get the number of support nodes contained in the smallest support domain.
-     * \return [int] The number of support nodes contained in the smallest support domain.
-     */
     int MaxSupportNodesIn(const std::vector<std::vector<int> > &neighbor_ids) const;
 
 
 private:
-    std::vector<Node> influence_nodes_;                /*!< The influence nodes of the support domain. */
+    std::vector<Node> support_nodes_;                /*!< The support nodes of the support domain. */
 
-    std::vector<Tetrahedron> influence_tetras_;        /*!< The influence tetrahedra of the support domain. */
+    std::vector<double> cutoff_radiuses_;
 
-    std::vector<double> influence_radiuses_;           /*!< The influence radiuses of the influence nodes of the support domain. */
-
+    std::vector<double> support_radiuses_;           /*!< The support radiuses of the influence nodes of the support domain. */
 };
 
 

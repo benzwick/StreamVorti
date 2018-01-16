@@ -31,6 +31,7 @@
 #ifndef STREAMVORTI_GRID_GRIDS_HPP_
 #define STREAMVORTI_GRID_GRIDS_HPP_
 
+#include "StreamVorti/grid/grid_2d.hpp"
 #include "StreamVorti/grid/grid_3d.hpp"
 
 #endif //STREAMVORTI_GRID_GRIDS_HPP_

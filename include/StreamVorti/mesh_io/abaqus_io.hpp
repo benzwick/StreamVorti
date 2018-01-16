@@ -37,6 +37,7 @@
 #include "StreamVorti/elements/elements.hpp"
 #include "StreamVorti/sets/node_set.hpp"
 #include "StreamVorti/mesh/mesh_properties.hpp"
+#include "StreamVorti/utilities/logger.hpp"
 
 #include <vector>
 #include <map>

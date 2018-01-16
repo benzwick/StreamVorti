@@ -79,7 +79,7 @@ public:
      * \param [in] mesh_filename The filename of the tetrahedral mesh to load.
      * \return [void]
      */
-    void LoadMeshRepresentation(const std::string &mesh_filename);
+    void LoadGrid(const std::string &grid_filename);
 
 
     /*!
@@ -96,16 +96,16 @@ public:
 
     /*!
      * \brief Get the 3D grid representation of the model.
-     * \return [ExplitSim::Grid3D] The model's 3D grid representation.
+     * \return [ExplitSim::Grid2D] The model's 3D grid representation.
      */
-    inline const Grid3D & Grid() const { return this->grid_; }
+    inline const Grid2D & Grid() const { return this->grid_; }
 
 
 
 
 private:
 
-    Grid3D grid_;                           /*!< The 3D grid representation of the model. */
+    Grid2D grid_;                           /*!< The 3D grid representation of the model. */
 
 };
 

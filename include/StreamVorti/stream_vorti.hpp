@@ -50,7 +50,8 @@
 
 
 /*!
- * \namespace StreamVorti Classes collection for implementation of the Strong-Form Meshless Stream Function - Vorticity formulation.
+ * \namespace StreamVorti Classes collection for implementation of
+ *            the Strong-Form Meshless Stream Function - Vorticity formulation.
  */
 
 

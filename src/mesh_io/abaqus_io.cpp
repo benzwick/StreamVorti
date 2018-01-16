@@ -39,7 +39,7 @@ AbaqusIO::~AbaqusIO()
 void AbaqusIO::LoadMeshFrom(const std::string &mesh_filename)
 {
     // Print reading status message.
-    std::cout << "[ExplicitSim] Reading mesh file: \"" + mesh_filename + "\n";
+    std::cout << Logger::Message("Reading mesh file: ") << mesh_filename << "\n";
 
     // Clear containers.
     this->input_mesh_.clear();
@@ -132,7 +132,7 @@ void AbaqusIO::LoadNodesIn(std::vector<Node> &nodes)
     nodes.clear();
 
     // The coordinates of the nodes in the mesh.
-    double x = 0.; double y = 0.; double z = 0.;
+    double x = 0.; double y = 0.;
 
     // The id of the nodes in the mesh. Initialized to invalid value (-1).
     int id = -1;
@@ -155,14 +155,19 @@ void AbaqusIO::LoadNodesIn(std::vector<Node> &nodes)
         std::stringstream ss(line);
 
         // Get the coordinates until reach the end of the vertices set.
-        if (!(ss >> id >> x >> y >> z)) { break; }
+        if (!(ss >> id >> x >> y)) { break; }
 
         // Set the id and coordinates of the mesh node. Reduce index by 1 to account for the storage offset.
         node.SetId(id-1);
-        node.SetCoordinates(x, y, z);
+        node.SetCoordinates(x, y, 0.);
 
         // Store the node in the nodes' container.
         nodes.emplace_back(node);
+    }
+
+    if (nodes.empty()) {
+        throw std::runtime_error(Logger::Error("Could not load nodes from Abaqus. "
+                                               "Check nodes in the given filename.").c_str());
     }
 
     // Reset the offsetted nodes indices, if any.
@@ -455,6 +460,11 @@ void AbaqusIO::LoadBoundarySetsIn(std::vector<NodeSet> &node_sets)
 
         // Add current nodeset in the nodesets container.
         node_sets.emplace_back(current_nset);
+    }
+
+    if (node_sets.empty()) {
+        throw std::runtime_error(Logger::Error("Could not load node sets from Abaqus. "
+                                               "Check nodes in the given filename.").c_str());
     }
 
 

@@ -34,8 +34,9 @@ StrongModel2d::~StrongModel2d()
 
 
 
-void StrongModel2d::CreateGridRepresentation()
+void StrongModel2d::LoadGrid(const std::string &grid_filename)
 {
+    this->grid_.LoadFrom(grid_filename);
 
 }
 
