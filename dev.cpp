@@ -24,11 +24,9 @@ int main()
        support.ComputeSupportRadiuses(5);
        auto neighs = support.NeighborIndices();
 
-       for (auto &o_it : neighs) {
-           std::sort(o_it.begin(), o_it.end());
-           for (auto &i_it : o_it) { std::cout << i_it+1 << " "; }
-           std::cout << std::endl << std::endl;
-       }
+
+       Dcpse2d derivs;
+       derivs.ComputeDerivs(model.Grid().Nodes(), neighs, support.SupportRadiuses());
 
 
     }

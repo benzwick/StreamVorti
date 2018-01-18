@@ -64,6 +64,7 @@ void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
         Neighbor_search search(tree, query, neighs_num);
 
         std::vector<double> distances;
+        distances.reserve(neighs_num);
 
         // report the N nearest neighbors and their distance
         // This should sort all N points by increasing distance from origin
@@ -112,6 +113,7 @@ void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
         Neighbor_search search(tree, query, neighs_num);
 
         std::vector<double> distances;
+        distances.reserve(neighs_num);
 
         // report the N nearest neighbors and their distance
         // This should sort all N points by increasing distance from origin
@@ -143,7 +145,7 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
     }
 
 
-    typedef CGAL::Simple_cartesian<double> K;
+    typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
     typedef K::Point_2 Point_2d;
     typedef boost::tuple<Point_2d,int> Point_and_int;
     typedef CGAL::Search_traits_2<K> Traits_base;
@@ -203,6 +205,51 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
 
     // Return the indices of the closest nodes to each evaluation point.
     return closest_nodes_ids;
+
+}
+
+
+void SupportDomain::SaveNeighsToFile(const std::vector<std::vector<int> > &neighbor_ids,
+                                     const std::string &filename) const
+{
+    //Initialize the path of the exporting file.
+    std::string path = "";
+
+    // Position of the last slash in the exporting file's name.
+    std::size_t last_slash = filename.find_last_of("/\\");
+
+    // Get the path directory of the exporting file name.
+    if (last_slash != std::string::npos) {
+        path = filename.substr(0, last_slash);
+    }
+
+    // Create the path's directory if it doesn't exist.
+    boost::filesystem::path dir(path);
+    if (!path.empty() && !boost::filesystem::exists(dir)) {
+        boost::filesystem::create_directories(dir);
+    }
+
+    // Initialize the exporting file name's extension.
+    std::string ext = "";
+
+    // Search for the extension.
+    if (filename.find_last_of(".") != std::string::npos) {
+        ext = filename.substr(filename.find_last_of("."));
+    }
+
+    // Add .vtu extension before exporting if it's missing from the exporting file's name.
+    std::string out_filename;
+    if (ext != ".txt") { out_filename = filename + ".txt"; }
+    else { out_filename = filename; }
+
+    std::ofstream out(filename, std::ios::out | std::ios::trunc);
+
+    for (auto &neighs : neighbor_ids) {
+        for (auto &id : neighs) { out << id+1 << " "; }
+        out << std::endl;
+    }
+
+    out.close();
 
 }
 

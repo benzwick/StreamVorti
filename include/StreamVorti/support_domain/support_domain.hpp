@@ -43,6 +43,10 @@
 #include <CGAL/Fuzzy_sphere.h>
 #include <boost/iterator/zip_iterator.hpp>
 
+#include <boost/filesystem.hpp>
+
+#include <iostream>
+#include <fstream>
 #include <list>
 #include <cmath>
 #include <string>
@@ -61,9 +65,6 @@ namespace StreamVorti {
 
 /*!
  * \class SupportDomain
- * \brief Class implemmenting the support domain of nodes for meshless shape functions construction.
- * \bug The calculation of min max support nodes during the closest nodes calculation can generate errors if closest nodes are generated multiple times.
- * \bug closest nodes should be part of the class probably and not returned.
  */
 
 class SupportDomain
@@ -101,6 +102,10 @@ public:
 
 
     const std::vector<std::vector<int> > NeighborIndices();
+
+
+    void SaveNeighsToFile(const std::vector<std::vector<int> > &neighbor_ids,
+                          const std::string &filename) const;
 
 
     int MinSupportNodesIn(const std::vector<std::vector<int> > &neighbor_ids) const;

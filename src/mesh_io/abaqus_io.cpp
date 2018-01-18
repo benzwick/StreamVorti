@@ -48,14 +48,14 @@ void AbaqusIO::LoadMeshFrom(const std::string &mesh_filename)
 
     // Check if mesh filename is given.
     if (mesh_filename.empty()) {
-        std::string error = "[ExplicitSim ERROR] No filename was given to read mesh.";
+        std::string error = Logger::Error("No filename was given to read mesh.");
         throw std::invalid_argument(error.c_str());
     }
 
     // Check if mesh is in abaqus format (.inp).
     std::string ext = mesh_filename.substr(mesh_filename.length()-4);
     if (ext != ".inp") {
-        std::string error = "[ExplicitSim ERROR] The mesh \"" + mesh_filename + "\" is not in Abaqus format (.inp)";
+        std::string error = Logger::Error("The file: ") + mesh_filename + " is not in Abaqus format (.inp)";
         throw std::invalid_argument(error.c_str());
     }
 
@@ -64,7 +64,7 @@ void AbaqusIO::LoadMeshFrom(const std::string &mesh_filename)
 
     // Check if mesh file opened successfully.
     if (!mesh_file.is_open()) {
-        std::string error = "[ExplicitSim ERROR] Could not open the mesh file: \"" + mesh_filename + "\". Check given path.";
+        std::string error = Logger::Error("Could not open the file: ") + mesh_filename + " Check given path.";
         throw std::runtime_error(error.c_str());
     }
 

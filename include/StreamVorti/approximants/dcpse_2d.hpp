@@ -33,10 +33,16 @@
 
 #include "StreamVorti/vectors/vectors.hpp"
 #include "StreamVorti/elements/node.hpp"
+#include "StreamVorti/utilities/logger.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
+#include <boost/filesystem.hpp>
+
+#include <iostream>
+#include <fstream>
+#include <iomanip>
 #include <vector>
 #include <algorithm>
 #include <string>
@@ -72,98 +78,41 @@ public:
     virtual ~Dcpse2d();
 
 
-    /*!
-     * \brief Set the type of the basis function for shape functions and derivatives computation.
-     *
-     * The available types for the basis function are [linear], [quadratic]. The input type is NOT case-sensitive.
-     *
-     * \param [in] basis_function_type The type of the basis function to be used.
-     * \return [void]
-     */
-    void SetBasisFunctionType(const std::string &basis_function_type);
+    void ComputeDerivs(const std::vector<Node> &geom_nodes,
+                       const std::vector<std::vector<int> > &support_nodes_ids,
+                       const std::vector<double> &support_radiuses);
 
 
-    /*!
-     * \brief Set the exact derivatives mode.
-     *
-     * If the exact derivatives conditional is true exact derivatives will be computed, otherwise difuse ones will be computed.
-     * Default: [false].
-     *
-     * \param [in] exact_derivatives The conditional of exact derivatives.
-     * \return [void]
-     */
-    void SetExactDerivativesMode(const bool &exact_derivatives);
+    void SaveDerivToFile(const std::string &deriv, const std::string &filename) const;
 
 
-    /*!
-     * \brief Compute the shape functions and their derivatives.
-     * \param [in] geom_nodes The nodes describing the model's geometry.
-     * \param [in] eval_nodes_coords The coordinates of the evaluation nodes of the shape functions.
-     * \param [in] support_nodes_ids The indices of the nodes belonging in the support domain of its evaluation node.
-     * \param [in] influence_radiuses The radiuses of influence of each evaluation point.
-     * \return [void]
-     */
-    void ComputeShFuncAndDerivs(const std::vector<Node> &geom_nodes,
-                                const std::vector<Vec3<double> > &eval_nodes_coords,
-                                const std::vector<std::vector<int> > &support_nodes_ids,
-                                const std::vector<double> &influence_radiuses);
-
-
-    /*!
-     * \brief BaseFunctionType
-     * \return [std::string]
-     */
-    inline const std::string & BaseFunctionType() const { return this->base_function_type_; }
-
-
-    /*!
-     * \brief UseExactDerivatives
-     * \return [bool]
-     */
-    inline const bool & UseExactDerivatives() const { return this->exact_derivatives_; }
-
-
-    /*!
-     * \brief Get the shape function sparse matrix.
-     * \return [Eigen::SparseMatrix<double>] The shape function sparse matrix.
-     */
-    inline const Eigen::SparseMatrix<double> & ShapeFunction() const { return this->sh_func_; }
-
-
-    /*!
-     * \brief Get the shape function first X derivative sparse matrix.
-     * \return [Eigen::SparseMatrix<double>] The shape function first X derivative sparse matrix.
-     */
     inline const Eigen::SparseMatrix<double> & ShapeFunctionDx() const { return this->sh_func_dx_; }
 
 
-    /*!
-     * \brief Get the shape function first Y derivative sparse matrix.
-     * \return [Eigen::SparseMatrix<double>] The shape function first Y derivative sparse matrix.
-     */
     inline const Eigen::SparseMatrix<double> & ShapeFunctionDy() const { return this->sh_func_dy_; }
 
 
-    /*!
-     * \brief Get the shape function first Z derivative sparse matrix.
-     * \return [Eigen::SparseMatrix<double>] The shape function first Z derivative sparse matrix.
-     */
-    inline const Eigen::SparseMatrix<double> & ShapeFunctionDz() const { return this->sh_func_dz_; }
+    inline const Eigen::SparseMatrix<double> & ShapeFunctionDxx() const { return this->sh_func_dxx_; }
+
+
+    inline const Eigen::SparseMatrix<double> & ShapeFunctionDyy() const { return this->sh_func_dyy_; }
+
+
+    inline const Eigen::SparseMatrix<double> & ShapeFunctionDxy() const { return this->sh_func_dxy_; }
 
 
 
 private:
-    std::string base_function_type_;            /*!< The type of the base function to be used during shape functions and derivatives calculation. */
 
-    bool exact_derivatives_;                    /*!< Conditional to state the computation of exact [true] or diffuse [false] derivatives. */
+    Eigen::SparseMatrix<double> sh_func_dx_;     /*!< The shape function 1st x derivative matrix. */
 
-    Eigen::SparseMatrix<double> sh_func_;       /*!< The shape function matrix. */
+    Eigen::SparseMatrix<double> sh_func_dy_;     /*!< The shape function 1st y derivative matrix. */
 
-    Eigen::SparseMatrix<double> sh_func_dx_;     /*!< The shape function x derivative matrix. */
+    Eigen::SparseMatrix<double> sh_func_dxx_;     /*!< The shape function 2nd x derivative matrix. */
 
-    Eigen::SparseMatrix<double> sh_func_dy_;     /*!< The shape function y derivative matrix. */
+    Eigen::SparseMatrix<double> sh_func_dyy_;     /*!< The shape function 2nd y derivative matrix. */
 
-    Eigen::SparseMatrix<double> sh_func_dz_;     /*!< The shape function z derivative matrix. */
+    Eigen::SparseMatrix<double> sh_func_dxy_;     /*!< The shape function 2nd xy derivative matrix. */
 };
 
 
