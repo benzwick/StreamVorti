@@ -36,7 +36,6 @@
 
 #include "StreamVorti/approximants/dcpse_2d.hpp"
 #include "StreamVorti/elements/elements.hpp"
-#include "StreamVorti/exporters/exporters.hpp"
 #include "StreamVorti/grid/grids.hpp"
 #include "StreamVorti/mesh/mesh.hpp"
 #include "StreamVorti/mesh_io/mesh_io.hpp"
