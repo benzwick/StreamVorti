@@ -122,40 +122,6 @@ public:
 
 
     /*!
-     * \brief Sets the normal of the node.
-     * \param [in] n_x The X component of the normal.
-     * \param [in] n_y The Y component of the normal.
-     * \param [in] n_z The Z component of the normal.
-     * \return [void]
-     */
-    void SetNormal(const double &n_x, const double &n_y, const double &n_z);
-
-
-    /*!
-     * \brief Sets the X component of the node's normal.
-     * \param [in] n_x The X component of the normal.
-     * \return [void]
-     */
-    void SetNormalX(const double &n_x);
-
-
-    /*!
-     * \brief Sets the Y component of the node's normal.
-     * \param [in] n_y The Y component of the normal.
-     * \return [void]
-     */
-    void SetNormalY(const double &n_y);
-
-
-    /*!
-     * \brief Sets the Z component of the node's normal.
-     * \param [in] n_z The Z component of the normal.
-     * \return [void]
-     */
-    void SetNormalZ(const double &n_z);
-
-
-    /*!
      * \brief Sets the partition the node belongs.
      * \param [in] id The partition's index.
      * \param [in] name The partiotion's name. If omitted, it is considered empty.
@@ -179,14 +145,6 @@ public:
      * \return [void]
      */
     void CopyCoordinates(const Vec3<double> &coordinates);
-
-
-    /*!
-     * \brief Copy normal by a Vec3 vector.
-     * \param [in] normal The Vec3 vector containing the normal to be copied.
-     * \return [void]
-     */
-    void CopyNormal(const Vec3<double> &normal);
 
 
     /*!
@@ -217,13 +175,6 @@ public:
      * \return [Vec3] The node's coordinates.
      */
     inline const Vec3<double> & Coordinates() const { return this->coordinates_; }
-
-
-    /*!
-     * \brief Get the node's normal.
-     * \return [Vec3] The node's normal.
-     */
-    inline const Vec3<double> & Normal() const { return this->normal_; }
 
 
     /*!
@@ -286,7 +237,7 @@ public:
     /*!
      * \brief Assignment operator.
      *
-     * Assigns all the properties of a given node (id, coordinates, normal, partition, boundary, and element type).
+     * Assigns all the properties of a given node (id, coordinates, partition, boundary, and element type).
      *
      * \param [in] node The node to assign.
      * \return [Node] The assigned node.
@@ -298,8 +249,6 @@ private:
     int id_;                            /*!< The node's id (position in a list of nodes). */
 
     Vec3<double> coordinates_;     /*!< The node's coordinates. */
-
-    Vec3<double> normal_;          /*!< The node's normal vector. */
 
     Partition part_;               /*!< The node's partition. */
 

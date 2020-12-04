@@ -30,9 +30,8 @@ Node::Node() : id_(-1), element_type_(StreamVorti::ElementType::node)
 {
     //Id is initialized to -1 to indicate that node is not listed.
 
-    // Initialize coordinates and normal.
+    // Initialize coordinates.
     this->coordinates_.Set(0., 0., 0.);
-    this->normal_.Set(0., 0., 0.);
 
     // Initialize partition.
     part_.id_ = 0;
@@ -97,34 +96,6 @@ void Node::SetCoordZ(const double &z)
 }
 
 
-void Node::SetNormal(const double &n_x, const double &n_y, const double &n_z)
-{
-    // Set the node's normal.
-    this->normal_.Set(n_x, n_y, n_z);
-}
-
-
-void Node::SetNormalX(const double &n_x)
-{
-    // Set the x component of the node's normal.
-    this->normal_.SetX(n_x);
-}
-
-
-void Node::SetNormalY(const double &n_y)
-{
-    // Set the y component of the node's normal.
-    this->normal_.SetY(n_y);
-}
-
-
-void Node::SetNormalZ(const double &n_z)
-{
-    // Set the z component of the node's normal.
-    this->normal_.SetZ(n_z);
-}
-
-
 void Node::SetPartition(const int &id, std::string name)
 {
     // Set the id of the partition the node belongs to.
@@ -152,13 +123,6 @@ void Node::CopyCoordinates(const Vec3<double> &coordinates)
 }
 
 
-void Node::CopyNormal(const Vec3<double> &normal)
-{
-    // Set the node's normal by a copy.
-    this->normal_ = normal;
-}
-
-
 void Node::CopyPartition(const Partition &part)
 {
     // Set the node's partition by a copy.
@@ -178,7 +142,6 @@ bool Node::operator == (const Node &node) const
     // Compare nodes.
     return ((this->id_ == node.id_) &&
             (this->coordinates_ == node.coordinates_) &&
-            (this->normal_ == node.normal_) &&
             (this->part_ == node.part_) &&
             (this->boundary_ == node.boundary_) &&
             (this->element_type_ == node.element_type_)
@@ -199,7 +162,6 @@ Node & Node::operator = (const Node &node)
         // Assign values from node.
         this->id_ = node.id_;
         this->coordinates_ = node.coordinates_;
-        this->normal_ = node.normal_;
         this->part_ = node.part_;
         this->boundary_ = node.boundary_;
         this->element_type_ = node.element_type_;
