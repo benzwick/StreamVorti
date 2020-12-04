@@ -120,14 +120,14 @@ int main(int argc, char *argv[]) {
         // Profiling spent time in StreamVorti
         Timer timer;
 
-        // Create 2d strong model.
-        StrongModel2d model;
-        model.LoadGrid(config->RetrieveArgument<std::string>("Model.GridFile"));
-        std::cout << Logger::Message("Model has nodes: ") << model.Grid().Nodes().size() << std::endl;
+        // Load 2d grid.
+        Grid2D grid;
+        grid.LoadFrom(config->RetrieveArgument<std::string>("Model.GridFile"));
+        std::cout << Logger::Message("Grid has nodes: ") << grid.Nodes().size() << std::endl;
 
         // Set support domain.
         SupportDomain support;
-        support.SetSupportNodes(model.Grid().Nodes());
+        support.SetSupportNodes(grid.Nodes());
 
         timer.Reset();
         support.ComputeCutOffRadiuses(config->RetrieveArgument<int>("DCPSE.CutoffRadAtNeighbor"));
@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
 
         Dcpse2d derivs;
         timer.Reset();
-        derivs.ComputeDerivs(model.Grid().Nodes(), neighs, support.SupportRadiuses());
+        derivs.ComputeDerivs(grid.Nodes(), neighs, support.SupportRadiuses());
         std::cout << Logger::Message("Execution time for DCPSE derivatives calculation: ")
                   << timer.PrintElapsedTime() << "\n";
 

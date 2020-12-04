@@ -13,20 +13,20 @@ int main()
 
        std::cout << "\t<<< Welcome to StreamVorti >>>\n";
 
-       // Create 2d strong model.
-       StrongModel2d model;
-       model.LoadGrid("/home/mood/DATABASE/mesh/geometric/2D/square10x10.inp");
+       // Load 2d grid.
+       Grid2D grid;
+       grid.LoadFrom("/home/mood/DATABASE/mesh/geometric/2D/square10x10.inp");
 
        // Set support domain.
        SupportDomain support;
-       support.SetSupportNodes(model.Grid().Nodes());
+       support.SetSupportNodes(grid.Nodes());
        support.ComputeCutOffRadiuses(30);
        support.ComputeSupportRadiuses(5);
        auto neighs = support.NeighborIndices();
 
 
        Dcpse2d derivs;
-       derivs.ComputeDerivs(model.Grid().Nodes(), neighs, support.SupportRadiuses());
+       derivs.ComputeDerivs(grid.Nodes(), neighs, support.SupportRadiuses());
 
 
     }
