@@ -71,15 +71,6 @@ void TetraMesh::LoadFrom(const std::string &mesh_filename)
         }
 
     }
-    else if (ext == ".feb") {
-        FebioIO febio_io;
-        febio_io.LoadMeshFrom(mesh_filename.c_str());
-        febio_io.LoadNodesIn(this->nodes_);
-        febio_io.LoadElementsIn(this->tetras_);
-        if (febio_io.BoundariesExist()) {
-            febio_io.LoadBoundarySetsIn(this->node_sets_);
-        }
-    }
     else {
         std::string error = Logger::Error("Could not load mesh of unkown format. Expected [.inp | .feb] Check: ") + mesh_filename;
         throw std::invalid_argument(error.c_str());

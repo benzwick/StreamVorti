@@ -7,7 +7,7 @@ PROJECT(MeshIO)
 
 
 # Library source files.
-SET(SOURCES abaqus_io.cpp  febio_io.cpp)
+SET(SOURCES abaqus_io.cpp)
 
 # Include the headers directory.
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
@@ -15,8 +15,7 @@ INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 # Library header files.
 SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/mesh_io.hpp
             ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/abaqus_io.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/abaqus_io.tpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/febio_io.hpp)
+            ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/abaqus_io.tpp)
 
 ADD_LIBRARY( ${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )
 

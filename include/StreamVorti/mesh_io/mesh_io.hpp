@@ -33,6 +33,5 @@
 #define STREAMVORTI_MESH_IO_MESH_IO_HPP_
 
 #include "StreamVorti/mesh_io/abaqus_io.hpp"
-#include "StreamVorti/mesh_io/febio_io.hpp"
 
 #endif //STREAMVORTI_MESH_IO_MESH_IO_HPP_
