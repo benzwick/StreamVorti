@@ -38,6 +38,39 @@ Grid2D::Grid2D(const Grid2D &grid2D)
 }
 
 
+Grid2D::Grid2D(const mfem::GridFunction &nodes)
+// See
+// - https://github.com/mfem/mfem/issues/63#issuecomment-221646308
+// - mfem::GridFunction::ReorderByNodes()
+{
+	// ASSERT Ordering::byNODES (default)
+	if (nodes.FESpace()->GetOrdering() != mfem::Ordering::byNODES)
+	{
+		MFEM_ABORT( "Node coordinates are not ordered by nodes." );
+	}
+
+	// ASSERT mesh dim == 2
+	int dim = nodes.FESpace()->GetMesh()->Dimension();
+	if (dim != 2)
+	{
+		MFEM_ABORT( "Mesh is " << dim << "D not 2D." );
+	}
+
+	const int nNodes = nodes.Size() / dim;
+	double x, y;
+	Node node;
+
+	for (int i = 0; i < nNodes; ++i)
+	{
+		x = nodes(         i);
+		y = nodes(nNodes + i);
+		node.SetId(i);
+		node.SetCoordinates(x, y, 0.);
+		nodes_.emplace_back(node);
+	}
+}
+
+
 Grid2D::~Grid2D()
 {}
 

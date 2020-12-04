@@ -53,8 +53,30 @@ FIND_PACKAGE(Boost REQUIRED COMPONENTS system filesystem program_options)
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
 LINK_DIRECTORIES(${Boost_LIBRARY_DIR})
 
-# -------------------------
+# From https://github.com/GLVis/glvis/blob/9f2df220342d13ef42c2985257ed96ba43f3bb70/CMakeLists.txt
+# Import MFEM. The following variables can be used to help CMake find MFEM:
+#  * MFEM_DIR - absolute path to the MFEM build or install prefix.
+#  * mfem_DIR - absolute path to where MFEMConfig.cmake is.
+message(STATUS "Looking for mfem ...")
+set(MFEM_DIR "" CACHE PATH "Path to the MFEM build or install prefix.")
+if (MFEM_DIR)
+   find_package(mfem REQUIRED NAMES MFEM HINTS "${MFEM_DIR}"
+                "${MFEM_DIR}/lib/cmake/mfem" NO_DEFAULT_PATH)
+else()
+   find_package(mfem REQUIRED NAMES MFEM)
+endif()
+message(STATUS "Found mfem config in: ${mfem_DIR} (version ${MFEM_VERSION})")
+# Use the same C++ compiler as MFEM. This is needed when MFEM was built using
+# an MPI wrapper and we do not have explicitly the MPI compile and link flags.
+if (NOT CMAKE_CXX_COMPILER AND MFEM_CXX_COMPILER)
+  set(CMAKE_CXX_COMPILER "${MFEM_CXX_COMPILER}")
+endif()
 
+# Include paths and libraries needed by MFEM
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MFEM_CXX_FLAGS}")
+INCLUDE_DIRECTORIES(${MFEM_INCLUDE_DIRS})
+
+# -------------------------
 
 # Subdirectories of StreamVorti.
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
@@ -83,7 +105,7 @@ IF( STREAMVORTI_BUILD_SHARED_LIBS )
         $<TARGET_OBJECTS:Vectors>)
 
     # Link with dependencies
-    TARGET_LINK_LIBRARIES(${PROJECT_NAME}  ${CGAL_LIBRARIES}  ${Boost_LIBRARIES})
+    TARGET_LINK_LIBRARIES(${PROJECT_NAME}  ${CGAL_LIBRARIES}  ${Boost_LIBRARIES} ${MFEM_LIBRARIES})
 
     # Set build folders.
     SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES
@@ -113,7 +135,7 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
         $<TARGET_OBJECTS:Vectors>)
     
     # Link with dependencies
-    TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static  ${CGAL_LIBRARIES}  ${Boost_LIBRARIES})
+    TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static  ${CGAL_LIBRARIES}  ${Boost_LIBRARIES} ${MFEM_LIBRARIES})
     
     # Set build folders   
     SET_TARGET_PROPERTIES(${PROJECT_NAME}_static PROPERTIES
@@ -149,7 +171,19 @@ ELSE()
     TARGET_LINK_LIBRARIES(streamvort_dev  ${PROJECT_NAME}_static)
 ENDIF()
 
-										   
+##############################################################################
+# MFEM simulation executable.
+ADD_EXECUTABLE(MfemRun  mfem_main.cpp)
+IF(STREAMVORTI_BUILD_SHARED_LIBS)
+    TARGET_LINK_LIBRARIES(MfemRun  ${PROJECT_NAME})
+ELSE()
+    TARGET_LINK_LIBRARIES(MfemRun  ${PROJECT_NAME}_static)
+ENDIF()
+
+# Install the StreamVorti simulation executable.
+INSTALL(TARGETS MfemRun RUNTIME DESTINATION bin/StreamVorti)
+##############################################################################
+
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
 INSTALL(FILES ${HEADERS} DESTINATION include/StreamVorti)
 

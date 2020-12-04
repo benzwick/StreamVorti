@@ -34,6 +34,8 @@
 #include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/mesh_io/mesh_io.hpp"
 
+#include "mfem.hpp"
+
 #include <vector>
 #include <string>
 
@@ -62,6 +64,10 @@ public:
      */
     Grid2D(const Grid2D &grid2D);
 
+    /*!
+     * \brief Grid2D constructor from MFEM nodal coordinates GridFunction.
+     */
+    Grid2D(const mfem::GridFunction &nodes);
 
     /*!
      * \brief Grid2D destructor.
