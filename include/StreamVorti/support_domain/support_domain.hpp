@@ -31,7 +31,7 @@
 #define STREAMVORTI_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
 
 
-#include "StreamVorti/elements/elements.hpp"
+#include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/vectors/vectors.hpp"
 #include "StreamVorti/utilities/logger.hpp"
 

@@ -34,10 +34,8 @@
 #define STREAMVORTI_MESH_TETRAMESH_HPP_
 
 #include "StreamVorti/mesh_io/mesh_io.hpp"
-#include "StreamVorti/mesh/mesh_properties.hpp"
 #include "StreamVorti/vectors/vectors.hpp"
-#include "StreamVorti/elements/elements.hpp"
-#include "StreamVorti/sets/node_set.hpp"
+#include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/utilities/logger.hpp"
 
 #include <vector>
@@ -87,25 +85,10 @@ public:
 
 
     /*!
-     * \brief Save a tetrahedral mesh.
-     * \param [in] mesh_filename The filename (full path) where the mesh should be saved.
-     * \return [void]
-     */
-    void SaveTo(const std::string &mesh_filename);
-
-
-    /*!
      * \brief Write access to the nodes of the mesh.
      * \return [std::vector<StreamVorti::Node>] the mesh nodes with write access.
      */
     inline std::vector<Node> & EditNodes() { return this->nodes_; }
-
-
-    /*!
-     * \brief Write access to the elements of the mesh.
-     * \return [std::vector<StreamVorti::Tetrahedron>] The mesh elements with write access.
-     */
-    inline std::vector<Tetrahedron> & EditElements() { return this->tetras_; }
 
 
     /*!
@@ -140,30 +123,6 @@ public:
      * \return [int] The number of nodes of the tetrahedral mesh.
      */
     inline const int NodesNum() const { return static_cast<int>(this->nodes_.size()); }
-
-
-    /*!
-     * \brief Get the sets of nodes of the mesh.
-     *
-     * These correspond to groups of nodes where a boundary condition could be specified.
-     *
-     * \return [std::vector<StreamVorti::NodeSet>] The sets of nodes of the mesh.
-     */
-    inline const std::vector<NodeSet> NodeSets() const { return this->node_sets_; }
-
-
-    /*!
-     * \brief Read-ony access to the elements of the mesh.
-     * \return [std::vector<StreamVorti::Tetrahedron>] the mesh elements with read-only access.
-     */
-    inline const std::vector<Tetrahedron> & Elements() const { return this->tetras_; }
-
-
-    /*!
-     * \brief The type of the mesh (tetrahedral).
-     * \return [StreamVorti::MeshType] the mesh type of the given mesh (tetrahedral).
-     */
-    inline const StreamVorti::MeshType & MeshType() const { return this->mesh_type_; }
 
 
     /*!
@@ -202,11 +161,6 @@ private:
 
     std::vector<Node> nodes_;                             /*!< The mesh nodes. */
 
-    std::vector<NodeSet> node_sets_;            /*!< The mesh node sets. */
-
-    std::vector<Tetrahedron> tetras_;                     /*!< The mesh tetrahedral elements. */
-
-    StreamVorti::MeshType mesh_type_;                     /*!< The mesh type (tetrahedral). */
 };
 
 

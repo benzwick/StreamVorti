@@ -34,7 +34,6 @@
 
 // Collection of mesh header files.
 
-#include "StreamVorti/mesh/mesh_properties.hpp"
 #include "StreamVorti/mesh/tetramesh.hpp"
 
 #endif //STREAMVORTI_MESH_MESH_HPP_

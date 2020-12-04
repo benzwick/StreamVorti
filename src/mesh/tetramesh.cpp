@@ -27,7 +27,7 @@
 namespace StreamVorti {
 
 
-TetraMesh::TetraMesh() : mesh_type_(StreamVorti::MeshType::tetrahedral)
+TetraMesh::TetraMesh()
 {}
 
 
@@ -54,22 +54,12 @@ void TetraMesh::LoadFrom(const std::string &mesh_filename)
 
     // Clear the mesh containers.
     this->nodes_.clear();
-    this->tetras_.clear();
-    this->node_sets_.clear();
 
     // Load the corresponding format.
     if (ext == ".inp") {
         AbaqusIO abaqus_io;
         abaqus_io.LoadMeshFrom(mesh_filename.c_str());
         abaqus_io.LoadNodesIn(this->nodes_);
-        abaqus_io.LoadElementsIn(this->tetras_);
-        if (abaqus_io.PartitionsExist()) {
-            abaqus_io.LoadPartitionsIn(this->tetras_);
-        }
-        if (abaqus_io.NodeSetsExist()) {
-            abaqus_io.LoadBoundarySetsIn(this->node_sets_);
-        }
-
     }
     else {
         std::string error = Logger::Error("Could not load mesh of unkown format. Expected [.inp | .feb] Check: ") + mesh_filename;
@@ -79,37 +69,10 @@ void TetraMesh::LoadFrom(const std::string &mesh_filename)
 }
 
 
-void TetraMesh::SaveTo(const std::string &mesh_filename)
-{
-    // Check if mesh filename is given.
-    if (mesh_filename.empty()) {
-        std::string error = "ERROR: No filename was given to save the mesh.";
-        throw std::invalid_argument(error.c_str());
-    }
-
-    // Get the extension of the mesh filename.
-    auto ext = mesh_filename.substr(mesh_filename.length()-4);
-
-
-    if (ext == ".inp") {
-        AbaqusIO abaqus_io;
-        abaqus_io.SaveMesh<TetraMesh,Tetrahedron>(*this, mesh_filename.c_str());
-    }
-    else {
-        std::string error = "ERROR: Given mesh file: \"" + mesh_filename + "\" is of unknown format.";
-        throw std::invalid_argument(error.c_str());
-    }
-}
-
-
 bool TetraMesh::operator == (const TetraMesh &tetramesh) const
 {
     // Compare tetrahedral meshes for equality.
-    return ((this->nodes_ == tetramesh.nodes_) &&
-            (this->node_sets_ == tetramesh.node_sets_) &&
-            (this->tetras_ == tetramesh.tetras_) &&
-            (this->mesh_type_ == tetramesh.mesh_type_)
-           );
+    return ((this->nodes_ == tetramesh.nodes_));
 }
 
 
@@ -125,9 +88,6 @@ TetraMesh & TetraMesh::operator = (const TetraMesh &tetramesh)
     if (this != &tetramesh) {
         // Assign values from tetrahedron.
         this->nodes_ = tetramesh.nodes_;
-        this->node_sets_ = tetramesh.node_sets_;
-        this->tetras_ = tetramesh.tetras_;
-        this->mesh_type_ = tetramesh.mesh_type_;
     }
 
     return *this;

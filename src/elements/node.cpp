@@ -26,20 +26,12 @@
 namespace StreamVorti {
 
 
-Node::Node() : id_(-1), element_type_(StreamVorti::ElementType::node)
+Node::Node() : id_(-1)
 {
     //Id is initialized to -1 to indicate that node is not listed.
 
     // Initialize coordinates.
     this->coordinates_.Set(0., 0., 0.);
-
-    // Initialize partition.
-    part_.id_ = 0;
-    part_.name_ = "";
-
-    // Initialize boundary (zero -> no boundary).
-    boundary_.id_ = 0;
-    boundary_.name_ = "";
 }
 
 
@@ -96,26 +88,6 @@ void Node::SetCoordZ(const double &z)
 }
 
 
-void Node::SetPartition(const int &id, std::string name)
-{
-    // Set the id of the partition the node belongs to.
-    this->part_.id_ = id;
-
-    // Set the name of the partition the node belongs to.
-    this->part_.name_ = name;
-}
-
-
-void Node::SetBoundary(const int &id, std::string name)
-{
-    // Set the id of the boundary the node belongs to.
-    this->boundary_.id_ = id;
-
-    // Set the name of the boundary the node belongs to.
-    this->boundary_.name_ = name;
-}
-
-
 void Node::CopyCoordinates(const Vec3<double> &coordinates)
 {
     // Set the node's coordinates by a copy.
@@ -123,28 +95,11 @@ void Node::CopyCoordinates(const Vec3<double> &coordinates)
 }
 
 
-void Node::CopyPartition(const Partition &part)
-{
-    // Set the node's partition by a copy.
-    this->part_ = part;
-}
-
-
-void Node::CopyBoundary(const Boundary &boundary)
-{
-    // Set the node's boundary by a copy.
-    this->boundary_ = boundary;
-}
-
-
 bool Node::operator == (const Node &node) const
 {
     // Compare nodes.
     return ((this->id_ == node.id_) &&
-            (this->coordinates_ == node.coordinates_) &&
-            (this->part_ == node.part_) &&
-            (this->boundary_ == node.boundary_) &&
-            (this->element_type_ == node.element_type_)
+            (this->coordinates_ == node.coordinates_)
            );
 }
 
@@ -162,9 +117,6 @@ Node & Node::operator = (const Node &node)
         // Assign values from node.
         this->id_ = node.id_;
         this->coordinates_ = node.coordinates_;
-        this->part_ = node.part_;
-        this->boundary_ = node.boundary_;
-        this->element_type_ = node.element_type_;
     }
 
     return *this;

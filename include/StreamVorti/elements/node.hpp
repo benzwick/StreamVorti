@@ -32,7 +32,6 @@
 #define STREAMVORTI_ELEMENTS_NODE_HPP_
 
 #include "StreamVorti/vectors/vectors.hpp"
-#include "StreamVorti/elements/element_properties.hpp"
 
 
 namespace StreamVorti {
@@ -122,45 +121,11 @@ public:
 
 
     /*!
-     * \brief Sets the partition the node belongs.
-     * \param [in] id The partition's index.
-     * \param [in] name The partiotion's name. If omitted, it is considered empty.
-     * \return [void]
-     */
-    void SetPartition(const int &id, std::string name="");
-
-
-    /*!
-     * \brief Sets the boundary the node belongs.
-     * \param [in] id The boundary's index. If zero, the node does not belong on boundary.
-     * \param [in] name The boundary's name. If omitted, it is considered empty.
-     * \return [void]
-     */
-    void SetBoundary(const int &id, std::string name="");
-
-
-    /*!
      * \brief Copy coordinates by a Vec3 vector.
      * \param [in] coordinates The Vec3 vector containing the coordinates to be copied.
      * \return [void]
      */
     void CopyCoordinates(const Vec3<double> &coordinates);
-
-
-    /*!
-     * \brief Copy partition from other element object.
-     * \param [in] part The partition to be copied.
-     * \return [void]
-     */
-    void CopyPartition(const Partition &part);
-
-
-    /*!
-     * \brief Copy boundary from other element object.
-     * \param [in] boundary The boundary to be copied.
-     * \return [void]
-     */
-    void CopyBoundary(const Boundary &boundary);
 
 
     /*!
@@ -175,41 +140,6 @@ public:
      * \return [Vec3] The node's coordinates.
      */
     inline const Vec3<double> & Coordinates() const { return this->coordinates_; }
-
-
-    /*!
-     * \brief Get the index of the partition the node belongs to.
-     * \return [int] The node's partition index.
-     */
-    inline const int & PartitionId() const { return this->part_.id_; }
-
-
-    /*!
-     * \brief Get the name of the partition the node belongs to.
-     * \return [std::string] The node's partition name.
-     */
-    inline const std::string & PartitionName() const { return this->part_.name_; }
-
-
-    /*!
-     * \brief Get the index of the boundary the node belongs to.
-     * \return [int] The node's boundary index.
-     */
-    inline const int & BoundaryId() const { return this->boundary_.id_; }
-
-
-    /*!
-     * \brief Get the name of the boundary the node belongs to.
-     * \return [std::string] The node's boundary name.
-     */
-    inline const std::string & BoundaryName() const { return this->boundary_.name_; }
-
-
-    /*!
-     * \brief Get the element type of the node.
-     * \return [ElementType] The node's element type.
-     */
-    inline const StreamVorti::ElementType & ElementType() const { return this->element_type_; }
 
 
     /*!
@@ -237,7 +167,7 @@ public:
     /*!
      * \brief Assignment operator.
      *
-     * Assigns all the properties of a given node (id, coordinates, partition, boundary, and element type).
+     * Assigns all the properties of a given node (id, coordinates).
      *
      * \param [in] node The node to assign.
      * \return [Node] The assigned node.
@@ -249,12 +179,6 @@ private:
     int id_;                            /*!< The node's id (position in a list of nodes). */
 
     Vec3<double> coordinates_;     /*!< The node's coordinates. */
-
-    Partition part_;               /*!< The node's partition. */
-
-    Boundary boundary_;            /*!< The node's boundary. */
-
-    StreamVorti::ElementType element_type_;     /*!< The node's element type is set during construction. */
 
 };
 

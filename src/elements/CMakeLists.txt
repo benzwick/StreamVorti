@@ -7,16 +7,13 @@ PROJECT(Elements)
 
 
 # Library source files.
-SET(SOURCES node.cpp  tetrahedron.cpp )
+SET(SOURCES node.cpp)
 
 # Include the headers directory.
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Library header files.
-SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/elements/element_properties.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/elements/elements.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/elements/node.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/elements/tetrahedron.hpp)
+SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/elements/node.hpp)
 
 ADD_LIBRARY( ${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )
 

@@ -34,9 +34,7 @@
 
 
 #include "StreamVorti/vectors/vectors.hpp"
-#include "StreamVorti/elements/elements.hpp"
-#include "StreamVorti/sets/node_set.hpp"
-#include "StreamVorti/mesh/mesh_properties.hpp"
+#include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/utilities/logger.hpp"
 
 #include <vector>
@@ -93,21 +91,6 @@ public:
 
 
     /*!
-     * \brief Save mesh in abaqus format.
-     *
-     * Templated function to save a mesh in abaqus format.
-     * The template type must be one of the available mesh types: triangular,
-     * quadrangular, tetrahedral, hexahedral.
-     *
-     * \param [in] mesh The mesh to be saved.
-     * \param [in] mesh_filename The filename (full path) where the mesh will be saved.
-     * \return [void]
-     */
-    template <class MESHTYPE, class ELEMTYPE>
-    inline void SaveMesh(const MESHTYPE &mesh, const std::string &mesh_filename);
-
-
-    /*!
      * \brief Load the vertices of the readed mesh in the given vertices container.
      * \param [out] vertices The vertices container to load the vertices of the mesh.
      * \return [void] The vertices of the readed mesh.
@@ -115,66 +98,17 @@ public:
     void LoadNodesIn(std::vector<Node> &nodes);
 
 
-    /*!
-     * \brief Load the elements of the readed mesh in the given elements container.
-     * \param [out] tetras The tetrahedra container to load the tetrahedra of the mesh.
-     * \return [void]
-     */
-    void LoadElementsIn(std::vector<Tetrahedron> &tetras);
-
-
-    /*!
-     * \brief Assign the partitions of the readed mesh to the elements of the given container.
-     * \param [out] tetras The tetrahedra container where partitions will be assigned to the stored tetrahedra.
-     * \return [void]
-     */
-    void LoadPartitionsIn(std::vector<Tetrahedron> &tetras);
-
-
-    /*!
-     * \brief Assign the boundary node sets of the loaded mesh to the given container.
-     * \param node_sets The container where the loaded mesh nodesets will be stored.
-     * \return [void]
-     */
-    void LoadBoundarySetsIn(std::vector<NodeSet> &node_sets);
-
-
-    /*!
-     * \brief Conditional to check if the mesh has multiple partitions (domains)
-     * \return [bool] True if the mesh has more than one partitions (domains), false differently.
-     */
-    inline const bool & PartitionsExist() const { return this->partitions_exist; }
-
-
-    inline const bool & NodeSetsExist() const { return this->node_sets_exist; }
-
-
 private:
     std::vector<std::string> input_mesh_;                    /*!< The parsed mesh with an index per line for easy access. */
 
     int nodes_startline_;                                /*!< The index of the starting line of the nodes set in the mesh file. */
 
-    int elems_startline_;                                  /*!< The index of the starting line of the elements set in the mesh file. */
-
     std::vector<std::pair<int,int> > offsetted_nodes_;       /*!< The indices of the offsetted nodes from the storage order and their offsets. */
-
-    std::vector<std::pair<int,int> > offsetted_elems_;       /*!< The indices of the offsetted elements from the storage order and their offsets. */
-
-    bool partitions_exist;                                   /*!< The conditional of the mesh partitions' existence. */
-
-    bool node_sets_exist;                                    /*!< The conditional of the mesh boundaries' existence */
-
-    std::vector<int> parts_startlines_;                      /*!< The indices of the starting line of the partition sets in the mesh filie. */
-
-    std::vector<int> node_sets_startlines_;                    /*!< The indices of the starting line of the boundary sets in the mesh filie. */
 };
 
 
 /*! @} End of Doxygen Groups*/
 
 } //end of namespace StreamVorti
-
-
-#include "StreamVorti/mesh_io/abaqus_io.tpp"
 
 #endif //STREAMVORTI_MESH_IO_ABAQUS_IO_HPP_

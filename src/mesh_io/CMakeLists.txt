@@ -14,8 +14,7 @@ INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Library header files.
 SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/mesh_io.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/abaqus_io.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/abaqus_io.tpp)
+            ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh_io/abaqus_io.hpp)
 
 ADD_LIBRARY( ${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )
 

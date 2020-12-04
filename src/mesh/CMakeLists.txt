@@ -14,7 +14,6 @@ INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Library header files.
 SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh/mesh.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh/mesh_properties.hpp
             ${CMAKE_SOURCE_DIR}/include/StreamVorti/mesh/tetramesh.hpp)
 
 ADD_LIBRARY( ${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )

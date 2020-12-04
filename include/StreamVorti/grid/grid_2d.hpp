@@ -32,7 +32,6 @@
 #define STREAMVORTI_GRID_GRID_2D_HPP_
 
 #include "StreamVorti/elements/node.hpp"
-#include "StreamVorti/sets/node_set.hpp"
 #include "StreamVorti/mesh_io/mesh_io.hpp"
 
 #include <vector>
@@ -109,13 +108,6 @@ public:
 
 
     /*!
-     * \brief Read-only access to the node sets of the grid.
-     * \return [std::vector<StreamVorti::NodeSet>] the grid node sets with read-only access.
-     */
-    inline const std::vector<NodeSet> & NodeSets() const { return this->node_sets_; }
-
-
-    /*!
      * \brief Equal to operator.
      *
      * Compares 2D grids for equality.
@@ -149,9 +141,6 @@ public:
 
 private:
     std::vector<Node> nodes_;        /*!< The nodes of the grid. */
-
-    std::vector<NodeSet> node_sets_;            /*!< The mesh node sets. */
-
 };
 
 

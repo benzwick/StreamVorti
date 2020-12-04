@@ -54,17 +54,12 @@ void Grid2D::LoadFrom(const std::string &grid_filename)
 
     // Clear the mesh containers.
     this->nodes_.clear();
-    this->node_sets_.clear();
 
     // Load the corresponding format.
     if (ext == ".inp") {
         AbaqusIO abaqus_io;
         abaqus_io.LoadMeshFrom(grid_filename.c_str());
         abaqus_io.LoadNodesIn(this->nodes_);
-        if (abaqus_io.NodeSetsExist()) {
-            abaqus_io.LoadBoundarySetsIn(this->node_sets_);
-        }
-
     }
     else {
         std::string error = Logger::Error("Could not load grid of unknown format. Expected [.inp] Check: ") + grid_filename;
