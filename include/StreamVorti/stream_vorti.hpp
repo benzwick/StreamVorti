@@ -41,7 +41,6 @@
 #include "StreamVorti/mesh_io/mesh_io.hpp"
 #include "StreamVorti/models/models.hpp"
 #include "StreamVorti/options_configuration/config_manager.hpp"
-#include "StreamVorti/solvers/solvers.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 #include "StreamVorti/utilities/utilities.hpp"
 #include "StreamVorti/vectors/vectors.hpp"
