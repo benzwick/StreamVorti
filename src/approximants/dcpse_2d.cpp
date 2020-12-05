@@ -22,6 +22,8 @@
 
 
 #include "StreamVorti/approximants/dcpse_2d.hpp"
+#include "StreamVorti/grid/grid_2d.hpp"
+#include "StreamVorti/support_domain/support_domain.hpp"
 
 
 namespace StreamVorti {
@@ -29,6 +31,41 @@ namespace StreamVorti {
 
 Dcpse2d::Dcpse2d()
 {}
+
+
+Dcpse2d::Dcpse2d(mfem::FiniteElementSpace *fes,
+                 int CutoffRadAtNeighbor,
+                 int SupportRadAtNeighbor)
+{
+    // Create GridFunction with nodal coordinates
+    mfem::Mesh *mesh = fes->GetMesh();
+    int dim = mesh->Dimension();
+    int vdim = fes->GetVDim();
+    if (dim != vdim)
+    {
+        MFEM_ABORT( "Mesh is " << dim << "D but FE space is " << vdim << "D." );
+    }
+    mfem::GridFunction nodes(fes);
+    mesh->GetNodes(nodes);
+
+    // Initialize and compute DC PSE derivatives
+    Grid2D grid(nodes);
+    SupportDomain support;
+    support.SetSupportNodes(grid.Nodes());
+    support.ComputeCutOffRadiuses(CutoffRadAtNeighbor);
+    support.ComputeSupportRadiuses(SupportRadAtNeighbor);
+    auto neighs = support.NeighborIndices();
+    this->ComputeDerivs(grid.Nodes(), neighs, support.SupportRadiuses());
+
+    // ----------------------------------------------------------------------
+    // Use this in user code:
+    // NOTE: fes must have same vdim as mesh dim
+    // StreamVorti::Dcpse2d derivs(fes, 30, 5);
+    // SparseMatrix dx(derivs.ShapeFunctionDx());
+    // GridFunction dudx_dcpse(fespace_h1);
+    // dx.Mult(u_gf, dudx_dcpse);
+    // ----------------------------------------------------------------------
+}
 
 
 Dcpse2d::~Dcpse2d()

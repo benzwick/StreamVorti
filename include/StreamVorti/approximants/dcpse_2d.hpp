@@ -75,6 +75,14 @@ public:
 
 
     /*!
+     * \brief Dcpse2d constructor from MFEM finite element space.
+     */
+    Dcpse2d(mfem::FiniteElementSpace *fes,
+            int CutoffRadAtNeighbor = 30,
+            int SupportRadAtNeighbor = 5);
+
+
+    /*!
      * \brief Dcpse2d destructor.
      */
     virtual ~Dcpse2d();
