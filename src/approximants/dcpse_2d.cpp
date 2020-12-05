@@ -40,22 +40,12 @@ void Dcpse2d::ComputeDerivs(const std::vector<Node> &geom_nodes,
                             const std::vector<double> &support_radiuses)
 {
 
-    // Initialize shape function and derivative matrices.
-    this->sh_func_dx_ = Eigen::SparseMatrix<double>(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dy_ = Eigen::SparseMatrix<double>(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dxx_ = Eigen::SparseMatrix<double>(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dyy_ = Eigen::SparseMatrix<double>(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dxy_ = Eigen::SparseMatrix<double>(geom_nodes.size(), geom_nodes.size());
-
-
-    //Triplets to populate the dcpse shape Functions.
-    std::vector<Eigen::Triplet<double> > trPhiX, trPhiY, trPhiXX, trPhiYY , trPhiXY;
-    trPhiX.reserve(geom_nodes.size()*support_nodes_ids[0].size());
-    trPhiY.reserve(geom_nodes.size()*support_nodes_ids[0].size());
-    trPhiXX.reserve(geom_nodes.size()*support_nodes_ids[0].size());
-    trPhiYY.reserve(geom_nodes.size()*support_nodes_ids[0].size());
-    trPhiXY.reserve(geom_nodes.size()*support_nodes_ids[0].size());
-
+    // Initialize shape function derivative matrices.
+    this->sh_func_dx_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
+    this->sh_func_dy_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
+    this->sh_func_dxx_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
+    this->sh_func_dyy_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
+    this->sh_func_dxy_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
 
     // Iterate over all the nodes of the grid.
     for(const auto &node: geom_nodes) {
@@ -223,28 +213,28 @@ void Dcpse2d::ComputeDerivs(const std::vector<Node> &geom_nodes,
         //Store in triplets (center_node id, neighbour id, shFunc value).
         for(const auto &neigh_id : support_nodes_ids[node_id]) {
             auto it = &neigh_id - &support_nodes_ids[node_id][0];
-            trPhiX.emplace_back(Eigen::Triplet<double>(node_id, neigh_id, valX(it) ) );
-            trPhiY.emplace_back(Eigen::Triplet<double>(node_id, neigh_id, valY(it)) );
-            trPhiXX.emplace_back(Eigen::Triplet<double>(node_id, neigh_id, valXX(it) ) );
-            trPhiYY.emplace_back(Eigen::Triplet<double>(node_id, neigh_id, valYY(it) ) );
-            trPhiXY.emplace_back(Eigen::Triplet<double>(node_id, neigh_id, valXY(it) ) );
+            this->sh_func_dx_.Add(node_id, neigh_id, valX(it));
+            this->sh_func_dy_.Add(node_id, neigh_id, valY(it));
+            this->sh_func_dxx_.Add(node_id, neigh_id, valXX(it));
+            this->sh_func_dyy_.Add(node_id, neigh_id, valYY(it));
+            this->sh_func_dxy_.Add(node_id, neigh_id, valXY(it));
         }
     } // End Iterate over all the nodes of the grid.
 
 
-    // Populate shape function and derivatives matrices.
-    this->sh_func_dx_.setFromTriplets(trPhiX.begin(), trPhiX.end());
-    this->sh_func_dy_.setFromTriplets(trPhiY.begin(), trPhiY.end());
-    this->sh_func_dxx_.setFromTriplets(trPhiXX.begin(), trPhiXX.end());
-    this->sh_func_dyy_.setFromTriplets(trPhiYY.begin(), trPhiYY.end());
-    this->sh_func_dxy_.setFromTriplets(trPhiXY.begin(), trPhiXY.end());
+    // Finalize shape function derivative matrices.
+    this->sh_func_dx_.Finalize();
+    this->sh_func_dy_.Finalize();
+    this->sh_func_dxx_.Finalize();
+    this->sh_func_dyy_.Finalize();
+    this->sh_func_dxy_.Finalize();
 
 }
 
 
 void Dcpse2d::SaveDerivToFile(const std::string &deriv, const std::string &filename) const
 {
-    Eigen::SparseMatrix<double> derivative;
+    mfem::SparseMatrix derivative;
 
     if (deriv == "dx") { derivative = this->sh_func_dx_; }
     else if (deriv == "dy") { derivative = this->sh_func_dy_; }
@@ -253,7 +243,7 @@ void Dcpse2d::SaveDerivToFile(const std::string &deriv, const std::string &filen
     else if (deriv == "dxy") { derivative = this->sh_func_dxy_; }
 
 
-    if (derivative.rows() == 0) {
+    if (derivative.Height() == 0) {
         throw std::runtime_error(Logger::Error("Could not save DCPSE derivative. "
                                                "Derivatives have not been computed.").c_str());
     }
@@ -290,13 +280,7 @@ void Dcpse2d::SaveDerivToFile(const std::string &deriv, const std::string &filen
 
     std::ofstream out(filename, std::ios::out | std::ios::trunc);
 
-    for (int k = 0; k < derivative.outerSize(); ++k) {
-        for (Eigen::SparseMatrix<double>::InnerIterator it(derivative, k); it; ++it) {
-            out << it.row()+1 << " ";
-            out << it.col()+1 << " ";
-            out << std::setprecision(15) << it.value() << std::endl;
-        }
-    }
+    derivative.PrintMatlab(out);
 
     out.close();
 

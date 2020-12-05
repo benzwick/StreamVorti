@@ -35,6 +35,8 @@
 #include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/utilities/logger.hpp"
 
+#include "mfem.hpp"
+
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
@@ -86,33 +88,33 @@ public:
     void SaveDerivToFile(const std::string &deriv, const std::string &filename) const;
 
 
-    inline const Eigen::SparseMatrix<double> & ShapeFunctionDx() const { return this->sh_func_dx_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDx() const { return this->sh_func_dx_; }
 
 
-    inline const Eigen::SparseMatrix<double> & ShapeFunctionDy() const { return this->sh_func_dy_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDy() const { return this->sh_func_dy_; }
 
 
-    inline const Eigen::SparseMatrix<double> & ShapeFunctionDxx() const { return this->sh_func_dxx_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDxx() const { return this->sh_func_dxx_; }
 
 
-    inline const Eigen::SparseMatrix<double> & ShapeFunctionDyy() const { return this->sh_func_dyy_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDyy() const { return this->sh_func_dyy_; }
 
 
-    inline const Eigen::SparseMatrix<double> & ShapeFunctionDxy() const { return this->sh_func_dxy_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDxy() const { return this->sh_func_dxy_; }
 
 
 
 private:
 
-    Eigen::SparseMatrix<double> sh_func_dx_;     /*!< The shape function 1st x derivative matrix. */
+    mfem::SparseMatrix sh_func_dx_;     /*!< The shape function 1st x derivative matrix. */
 
-    Eigen::SparseMatrix<double> sh_func_dy_;     /*!< The shape function 1st y derivative matrix. */
+    mfem::SparseMatrix sh_func_dy_;     /*!< The shape function 1st y derivative matrix. */
 
-    Eigen::SparseMatrix<double> sh_func_dxx_;     /*!< The shape function 2nd x derivative matrix. */
+    mfem::SparseMatrix sh_func_dxx_;     /*!< The shape function 2nd x derivative matrix. */
 
-    Eigen::SparseMatrix<double> sh_func_dyy_;     /*!< The shape function 2nd y derivative matrix. */
+    mfem::SparseMatrix sh_func_dyy_;     /*!< The shape function 2nd y derivative matrix. */
 
-    Eigen::SparseMatrix<double> sh_func_dxy_;     /*!< The shape function 2nd xy derivative matrix. */
+    mfem::SparseMatrix sh_func_dxy_;     /*!< The shape function 2nd xy derivative matrix. */
 };
 
 
