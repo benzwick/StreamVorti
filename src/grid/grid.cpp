@@ -38,19 +38,34 @@ Grid::Grid(const Grid &grid)
 }
 
 
-Grid::Grid(const mfem::GridFunction &nodes)
-// See
-// - https://github.com/mfem/mfem/issues/63#issuecomment-221646308
-// - mfem::GridFunction::ReorderByNodes()
+Grid::Grid(const mfem::GridFunction &gf)
 {
-    const int dim = nodes.FESpace()->GetMesh()->Dimension();
-    const int nNodes = nodes.FESpace()->GetNDofs();
+    // See:
+    // - https://github.com/mfem/mfem/issues/63#issuecomment-221646308
+    // - https://github.com/mfem/mfem/issues/684#issuecomment-441872496
+
+    mfem::Mesh *mesh = gf.FESpace()->GetMesh();
+    const int dim = mesh->Dimension();
+    // Note (number of nodes) > (number of vertices) when order > 1
+    const int nNodes = gf.FESpace()->GetNDofs();
+    const mfem::FiniteElementCollection *fec = gf.FESpace()->FEColl();
+
+    // ASSERT gf is H1 (not L2, ND, RT, etc.)
+    if (dynamic_cast<const mfem::H1_FECollection*>(fec) == nullptr)
+    {
+        MFEM_ABORT( "Grid function FE space is not H1." );
+    }
 
     // ASSERT mesh dim == 1, 2 or 3
     if (dim < 1 || dim > 3)
     {
         MFEM_ABORT( "Mesh is " << dim << "D not 1D, 2D or 3D." );
     }
+
+    // Create GridFunction with nodal coordinates
+    mfem::FiniteElementSpace *fes = new mfem::FiniteElementSpace(mesh, fec, dim);
+    mfem::GridFunction nodes(fes);
+    mesh->GetNodes(nodes);
 
     double x, y, z;
     Node node;
@@ -64,6 +79,8 @@ Grid::Grid(const mfem::GridFunction &nodes)
         node.SetCoordinates(x, y, z);
         nodes_.emplace_back(node);
     }
+
+    delete fes;
 }
 
 

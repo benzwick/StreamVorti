@@ -33,23 +33,12 @@ Dcpse2d::Dcpse2d()
 {}
 
 
-Dcpse2d::Dcpse2d(mfem::FiniteElementSpace *fes,
+Dcpse2d::Dcpse2d(mfem::GridFunction &gf,
                  int CutoffRadAtNeighbor,
                  int SupportRadAtNeighbor)
 {
-    // Create GridFunction with nodal coordinates
-    mfem::Mesh *mesh = fes->GetMesh();
-    int dim = mesh->Dimension();
-    int vdim = fes->GetVDim();
-    if (dim != vdim)
-    {
-        MFEM_ABORT( "Mesh is " << dim << "D but FE space is " << vdim << "D." );
-    }
-    mfem::GridFunction nodes(fes);
-    mesh->GetNodes(nodes);
-
     // Initialize and compute DC PSE derivatives
-    Grid grid(nodes);
+    Grid grid(gf);
     SupportDomain support;
     support.SetSupportNodes(grid.Nodes());
     support.ComputeCutOffRadiuses(CutoffRadAtNeighbor);
@@ -59,10 +48,10 @@ Dcpse2d::Dcpse2d(mfem::FiniteElementSpace *fes,
 
     // ----------------------------------------------------------------------
     // Use this in user code:
-    // NOTE: fes must have same vdim as mesh dim
-    // StreamVorti::Dcpse2d derivs(fes, 30, 5);
-    // SparseMatrix dx(derivs.ShapeFunctionDx());
-    // GridFunction dudx_dcpse(fespace_h1);
+    // GridFunction u_gf(fespace_h1);             // Nodal values
+    // StreamVorti::Dcpse2d derivs(u_gf, 30, 5);  // DC PSE derivatives object
+    // SparseMatrix dx(derivs.ShapeFunctionDx()); // DC PSE derivatives matrix
+    // GridFunction dudx_dcpse(fespace_h1);       // Derivatives of u wrt x
     // dx.Mult(u_gf, dudx_dcpse);
     // ----------------------------------------------------------------------
 }

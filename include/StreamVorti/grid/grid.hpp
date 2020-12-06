@@ -65,9 +65,9 @@ public:
     Grid(const Grid &grid);
 
     /*!
-     * \brief Grid constructor from MFEM nodal coordinates GridFunction.
+     * \brief Grid constructor to match nodes of an MFEM H1 GridFunction.
      */
-    Grid(const mfem::GridFunction &nodes);
+    Grid(const mfem::GridFunction &gf);
 
     /*!
      * \brief Grid destructor.

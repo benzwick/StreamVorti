@@ -75,9 +75,9 @@ public:
 
 
     /*!
-     * \brief Dcpse2d constructor from MFEM finite element space.
+     * \brief Dcpse2d constructor to match nodes of an MFEM H1 GridFunction.
      */
-    Dcpse2d(mfem::FiniteElementSpace *fes,
+    Dcpse2d(mfem::GridFunction &gf,
             int CutoffRadAtNeighbor = 30,
             int SupportRadAtNeighbor = 5);
 
