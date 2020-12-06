@@ -97,13 +97,13 @@ public:
     void SaveDerivToFile(const std::string &deriv, const std::string &filename) const;
 
 
-    inline const mfem::SparseMatrix & D(int i) const {
-        switch (i) {
-        case 0:
-            return this->sh_func_dx_;
-        case 1:
-            return this->sh_func_dy_;
+    const mfem::SparseMatrix & D(int i) const {
+        switch (i)
+        {
+        case 0: return this->sh_func_dx_;
+        case 1: return this->sh_func_dy_;
         }
+        MFEM_ABORT( "Index " << i << " out of bounds." );
     }
 
 

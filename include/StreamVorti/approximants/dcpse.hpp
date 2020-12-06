@@ -61,7 +61,7 @@ public:
      */
     virtual ~Dcpse() = 0;
 
-    inline const mfem::SparseMatrix & D(int i);
+    virtual const mfem::SparseMatrix & D(int i) const = 0;
 };
 
 inline Dcpse::~Dcpse() {};
