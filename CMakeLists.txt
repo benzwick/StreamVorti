@@ -83,7 +83,6 @@ ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/elements)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/grid)
-ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh_io)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/options_configuration)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/support_domain)
@@ -96,7 +95,6 @@ IF( STREAMVORTI_BUILD_SHARED_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
         $<TARGET_OBJECTS:Grid>
         $<TARGET_OBJECTS:Elements>
-        $<TARGET_OBJECTS:Mesh>
         $<TARGET_OBJECTS:MeshIO>
         $<TARGET_OBJECTS:OptionsConfiguration>
         $<TARGET_OBJECTS:Approximants>
@@ -126,7 +124,6 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
         $<TARGET_OBJECTS:Grid>
         $<TARGET_OBJECTS:Elements>
-        $<TARGET_OBJECTS:Mesh>
         $<TARGET_OBJECTS:MeshIO>
         $<TARGET_OBJECTS:OptionsConfiguration>
         $<TARGET_OBJECTS:Approximants>

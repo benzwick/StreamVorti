@@ -37,7 +37,6 @@
 #include "StreamVorti/approximants/dcpse_2d.hpp"
 #include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/grid/grid.hpp"
-#include "StreamVorti/mesh/mesh.hpp"
 #include "StreamVorti/mesh_io/mesh_io.hpp"
 #include "StreamVorti/options_configuration/config_manager.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
