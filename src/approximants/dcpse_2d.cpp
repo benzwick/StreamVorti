@@ -49,7 +49,7 @@ Dcpse2d::Dcpse2d(mfem::FiniteElementSpace *fes,
     mesh->GetNodes(nodes);
 
     // Initialize and compute DC PSE derivatives
-    Grid2D grid(nodes);
+    Grid grid(nodes);
     SupportDomain support;
     support.SetSupportNodes(grid.Nodes());
     support.ComputeCutOffRadiuses(CutoffRadAtNeighbor);

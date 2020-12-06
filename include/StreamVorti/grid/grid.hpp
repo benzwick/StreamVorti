@@ -22,14 +22,14 @@
 
 
 /*!
-   \file grid_2d.hpp
-   \brief Grid2D class header file.
+   \file grid.hpp
+   \brief Grid class header file.
    \author Konstantinos A. Mountris
    \date 15/01/2018
 */
 
-#ifndef STREAMVORTI_GRID_GRID_2D_HPP_
-#define STREAMVORTI_GRID_GRID_2D_HPP_
+#ifndef STREAMVORTI_GRID_GRID_HPP_
+#define STREAMVORTI_GRID_GRID_HPP_
 
 #include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/mesh_io/mesh_io.hpp"
@@ -48,31 +48,31 @@ namespace StreamVorti {
 
 
 /*!
- * \class Grid2D
- * \brief Class implemmenting a 2D grid of nodes.
+ * \class Grid
+ * \brief Class implemmenting a grid of nodes.
  */
-class Grid2D {
+class Grid {
 public:
     /*!
-     * \brief Grid2D constructor.
+     * \brief Grid constructor.
      */
-    Grid2D();
+    Grid();
 
     /*!
-     * \brief Grid2D copy constructor.
-     * \param [in] Grid2D The 2D grid to be copied.
+     * \brief Grid copy constructor.
+     * \param [in] Grid The grid to be copied.
      */
-    Grid2D(const Grid2D &grid2D);
+    Grid(const Grid &grid);
 
     /*!
-     * \brief Grid2D constructor from MFEM nodal coordinates GridFunction.
+     * \brief Grid constructor from MFEM nodal coordinates GridFunction.
      */
-    Grid2D(const mfem::GridFunction &nodes);
+    Grid(const mfem::GridFunction &nodes);
 
     /*!
-     * \brief Grid2D destructor.
+     * \brief Grid destructor.
      */
-    virtual ~Grid2D();
+    virtual ~Grid();
 
 
     void LoadFrom(const std::string &grid_filename);
@@ -116,23 +116,23 @@ public:
     /*!
      * \brief Equal to operator.
      *
-     * Compares 2D grids for equality.
+     * Compares grids for equality.
      *
-     * \param [in] grid3D The 2D grid mesh to compare.
-     * \return [bool] TRUE if 2D grids are identical.
+     * \param [in] grid The grid mesh to compare.
+     * \return [bool] TRUE if grids are identical.
      */
-    bool operator == (const Grid2D &grid2D) const;
+    bool operator == (const Grid &grid) const;
 
 
     /*!
      * \brief Not equal to operator.
      *
-     * Compares 2D grids for inequality.
+     * Compares grids for inequality.
      *
-     * \param [in] grid3D The 2D grids to compare.
-     * \return [bool] TRUE if 2D grids are not identical.
+     * \param [in] grid The grids to compare.
+     * \return [bool] TRUE if grids are not identical.
      */
-    bool operator != (const Grid2D &grid2D) const;
+    bool operator != (const Grid &grid) const;
 
 
     /*!
@@ -140,10 +140,10 @@ public:
      *
      * Assigns all the properties of a given 3D grid (nodes).
      *
-     * \param [in] grid3D The 2D grid to assign.
-     * \return [Grid2D] The assigned 2D grid.
+     * \param [in] grid3D The grid to assign.
+     * \return [Grid] The assigned grid.
      */
-    Grid2D & operator = (const Grid2D &grid2D);
+    Grid & operator = (const Grid &grid);
 
 private:
     std::vector<Node> nodes_;        /*!< The nodes of the grid. */
@@ -154,4 +154,4 @@ private:
 /*! @} End of Doxygen Groups*/
 } // End of namespace StreamVorti
 
-#endif //STREAMVORTI_GRID_GRID_2D_HPP_
+#endif //STREAMVORTI_GRID_GRID_HPP_

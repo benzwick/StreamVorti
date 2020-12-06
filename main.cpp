@@ -120,8 +120,8 @@ int main(int argc, char *argv[]) {
         // Profiling spent time in StreamVorti
         Timer timer;
 
-        // Load 2d grid.
-        Grid2D grid;
+        // Load grid.
+        Grid grid;
         grid.LoadFrom(config->RetrieveArgument<std::string>("Model.GridFile"));
         std::cout << Logger::Message("Grid has nodes: ") << grid.Nodes().size() << std::endl;
 

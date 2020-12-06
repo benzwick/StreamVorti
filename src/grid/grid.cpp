@@ -27,18 +27,18 @@
 namespace StreamVorti {
 
 
-Grid2D::Grid2D()
+Grid::Grid()
 {}
 
 
-Grid2D::Grid2D(const Grid2D &grid2D)
+Grid::Grid(const Grid &grid)
 {
     // Assign by copying grid3D.
-    *this = grid2D;
+    *this = grid;
 }
 
 
-Grid2D::Grid2D(const mfem::GridFunction &nodes)
+Grid::Grid(const mfem::GridFunction &nodes)
 // See
 // - https://github.com/mfem/mfem/issues/63#issuecomment-221646308
 // - mfem::GridFunction::ReorderByNodes()
@@ -71,11 +71,11 @@ Grid2D::Grid2D(const mfem::GridFunction &nodes)
 }
 
 
-Grid2D::~Grid2D()
+Grid::~Grid()
 {}
 
 
-void Grid2D::LoadFrom(const std::string &grid_filename)
+void Grid::LoadFrom(const std::string &grid_filename)
 {
     // Check if mesh filename is not empty.
     if (grid_filename.empty()) {
@@ -101,25 +101,25 @@ void Grid2D::LoadFrom(const std::string &grid_filename)
 }
 
 
-bool Grid2D::operator == (const Grid2D &grid2D) const
+bool Grid::operator == (const Grid &grid) const
 {
     // Compare tetrahedral meshes for equality.
-    return (this->nodes_ == grid2D.nodes_);
+    return (this->nodes_ == grid.nodes_);
 }
 
 
-bool Grid2D::operator != (const Grid2D &grid2D) const
+bool Grid::operator != (const Grid &grid) const
 {
     // Compare grids for inequality.
-    return !(*this == grid2D);
+    return !(*this == grid);
 }
 
 
-Grid2D & Grid2D::operator = (const Grid2D &grid2D)
+Grid & Grid::operator = (const Grid &grid)
 {
-    if (this != &grid2D) {
+    if (this != &grid) {
         // Assign nodes from grid.
-        this->nodes_ = grid2D.nodes_;
+        this->nodes_ = grid.nodes_;
     }
 
     return *this;

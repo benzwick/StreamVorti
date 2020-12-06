@@ -13,8 +13,8 @@ int main()
 
        std::cout << "\t<<< Welcome to StreamVorti >>>\n";
 
-       // Load 2d grid.
-       Grid2D grid;
+       // Load grid.
+       Grid grid;
        grid.LoadFrom("/home/mood/DATABASE/mesh/geometric/2D/square10x10.inp");
 
        // Set support domain.
