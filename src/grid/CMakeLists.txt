@@ -7,14 +7,13 @@ PROJECT(Grid)
 
 
 # Library source files.
-SET(SOURCES  grid_2d.cpp)
+SET(SOURCES  grid.cpp)
 
 # Include the headers directory.
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Library header files.
-SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/grid/grids.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/grid/grid_2d.hpp)
+SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/grid/grid.hpp)
 
 ADD_LIBRARY( ${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )
 

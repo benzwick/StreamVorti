@@ -21,7 +21,7 @@
  */
 
 
-#include "StreamVorti/grid/grid_2d.hpp"
+#include "StreamVorti/grid/grid.hpp"
 
 
 namespace StreamVorti {
