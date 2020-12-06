@@ -30,6 +30,8 @@
 #ifndef STREAMVORTI_APPROXIMANTS_DCPSE_HPP_
 #define STREAMVORTI_APPROXIMANTS_DCPSE_HPP_
 
+#include "mfem.hpp"
+
 namespace StreamVorti {
 
 /*!
@@ -58,6 +60,8 @@ public:
      * \brief Dcpse destructor.
      */
     virtual ~Dcpse() = 0;
+
+    inline const mfem::SparseMatrix & D(int i);
 };
 
 inline Dcpse::~Dcpse() {};

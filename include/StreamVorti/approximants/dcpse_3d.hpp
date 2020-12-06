@@ -97,6 +97,17 @@ public:
     void SaveDerivToFile(const std::string &deriv, const std::string &filename) const;
 
 
+    inline const mfem::SparseMatrix & D(int i) const {
+        switch (i) {
+        case 0:
+            return this->sh_func_dx_;
+        case 1:
+            return this->sh_func_dy_;
+        case 2:
+            return this->sh_func_dz_;
+        }
+    }
+
     inline const mfem::SparseMatrix & ShapeFunctionDx() const { return this->sh_func_dx_; }
 
 
