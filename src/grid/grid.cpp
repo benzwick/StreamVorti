@@ -43,31 +43,27 @@ Grid::Grid(const mfem::GridFunction &nodes)
 // - https://github.com/mfem/mfem/issues/63#issuecomment-221646308
 // - mfem::GridFunction::ReorderByNodes()
 {
-	// ASSERT Ordering::byNODES (default)
-	if (nodes.FESpace()->GetOrdering() != mfem::Ordering::byNODES)
-	{
-		MFEM_ABORT( "Node coordinates are not ordered by nodes." );
-	}
+    const int dim = nodes.FESpace()->GetMesh()->Dimension();
+    const int nNodes = nodes.FESpace()->GetNDofs();
 
-	// ASSERT mesh dim == 2
-	int dim = nodes.FESpace()->GetMesh()->Dimension();
-	if (dim != 2)
-	{
-		MFEM_ABORT( "Mesh is " << dim << "D not 2D." );
-	}
+    // ASSERT mesh dim == 1, 2 or 3
+    if (dim < 1 || dim > 3)
+    {
+        MFEM_ABORT( "Mesh is " << dim << "D not 1D, 2D or 3D." );
+    }
 
-	const int nNodes = nodes.Size() / dim;
-	double x, y;
-	Node node;
+    double x, y, z;
+    Node node;
 
-	for (int i = 0; i < nNodes; ++i)
-	{
-		x = nodes(         i);
-		y = nodes(nNodes + i);
-		node.SetId(i);
-		node.SetCoordinates(x, y, 0.);
-		nodes_.emplace_back(node);
-	}
+    for (int i = 0; i < nNodes; ++i)
+    {
+        node.SetId(i);
+        x = /*dim= 1*/ nodes(nodes.FESpace()->DofToVDof(i, 0));
+        y = dim >= 2 ? nodes(nodes.FESpace()->DofToVDof(i, 1)) : 0.0;
+        z = dim >= 3 ? nodes(nodes.FESpace()->DofToVDof(i, 2)) : 0.0;
+        node.SetCoordinates(x, y, z);
+        nodes_.emplace_back(node);
+    }
 }
 
 
