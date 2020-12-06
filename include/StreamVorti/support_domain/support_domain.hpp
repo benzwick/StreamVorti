@@ -36,9 +36,9 @@
 #include "StreamVorti/utilities/logger.hpp"
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/point_generators_2.h>
+#include <CGAL/point_generators_3.h>
 #include <CGAL/Orthogonal_k_neighbor_search.h>
-#include <CGAL/Search_traits_2.h>
+#include <CGAL/Search_traits_3.h>
 #include <CGAL/Search_traits_adapter.h>
 #include <CGAL/Fuzzy_sphere.h>
 #include <boost/iterator/zip_iterator.hpp>

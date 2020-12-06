@@ -36,8 +36,8 @@ SupportDomain::~SupportDomain()
 void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
 {
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-    typedef K::Point_2 Point_2d;
-    typedef CGAL::Search_traits_2<K> TreeTraits;
+    typedef K::Point_3 Point_3d;
+    typedef CGAL::Search_traits_3<K> TreeTraits;
     typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
     typedef Neighbor_search::Tree Tree;
 
@@ -50,15 +50,15 @@ void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
     this->cutoff_radiuses_.clear();
     this->cutoff_radiuses_.reserve(this->support_nodes_.size());
 
-    std::vector<Point_2d> support_coords;
+    std::vector<Point_3d> support_coords;
     for (auto node : this->support_nodes_) {
-        support_coords.emplace_back(Point_2d(node.Coordinates().X(), node.Coordinates().Y()));
+        support_coords.emplace_back(Point_3d(node.Coordinates().X(), node.Coordinates().Y(), node.Coordinates().Z()));
     }
 
     Tree tree(support_coords.begin(), support_coords.end());
 
     for (auto query_node : this->support_nodes_) {
-        Point_2d query(query_node.Coordinates().X(), query_node.Coordinates().Y());
+        Point_3d query(query_node.Coordinates().X(), query_node.Coordinates().Y(), query_node.Coordinates().Z());
 
         // Initialize the search structure, and search all N points
         Neighbor_search search(tree, query, neighs_num);
@@ -85,8 +85,8 @@ void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
 void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
 {
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-    typedef K::Point_2 Point_2d;
-    typedef CGAL::Search_traits_2<K> TreeTraits;
+    typedef K::Point_3 Point_3d;
+    typedef CGAL::Search_traits_3<K> TreeTraits;
     typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
     typedef Neighbor_search::Tree Tree;
 
@@ -99,15 +99,15 @@ void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
     this->support_radiuses_.clear();
     this->support_radiuses_.reserve(this->support_nodes_.size());
 
-    std::vector<Point_2d> support_coords;
+    std::vector<Point_3d> support_coords;
     for (auto node : this->support_nodes_) {
-        support_coords.emplace_back(Point_2d(node.Coordinates().X(), node.Coordinates().Y()));
+        support_coords.emplace_back(Point_3d(node.Coordinates().X(), node.Coordinates().Y(), node.Coordinates().Z()));
     }
 
     Tree tree(support_coords.begin(), support_coords.end());
 
     for (auto query_node : this->support_nodes_) {
-        Point_2d query(query_node.Coordinates().X(), query_node.Coordinates().Y());
+        Point_3d query(query_node.Coordinates().X(), query_node.Coordinates().Y(), query_node.Coordinates().Z());
 
         // Initialize the search structure, and search all N points
         Neighbor_search search(tree, query, neighs_num);
@@ -146,9 +146,9 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
 
 
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-    typedef K::Point_2 Point_2d;
-    typedef boost::tuple<Point_2d,int> Point_and_int;
-    typedef CGAL::Search_traits_2<K> Traits_base;
+    typedef K::Point_3 Point_3d;
+    typedef boost::tuple<Point_3d,int> Point_and_int;
+    typedef CGAL::Search_traits_3<K> Traits_base;
     typedef CGAL::Search_traits_adapter<Point_and_int,
                                         CGAL::Nth_of_tuple_property_map<0, Point_and_int>, Traits_base> Traits;
     typedef CGAL::Kd_tree<Traits> Tree;
@@ -159,12 +159,12 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
     std::vector<std::vector<int> > closest_nodes_ids;
 
     //Vectors to store coordinates and ids of point to be passed in tree tuples.
-    std::vector<Point_2d> points;
+    std::vector<Point_3d> points;
     std::vector<int> points_indices;
 
     for (const auto &node : this->support_nodes_) {
         auto id = &node - &this->support_nodes_[0];
-        points.emplace_back(Point_2d(node.Coordinates().X(), node.Coordinates().Y()));
+        points.emplace_back(Point_3d(node.Coordinates().X(), node.Coordinates().Y(), node.Coordinates().Z()));
         points_indices.emplace_back(id);
     }
 
@@ -179,7 +179,7 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
     for (auto &node : this->support_nodes_) {
         auto id = &node - &this->support_nodes_[0];
 
-        Point_2d center(node.Coordinates().X(), node.Coordinates().Y());
+        Point_3d center(node.Coordinates().X(), node.Coordinates().Y(), node.Coordinates().Z());
 
         // Searching sphere.
         Fuzzy_sphere fs(center, this->cutoff_radiuses_[id]);

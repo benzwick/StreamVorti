@@ -35,6 +35,7 @@
 // Collecting StreamVorti modules' header files.
 
 #include "StreamVorti/approximants/dcpse_2d.hpp"
+#include "StreamVorti/approximants/dcpse_3d.hpp"
 #include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/grid/grid.hpp"
 #include "StreamVorti/mesh_io/mesh_io.hpp"
