@@ -15,8 +15,9 @@ SET(SOURCES dcpse_2d.cpp dcpse_3d.cpp)
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Module header files.
-SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/approximants/dcpse_2d.hpp
-             ${CMAKE_SOURCE_DIR}/include/StreamVorti/approximants/dcpse_3d.hpp)
+SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/approximants/dcpse.hpp
+            ${CMAKE_SOURCE_DIR}/include/StreamVorti/approximants/dcpse_2d.hpp
+            ${CMAKE_SOURCE_DIR}/include/StreamVorti/approximants/dcpse_3d.hpp)
 
 ADD_LIBRARY(${PROJECT_NAME}  OBJECT  ${SOURCES}  ${HEADERS})
 

@@ -31,6 +31,7 @@
 #define STREAMVORTI_APPROXIMANTS_DCPSE_3D_HPP_
 
 
+#include "StreamVorti/approximants/dcpse.hpp"
 #include "StreamVorti/vectors/vectors.hpp"
 #include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/utilities/logger.hpp"
@@ -64,7 +65,7 @@ namespace StreamVorti {
  * \brief Class implemmenting modified DCPSE function derivatives approximants in 2 dimensions.
  */
 
-class Dcpse3d
+class Dcpse3d: public Dcpse
 {
 
 public:
