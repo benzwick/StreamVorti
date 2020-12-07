@@ -337,7 +337,7 @@ void Dcpse3d::SaveDerivToFile(const std::string &deriv, const std::string &filen
     else if (deriv == "dz")  { derivative = this->sh_func_dz_; }
     else if (deriv == "dxx") { derivative = this->sh_func_dxx_; }
     else if (deriv == "dyy") { derivative = this->sh_func_dyy_; }
-    else if (deriv == "dyy") { derivative = this->sh_func_dzz_; }
+    else if (deriv == "dzz") { derivative = this->sh_func_dzz_; }
     else if (deriv == "dxy") { derivative = this->sh_func_dxy_; }
     else if (deriv == "dxz") { derivative = this->sh_func_dxz_; }
     else if (deriv == "dyz") { derivative = this->sh_func_dyz_; }
