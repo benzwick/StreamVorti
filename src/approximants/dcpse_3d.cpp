@@ -22,7 +22,6 @@
 
 
 #include "StreamVorti/approximants/dcpse_3d.hpp"
-#include "StreamVorti/grid/grid.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 
 
@@ -37,14 +36,38 @@ Dcpse3d::Dcpse3d(mfem::GridFunction &gf,
                  int CutoffRadAtNeighbor,
                  int SupportRadAtNeighbor)
 {
+    // Get nodes
+    mfem::Mesh *mesh = gf.FESpace()->GetMesh();
+    const int dim = mesh->Dimension();
+    // Note (number of nodes) > (number of vertices) when order > 1
+    const int nNodes = gf.FESpace()->GetNDofs();
+    const mfem::FiniteElementCollection *fec = gf.FESpace()->FEColl();
+
+    // ASSERT gf is H1 (not L2, ND, RT, etc.)
+    if (dynamic_cast<const mfem::H1_FECollection*>(fec) == nullptr)
+    {
+        MFEM_ABORT( "Grid function FE space is not H1." );
+    }
+
+    // ASSERT mesh dim == 3
+    if (dim != 3)
+    {
+        MFEM_ABORT( "Mesh is " << dim << "D not 3D." );
+    }
+
+    // Create GridFunction with nodal coordinates
+    mfem::FiniteElementSpace *fes = new mfem::FiniteElementSpace(mesh, fec, dim);
+    mfem::GridFunction nodes(fes);
+    mesh->GetNodes(nodes);
+
     // Initialize and compute DC PSE derivatives
-    Grid grid(gf);
-    SupportDomain support;
-    support.SetSupportNodes(grid.Nodes());
+    SupportDomain support(nodes);
     support.ComputeCutOffRadiuses(CutoffRadAtNeighbor);
     support.ComputeSupportRadiuses(SupportRadAtNeighbor);
     auto neighs = support.NeighborIndices();
-    this->ComputeDerivs(grid.Nodes(), neighs, support.SupportRadiuses());
+    this->ComputeDerivs(nodes, neighs, support.SupportRadiuses());
+
+    delete fes;
 
     // ----------------------------------------------------------------------
     // Use this in user code:
@@ -61,25 +84,33 @@ Dcpse3d::~Dcpse3d()
 {}
 
 
-void Dcpse3d::ComputeDerivs(const std::vector<Node> &geom_nodes,
+void Dcpse3d::ComputeDerivs(mfem::GridFunction &geom_nodes,
                             const std::vector<std::vector<int> > &support_nodes_ids,
                             const std::vector<double> &support_radiuses)
 {
+    mfem::FiniteElementSpace *fes = geom_nodes.FESpace();
+    int nnodes = fes->GetNDofs();
 
     // Initialize shape function derivative matrices.
-    this->sh_func_dx_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dy_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dz_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dxx_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dyy_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dzz_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dxy_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dxz_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
-    this->sh_func_dyz_ = mfem::SparseMatrix(geom_nodes.size(), geom_nodes.size());
+    this->sh_func_dx_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dy_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dz_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dxx_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dyy_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dzz_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dxy_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dxz_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dyz_ = mfem::SparseMatrix(nnodes, nnodes);
 
     // Iterate over all the nodes of the grid.
-    for(const auto &node: geom_nodes) {
-        auto node_id = &node - &geom_nodes[0];
+    for (int node_id = 0; node_id < nnodes; ++node_id)
+    {
+        // for(const auto &node: geom_nodes) {
+        //     auto node_id = &node - &geom_nodes[0];
+
+        double node_X = geom_nodes(fes->DofToVDof(node_id, 0));
+        double node_Y = geom_nodes(fes->DofToVDof(node_id, 1));
+        double node_Z = geom_nodes(fes->DofToVDof(node_id, 2));
 
         // Monomial basis - Vandermonde matrices.
         Eigen::MatrixXd V1(support_nodes_ids[node_id].size(), 10);
@@ -95,13 +126,20 @@ void Dcpse3d::ComputeDerivs(const std::vector<Node> &geom_nodes,
         double epsilon = 0.;
 
         // Iterate over node's neighbors.
-        for (const auto &neigh_id : support_nodes_ids[node_id]) {
-            auto it = &neigh_id - &support_nodes_ids[node_id][0];
+        for (long unsigned int it = 0; it < support_nodes_ids[node_id].size(); ++it)
+        {
+        // for (const auto &neigh_id : support_nodes_ids[node_id]) {
+        //     auto it = &neigh_id - &support_nodes_ids[node_id][0];
+
+            int neigh_id = support_nodes_ids[node_id][it];
+            double neigh_X = geom_nodes(fes->DofToVDof(neigh_id, 0));
+            double neigh_Y = geom_nodes(fes->DofToVDof(neigh_id, 1));
+            double neigh_Z = geom_nodes(fes->DofToVDof(neigh_id, 2));
 
             epsilon = support_radiuses[node_id];
-            x = (node.Coordinates().X() - geom_nodes[neigh_id].Coordinates().X()) / epsilon;
-            y = (node.Coordinates().Y() - geom_nodes[neigh_id].Coordinates().Y()) / epsilon;
-            z = (node.Coordinates().Z() - geom_nodes[neigh_id].Coordinates().Z()) / epsilon;
+            x = (node_X - neigh_X) / epsilon;
+            y = (node_Y - neigh_Y) / epsilon;
+            z = (node_Z - neigh_Z) / epsilon;
 
             //Set V1 vandermonde matrix for 1st derivatives.
             V1.coeffRef(it, 0) = 1.;
@@ -115,12 +153,12 @@ void Dcpse3d::ComputeDerivs(const std::vector<Node> &geom_nodes,
             V1.coeffRef(it, 8) = y*z;
             V1.coeffRef(it, 9) = z*z;
 
-            double neigh_dist_sq = (geom_nodes[neigh_id].Coordinates().X() - node.Coordinates().X()) *
-                                   (geom_nodes[neigh_id].Coordinates().X() - node.Coordinates().X()) +
-                                   (geom_nodes[neigh_id].Coordinates().Y() - node.Coordinates().Y()) *
-                                   (geom_nodes[neigh_id].Coordinates().Y() - node.Coordinates().Y()) +
-                                   (geom_nodes[neigh_id].Coordinates().Z() - node.Coordinates().Z()) *
-                                   (geom_nodes[neigh_id].Coordinates().Z() - node.Coordinates().Z());
+            double neigh_dist_sq = (neigh_X - node_X) *
+                                   (neigh_X - node_X) +
+                                   (neigh_Y - node_Y) *
+                                   (neigh_Y - node_Y) +
+                                   (neigh_Z - node_Z) *
+                                   (neigh_Z - node_Z);
             //Set expWd vector.
             Wd = - (neigh_dist_sq / (epsilon*epsilon) );
             expWd(it) = std::exp(Wd);

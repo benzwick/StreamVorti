@@ -35,6 +35,8 @@
 #include "StreamVorti/vectors/vectors.hpp"
 #include "StreamVorti/utilities/logger.hpp"
 
+#include "mfem.hpp"
+
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/point_generators_3.h>
 #include <CGAL/Orthogonal_k_neighbor_search.h>
@@ -74,16 +76,19 @@ public:
     /*!
      * \brief SupportDomain constructor.
      */
-    SupportDomain();
+    SupportDomain(const mfem::GridFunction &support_nodes)
+        :
+        fespace_(support_nodes.FESpace()),
+        dim_(support_nodes.FESpace()->GetMesh()->Dimension()),
+        num_support_nodes_(support_nodes.FESpace()->GetNDofs()),
+        support_nodes_(support_nodes)
+        {};
 
 
     /*!
      * \brief SupportDomain destructor.
      */
-    virtual ~SupportDomain();
-
-
-    inline void SetSupportNodes(const std::vector<Node> &support_nodes) { this->support_nodes_ = support_nodes; }
+    virtual ~SupportDomain() {};
 
 
     void ComputeCutOffRadiuses(const std::size_t &neighs_num);
@@ -92,7 +97,7 @@ public:
     void ComputeSupportRadiuses(const std::size_t &neighs_num);
 
 
-    inline const std::vector<Node> & SupportNodes() const { return this->support_nodes_; }
+    inline const mfem::GridFunction & SupportNodes() const { return this->support_nodes_; }
 
 
     inline const std::vector<double> & CutoffRadiuses() const { return this->cutoff_radiuses_; }
@@ -108,14 +113,14 @@ public:
                           const std::string &filename) const;
 
 
-    int MinSupportNodesIn(const std::vector<std::vector<int> > &neighbor_ids) const;
-
-
-    int MaxSupportNodesIn(const std::vector<std::vector<int> > &neighbor_ids) const;
-
-
 private:
-    std::vector<Node> support_nodes_;                /*!< The support nodes of the support domain. */
+    const mfem::FiniteElementSpace *fespace_;
+
+    int dim_;
+
+    int num_support_nodes_;
+
+    mfem::GridFunction support_nodes_;                /*!< The support nodes of the support domain. */
 
     std::vector<double> cutoff_radiuses_;
 

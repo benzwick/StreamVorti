@@ -82,8 +82,6 @@ INCLUDE_DIRECTORIES(${MFEM_INCLUDE_DIRS})
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/elements)
-ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/grid)
-ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/mesh_io)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/options_configuration)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/support_domain)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/utilities)
@@ -93,9 +91,7 @@ ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/vectors)
 # Compilation of the shared library.
 IF( STREAMVORTI_BUILD_SHARED_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
-        $<TARGET_OBJECTS:Grid>
         $<TARGET_OBJECTS:Elements>
-        $<TARGET_OBJECTS:MeshIO>
         $<TARGET_OBJECTS:OptionsConfiguration>
         $<TARGET_OBJECTS:Approximants>
         $<TARGET_OBJECTS:SupportDomain>
@@ -122,9 +118,7 @@ ENDIF()
 # Compilation of the static library.
 IF( STREAMVORTI_BUILD_STATIC_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
-        $<TARGET_OBJECTS:Grid>
         $<TARGET_OBJECTS:Elements>
-        $<TARGET_OBJECTS:MeshIO>
         $<TARGET_OBJECTS:OptionsConfiguration>
         $<TARGET_OBJECTS:Approximants>
         $<TARGET_OBJECTS:SupportDomain>
@@ -148,27 +142,6 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
                         
 ENDIF()
 
-
-# StreamVorti simulation executable.
-ADD_EXECUTABLE(StreamVortiRun  main.cpp)
-IF(STREAMVORTI_BUILD_SHARED_LIBS)
-    TARGET_LINK_LIBRARIES(StreamVortiRun  ${PROJECT_NAME})
-ELSE()
-    TARGET_LINK_LIBRARIES(StreamVortiRun  ${PROJECT_NAME}_static)
-ENDIF()
-
-# Install the StreamVorti simulation executable.
-INSTALL(TARGETS StreamVortiRun RUNTIME DESTINATION bin/StreamVorti)
-
-# Development testing executable.
-ADD_EXECUTABLE(streamvort_dev  dev.cpp )
-IF(STREAMVORTI_BUILD_SHARED_LIBS)
-    TARGET_LINK_LIBRARIES(streamvort_dev  ${PROJECT_NAME})
-ELSE()
-    TARGET_LINK_LIBRARIES(streamvort_dev  ${PROJECT_NAME}_static)
-ENDIF()
-
-##############################################################################
 # MFEM simulation executable.
 ADD_EXECUTABLE(MfemRun  mfem_main.cpp)
 IF(STREAMVORTI_BUILD_SHARED_LIBS)
@@ -176,10 +149,7 @@ IF(STREAMVORTI_BUILD_SHARED_LIBS)
 ELSE()
     TARGET_LINK_LIBRARIES(MfemRun  ${PROJECT_NAME}_static)
 ENDIF()
-
-# Install the StreamVorti simulation executable.
 INSTALL(TARGETS MfemRun RUNTIME DESTINATION bin/StreamVorti)
-##############################################################################
 
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
 INSTALL(FILES ${HEADERS} DESTINATION include/StreamVorti)

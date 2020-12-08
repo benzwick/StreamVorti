@@ -33,29 +33,29 @@ int main(int argc, char *argv[])
     GridFunction nodes(&fes);
     mesh.GetNodes(nodes);
 
-    cout << nodes;
+    // cout << nodes;
 
-    const int nNodes = nodes.Size() / dim;
-    double coord[dim]; // coordinates of a node
-    for (int i = 0; i < nNodes; ++i)
-    {
-	for (int j = 0; j < dim; ++j)
-	{
-	    coord[j] = nodes(j * nNodes + i);
-	    cout << coord[j] << " ";
-	}
-	cout << endl;
-    }
+    // const int nNodes = nodes.Size() / dim;
+    // double coord[dim]; // coordinates of a node
+    // for (int i = 0; i < nNodes; ++i)
+    // {
+    //     for (int j = 0; j < dim; ++j)
+    //     {
+    //         coord[j] = nodes(j * nNodes + i);
+    //         cout << coord[j] << " ";
+    //     }
+    //     cout << endl;
+    // }
 
     try {
 
-        // Initialize configuration manager.
+        cout << "Initialize configuration manager." << endl;
         ConfigManager *config = new ConfigManager();
 
-        // Initialize configuration filename empty to be read during the StreamVorti execution.
+        cout << "Initialize configuration filename empty to be read during the StreamVorti execution." << endl;
         std::string config_filename = "";
 
-        // Check if configuration file was provided during execution.
+        cout << "Check if configuration file was provided during execution." << endl;
         if (argc == 1) {
             std::cout << Logger::Warning("No input file was specified. Type configuration filename with absolute path.\n"
                          "Otherwise tap '-g' to generate sample configuration file or '-q' to exit StreamVorti.\nInput filename: ");
@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
         }
         else { config_filename = argv[1]; }
 
-        // Read configuration file.
+        cout << "Read configuration file." << endl;
         config->ReadConfigFile(config_filename);
 
         std::cout << "\t<<< Welcome to StreamVorti >>>\n";
@@ -135,38 +135,36 @@ int main(int argc, char *argv[])
         // Profiling spent time in StreamVorti
         Timer timer;
 
-        // Load grid.
-        Grid grid(nodes);
-        // Grid grid;
-        // grid.LoadFrom(config->RetrieveArgument<std::string>("Model.GridFile"));
-        std::cout << Logger::Message("Grid has nodes: ") << grid.Nodes().size() << std::endl;
-
-        // Set support domain.
-        SupportDomain support;
-        support.SetSupportNodes(grid.Nodes());
+        cout << "Set support domain." << endl;
+        SupportDomain support(nodes);
 
         timer.Reset();
+        cout << "support: compute cutoff radiuses" << endl;
         support.ComputeCutOffRadiuses(config->RetrieveArgument<int>("DCPSE.CutoffRadAtNeighbor"));
         std::cout << Logger::Message("Execution time for cut-off radiuses computation for all nodes: ")
                   << timer.PrintElapsedTime() << "\n";
 
         timer.Reset();
+        cout << "support: compute support radiuses" << endl;
         support.ComputeSupportRadiuses(config->RetrieveArgument<int>("DCPSE.SupportRadAtNeighbor"));
         std::cout << Logger::Message("Execution time for support radiuses computation for all nodes: ")
                   << timer.PrintElapsedTime() << "\n";
 
         timer.Reset();
+        cout << "support: compute neighbor indices" << endl;
         auto neighs = support.NeighborIndices();
         std::cout << Logger::Message("Execution time for neighbor indices computation for all nodes: ")
                   << timer.PrintElapsedTime() << "\n";
 
         if (config->RetrieveArgument<std::string>("DCPSE.SaveNeighborsToFile") != "") {
+            cout << "support: save neighbor indices to file" << endl;
             support.SaveNeighsToFile(neighs, config->RetrieveArgument<std::string>("DCPSE.SaveNeighborsToFile"));
         }
 
+        cout << "DC PSE derivatives." << endl;
         Dcpse2d derivs;
         timer.Reset();
-        derivs.ComputeDerivs(grid.Nodes(), neighs, support.SupportRadiuses());
+        derivs.ComputeDerivs(nodes, neighs, support.SupportRadiuses());
         std::cout << Logger::Message("Execution time for DCPSE derivatives calculation: ")
                   << timer.PrintElapsedTime() << "\n";
 
@@ -192,7 +190,7 @@ int main(int argc, char *argv[])
 
         std::cout << Logger::Message("Simulation terminated successfully.") << std::endl;
 
-        // Release memory from configuration manager.
+        cout << "Release memory from configuration manager." << endl;
         delete config;
 
     }
