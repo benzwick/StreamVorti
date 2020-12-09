@@ -16,7 +16,6 @@ INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Module header files.
 SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/utilities/utilities.hpp
-            ${CMAKE_SOURCE_DIR}/include/StreamVorti/utilities/logger.hpp
             ${CMAKE_SOURCE_DIR}/include/StreamVorti/utilities/timer.hpp)
 
 ADD_LIBRARY(${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )

@@ -26,8 +26,6 @@
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
-#include "StreamVorti/utilities/logger.hpp"
-
 namespace StreamVorti {
 
 void Dcpse3d::Update()
@@ -328,10 +326,10 @@ void Dcpse3d::SaveDerivToFile(const std::string &deriv, const std::string &filen
     else if (deriv == "dxz") { derivative = this->sh_func_dxz_; }
     else if (deriv == "dyz") { derivative = this->sh_func_dyz_; }
 
-
-    if (derivative.Height() == 0) {
-        throw std::runtime_error(Logger::Error("Could not save DCPSE derivative. "
-                                               "Derivatives have not been computed.").c_str());
+    if (derivative.Height() == 0)
+    {
+        MFEM_ABORT( "Could not save DCPSE derivative. "
+                    "Derivatives have not been computed." );
     }
 
     //Initialize the path of the exporting file.

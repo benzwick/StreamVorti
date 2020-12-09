@@ -31,7 +31,6 @@
 #ifndef STREAMVORTI_UTILITIES_UTILITIES_HPP_
 #define STREAMVORTI_UTILITIES_UTILITIES_HPP_
 
-#include "StreamVorti/utilities/logger.hpp"
 #include "StreamVorti/utilities/timer.hpp"
 
 #endif //STREAMVORTI_UTILITIES_UTILITIES_HPP_

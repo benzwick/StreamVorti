@@ -57,15 +57,17 @@ int main(int argc, char *argv[])
 
         cout << "Check if configuration file was provided during execution." << endl;
         if (argc == 1) {
-            std::cout << Logger::Warning("No input file was specified. Type configuration filename with absolute path.\n"
-                         "Otherwise tap '-g' to generate sample configuration file or '-q' to exit StreamVorti.\nInput filename: ");
+            std::cout << "WARNING: No input file was specified. "
+                      << "Type configuration filename with absolute path." << std::endl
+                      << "Otherwise tap '-g' to generate sample configuration file "
+                      << "or '-q' to exit StreamVorti.\nInput filename: ";
 
             // Read configuration file given by the user.
             std::cin >> config_filename;
 
             if (config_filename == "-g") {
-                std::cout << Logger::Message("Give text file name [.ini] with absolute path to store the sample configuration "
-                             "file\nor tap '-t' to print in terminal.\nSample filename: ");
+                std::cout << "Give text file name [.ini] with absolute path to store the sample configuration "
+                          << "file\nor tap '-t' to print in terminal.\nSample filename: " << std::endl;
 
                 std::string sample_filename = "";
 
@@ -73,8 +75,8 @@ int main(int argc, char *argv[])
 
                 if (sample_filename == "-t") {
                     std::cout << config->PrintSampleFile() << std::endl;
-                    std::cout << Logger::Message("Save the sample configuration in a text file [.ini], edit it according to your simulation,"
-                                 " and relaunch StreamVorti passing your configuration file as argument.\n");
+                    std::cout << "Save the sample configuration in a text file [.ini], edit it according to your simulation,"
+                              << " and relaunch StreamVorti passing your configuration file as argument." << std::endl;
                     return EXIT_SUCCESS;
                 }
                 else {
@@ -112,15 +114,18 @@ int main(int argc, char *argv[])
                     // Output the sample file.
                     std::ofstream sample_output(sample_filename, std::ios_base::out | std::ios_base::trunc);
                     sample_output << config->PrintSampleFile();
-                    std::cout << Logger::Message("Sample configuration file saved at: ") << sample_filename << std::endl;
-                    std::cout << Logger::Message("Edit the sample configuration according to your simulation and "
-                                 "relaunch StreamVorti passing your configuration file as argument.\n");
+                    std::cout << "Sample configuration file saved at: " << sample_filename << std::endl;
+                    std::cout << "Edit the sample configuration according to your simulation and "
+                              << "relaunch StreamVorti passing your configuration file as argument." << std::endl;
                     return EXIT_SUCCESS;
                 }
 
             }
 
-            if (config_filename == "-q") { std::cout << Logger::Message("User requested termination. See you soon!\n"); exit(0); }
+            if (config_filename == "-q") {
+                std::cout << "User requested termination. See you soon!\n" << std::endl;
+                exit(0);
+            }
             std::cout << config_filename << std::endl;
             exit(0);
         }
@@ -130,7 +135,7 @@ int main(int argc, char *argv[])
         config->ReadConfigFile(config_filename);
 
         std::cout << "\t<<< Welcome to StreamVorti >>>\n";
-        std::cout << Logger::Message("Loading configuration file: ") << config_filename << std::endl;
+        std::cout << "Loading configuration file: " << config_filename << std::endl;
 
         // Profiling spent time in StreamVorti
         Timer timer;
@@ -141,20 +146,20 @@ int main(int argc, char *argv[])
         timer.Reset();
         cout << "support: compute cutoff radiuses" << endl;
         support.ComputeCutOffRadiuses(config->RetrieveArgument<int>("DCPSE.CutoffRadAtNeighbor"));
-        std::cout << Logger::Message("Execution time for cut-off radiuses computation for all nodes: ")
-                  << timer.PrintElapsedTime() << "\n";
+        std::cout << "Execution time for cut-off radiuses computation for all nodes: "
+                  << timer.PrintElapsedTime() << std::endl;
 
         timer.Reset();
         cout << "support: compute support radiuses" << endl;
         support.ComputeSupportRadiuses(config->RetrieveArgument<int>("DCPSE.SupportRadAtNeighbor"));
-        std::cout << Logger::Message("Execution time for support radiuses computation for all nodes: ")
-                  << timer.PrintElapsedTime() << "\n";
+        std::cout << "Execution time for support radiuses computation for all nodes: "
+                  << timer.PrintElapsedTime() << std::endl;
 
         timer.Reset();
         cout << "support: compute neighbor indices" << endl;
         auto neighs = support.NeighborIndices();
-        std::cout << Logger::Message("Execution time for neighbor indices computation for all nodes: ")
-                  << timer.PrintElapsedTime() << "\n";
+        std::cout << "Execution time for neighbor indices computation for all nodes: "
+                  << timer.PrintElapsedTime() << std::endl;
 
         if (config->RetrieveArgument<std::string>("DCPSE.SaveNeighborsToFile") != "") {
             cout << "support: save neighbor indices to file" << endl;
@@ -166,8 +171,8 @@ int main(int argc, char *argv[])
         timer.Reset();
         derivs.Update();
         // derivs.ComputeDerivs(nodes, neighs, support.SupportRadiuses());
-        std::cout << Logger::Message("Execution time for DCPSE derivatives calculation: ")
-                  << timer.PrintElapsedTime() << "\n";
+        std::cout << "Execution time for DCPSE derivatives calculation: "
+                  << timer.PrintElapsedTime() << std::endl;
 
         if (config->RetrieveArgument<std::string>("DCPSE.SaveDxToFile") != "") {
             derivs.SaveDerivToFile("dx", config->RetrieveArgument<std::string>("DCPSE.SaveDxToFile"));
@@ -189,7 +194,7 @@ int main(int argc, char *argv[])
             derivs.SaveDerivToFile("dxy", config->RetrieveArgument<std::string>("DCPSE.SaveDxyToFile"));
         }
 
-        std::cout << Logger::Message("Simulation terminated successfully.") << std::endl;
+        std::cout << "Simulation terminated successfully." << std::endl;
 
         cout << "Release memory from configuration manager." << endl;
         delete config;
