@@ -25,6 +25,51 @@
 
 namespace StreamVorti {
 
+SupportDomain::SupportDomain(const mfem::GridFunction &gf)
+    :
+    dim_(gf.FESpace()->GetMesh()->Dimension()),
+    num_support_nodes_(gf.FESpace()->GetNDofs())
+{
+    mfem::Mesh *mesh = gf.FESpace()->GetMesh();
+    const mfem::FiniteElementCollection *fec = gf.FESpace()->FEColl();
+
+    // ASSERT gf is H1 (not L2, ND, RT, etc.)
+    if (dynamic_cast<const mfem::H1_FECollection*>(fec) == nullptr)
+    {
+        MFEM_ABORT( "Grid function FE space is not H1." );
+    }
+
+    // ASSERT mesh 1 <= dim <= 3
+    if (this->dim_ < 1 || this->dim_ > 3)
+    {
+        MFEM_ABORT( "Mesh is " << this->dim_ << "D not 1D, 2D or 3D." );
+    }
+
+    // Create GridFunctions with local and global nodal coordinates
+    this->fespace_ = new mfem::FiniteElementSpace(mesh, fec, this->dim_);
+    this->support_nodes_ = new mfem::GridFunction(this->fespace_);
+    mesh->GetNodes(*this->support_nodes_);
+    // TODO: this is needed for parallel implementation
+    this->global_nodes_ = nullptr;
+}
+
+
+SupportDomain::SupportDomain(const mfem::ParGridFunction &gf, const mfem::Mesh &smesh)
+    :
+    dim_(gf.FESpace()->GetMesh()->Dimension()),
+    num_support_nodes_(gf.FESpace()->GetTrueVSize())
+{
+    // TODO: these should be global not local support nodes
+    // maybe pass the serial mesh to get the global nodes
+    // maybe pass the global nodes as a GridFunction
+    // maybe see `void ParGridFunction::SaveAsOne(std::ostream &out)`
+
+    this->fespace_ = nullptr;
+    this->support_nodes_ = nullptr;
+    this->global_nodes_ = nullptr;
+}
+
+
 void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
 {
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
@@ -33,41 +78,20 @@ void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
     typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
     typedef Neighbor_search::Tree Tree;
 
-
-    // TODO: delete or fix
-    // if (this->support_nodes_.empty()) {
-    //     throw std::runtime_error(Logger::Error("Could not compute cutoff radiuses."
-    //                                            " Should set the support nodes first").c_str());
-    // }
-
     this->cutoff_radiuses_.clear();
     this->cutoff_radiuses_.reserve(this->num_support_nodes_);
 
     std::vector<Point_3d> support_coords;
     for (int i = 0; i < this->num_support_nodes_; ++i)
     {
-    // for (auto node : this->support_nodes_) {
-
-        double x = support_nodes_(this->fespace_->DofToVDof(i, 0));
-        double y = support_nodes_(this->fespace_->DofToVDof(i, 1));
-        double z;
-        if (this->dim_ >= 3) z = support_nodes_(this->fespace_->DofToVDof(i, 2)); else z = 0.0;
-
-        support_coords.emplace_back(Point_3d(x, y, z));
+        support_coords.emplace_back(this->SupportNodeAsPoint(i));
     }
 
     Tree tree(support_coords.begin(), support_coords.end());
 
     for (int i = 0; i < this->num_support_nodes_; ++i)
     {
-    // for (auto query_node : this->support_nodes_) {
-
-        double x = support_nodes_(this->fespace_->DofToVDof(i, 0));
-        double y = support_nodes_(this->fespace_->DofToVDof(i, 1));
-        double z;
-        if (this->dim_ >= 3) z = support_nodes_(this->fespace_->DofToVDof(i, 2)); else z = 0.0;
-
-        Point_3d query(x, y, z);
+        Point_3d query = this->SupportNodeAsPoint(i);
 
         // Initialize the search structure, and search all N points
         Neighbor_search search(tree, query, neighs_num);
@@ -99,40 +123,20 @@ void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
     typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
     typedef Neighbor_search::Tree Tree;
 
-    // TODO: delete or fix
-    // if (this->support_nodes_.empty()) {
-    //     throw std::runtime_error(Logger::Error("Could not compute support radiuses."
-    //                                            " Should set the support nodes first").c_str());
-    // }
-
     this->support_radiuses_.clear();
     this->support_radiuses_.reserve(this->num_support_nodes_);
 
     std::vector<Point_3d> support_coords;
     for (int i = 0; i < this->num_support_nodes_; ++i)
     {
-    // for (auto node : this->support_nodes_) {
-
-        double x = support_nodes_(this->fespace_->DofToVDof(i, 0));
-        double y = support_nodes_(this->fespace_->DofToVDof(i, 1));
-        double z;
-        if (this->dim_ >= 3) z = support_nodes_(this->fespace_->DofToVDof(i, 2)); else z = 0.0;
-
-        support_coords.emplace_back(Point_3d(x, y, z));
+        support_coords.emplace_back(this->SupportNodeAsPoint(i));
     }
 
     Tree tree(support_coords.begin(), support_coords.end());
 
     for (int i = 0; i < this->num_support_nodes_; ++i)
     {
-    // for (auto query_node : this->support_nodes_) {
-
-        double x = support_nodes_(this->fespace_->DofToVDof(i, 0));
-        double y = support_nodes_(this->fespace_->DofToVDof(i, 1));
-        double z;
-        if (this->dim_ >= 3) z = support_nodes_(this->fespace_->DofToVDof(i, 2)); else z = 0.0;
-
-        Point_3d query(x, y, z);
+        Point_3d query = this->SupportNodeAsPoint(i);
 
         // Initialize the search structure, and search all N points
         Neighbor_search search(tree, query, neighs_num);
@@ -158,19 +162,6 @@ void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
 
 const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
 {
-
-    // TODO: delete or fix
-    // if (this->support_nodes_.empty()) {
-    //     throw std::runtime_error(Logger::Error("Could not find neighbor nodes to given points."
-    //                                            " Should set the support nodes first").c_str());
-    // }
-
-    // if (this->cutoff_radiuses_.empty()) {
-    //     throw std::runtime_error(Logger::Error("Could not find neighbor nodes to given points."
-    //                                            " Should compute the cutoff radiuses first").c_str());
-    // }
-
-
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
     typedef K::Point_3 Point_3d;
     typedef boost::tuple<Point_3d,int> Point_and_int;
@@ -189,15 +180,7 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
 
     for (int id = 0; id < this->num_support_nodes_; ++id)
     {
-    // for (const auto &node : this->support_nodes_) {
-    //     auto id = &node - &this->support_nodes_[0];
-
-        double x = support_nodes_(this->fespace_->DofToVDof(id, 0));
-        double y = support_nodes_(this->fespace_->DofToVDof(id, 1));
-        double z;
-        if (this->dim_ >= 3) z = support_nodes_(this->fespace_->DofToVDof(id, 2)); else z = 0.0;
-
-        points.emplace_back(Point_3d(x, y, z));
+        points.emplace_back(this->SupportNodeAsPoint(id));
         points_indices.emplace_back(id);
     }
 
@@ -212,15 +195,7 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
     std::vector<Point_3d> support_coords;
     for (int id = 0; id < this->num_support_nodes_; ++id)
     {
-    // for (auto &node : this->support_nodes_) {
-    //     auto id = &node - &this->support_nodes_[0];
-
-        double x = support_nodes_(this->fespace_->DofToVDof(id, 0));
-        double y = support_nodes_(this->fespace_->DofToVDof(id, 1));
-        double z;
-        if (this->dim_ >= 3) z = support_nodes_(this->fespace_->DofToVDof(id, 2)); else z = 0.0;
-
-        Point_3d center(x, y, z);
+        Point_3d center = this->SupportNodeAsPoint(id);
 
         // Searching sphere.
         Fuzzy_sphere fs(center, this->cutoff_radiuses_[id]);

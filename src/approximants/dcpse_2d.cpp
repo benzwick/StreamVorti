@@ -36,38 +36,13 @@ Dcpse2d::Dcpse2d(mfem::GridFunction &gf,
                  int CutoffRadAtNeighbor,
                  int SupportRadAtNeighbor)
 {
-    // Get nodes
-    mfem::Mesh *mesh = gf.FESpace()->GetMesh();
-    const int dim = mesh->Dimension();
-    // Note (number of nodes) > (number of vertices) when order > 1
-    const int nNodes = gf.FESpace()->GetNDofs();
-    const mfem::FiniteElementCollection *fec = gf.FESpace()->FEColl();
-
-    // ASSERT gf is H1 (not L2, ND, RT, etc.)
-    if (dynamic_cast<const mfem::H1_FECollection*>(fec) == nullptr)
-    {
-        MFEM_ABORT( "Grid function FE space is not H1." );
-    }
-
-    // ASSERT mesh dim == 2
-    if (dim != 2)
-    {
-        MFEM_ABORT( "Mesh is " << dim << "D not 3D." );
-    }
-
-    // Create GridFunction with nodal coordinates
-    mfem::FiniteElementSpace *fes = new mfem::FiniteElementSpace(mesh, fec, dim);
-    mfem::GridFunction nodes(fes);
-    mesh->GetNodes(nodes);
-
+    // TODO: move to parent class
     // Initialize and compute DC PSE derivatives
-    SupportDomain support(nodes);
+    SupportDomain support(gf);
     support.ComputeCutOffRadiuses(CutoffRadAtNeighbor);
     support.ComputeSupportRadiuses(SupportRadAtNeighbor);
     auto neighs = support.NeighborIndices();
-    this->ComputeDerivs(nodes, neighs, support.SupportRadiuses());
-
-    delete fes;
+    this->ComputeDerivs(support.SupportNodes(), neighs, support.SupportRadiuses());
 
     // ----------------------------------------------------------------------
     // Use this in user code:
@@ -84,11 +59,11 @@ Dcpse2d::~Dcpse2d()
 {}
 
 
-void Dcpse2d::ComputeDerivs(mfem::GridFunction &geom_nodes,
+void Dcpse2d::ComputeDerivs(const mfem::GridFunction &geom_nodes,
                             const std::vector<std::vector<int> > &support_nodes_ids,
                             const std::vector<double> &support_radiuses)
 {
-    mfem::FiniteElementSpace *fes = geom_nodes.FESpace();
+    const mfem::FiniteElementSpace *fes = geom_nodes.FESpace();
     int nnodes = fes->GetNDofs();
 
     // Initialize shape function derivative matrices.

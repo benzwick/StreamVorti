@@ -74,21 +74,25 @@ class SupportDomain
 public:
 
     /*!
-     * \brief SupportDomain constructor.
+     * \brief Serial SupportDomain constructor.
      */
-    SupportDomain(const mfem::GridFunction &support_nodes)
-        :
-        fespace_(support_nodes.FESpace()),
-        dim_(support_nodes.FESpace()->GetMesh()->Dimension()),
-        num_support_nodes_(support_nodes.FESpace()->GetNDofs()),
-        support_nodes_(support_nodes)
-        {};
+    SupportDomain(const mfem::GridFunction &gf);
+
+
+    /*!
+     * \brief Parallel SupportDomain constructor.
+     */
+    SupportDomain(const mfem::ParGridFunction &gf, const mfem::Mesh &smesh);
 
 
     /*!
      * \brief SupportDomain destructor.
      */
-    virtual ~SupportDomain() {};
+    virtual ~SupportDomain() {
+        delete this->fespace_;
+        delete this->support_nodes_;
+        delete this->global_nodes_;
+    };
 
 
     void ComputeCutOffRadiuses(const std::size_t &neighs_num);
@@ -97,7 +101,18 @@ public:
     void ComputeSupportRadiuses(const std::size_t &neighs_num);
 
 
-    inline const mfem::GridFunction & SupportNodes() const { return this->support_nodes_; }
+    inline const mfem::GridFunction & SupportNodes() const { return *this->support_nodes_; }
+
+
+    inline CGAL::Exact_predicates_inexact_constructions_kernel::Point_3 SupportNodeAsPoint(int id) {
+        double x = 0.;
+        double y = 0.;
+        double z = 0.;
+        if (dim_ > 0) x = (*support_nodes_)(fespace_->DofToVDof(id, 0));
+        if (dim_ > 1) y = (*support_nodes_)(fespace_->DofToVDof(id, 1));
+        if (dim_ > 2) z = (*support_nodes_)(fespace_->DofToVDof(id, 2));
+        return CGAL::Exact_predicates_inexact_constructions_kernel::Point_3(x, y, z);
+    }
 
 
     inline const std::vector<double> & CutoffRadiuses() const { return this->cutoff_radiuses_; }
@@ -114,17 +129,24 @@ public:
 
 
 private:
-    const mfem::FiniteElementSpace *fespace_;
+    /*! Dimension of the mesh */
+    const int dim_;
 
-    int dim_;
+    /*! Number of support nodes */
+    const int num_support_nodes_;
 
-    int num_support_nodes_;
+    mfem::FiniteElementSpace *fespace_;
 
-    mfem::GridFunction support_nodes_;                /*!< The support nodes of the support domain. */
+    /*! The local support nodes of the support domain. */
+    mfem::GridFunction *support_nodes_;
+
+    /*! The global support nodes of the support domain. */
+    mfem::GridFunction *global_nodes_;
 
     std::vector<double> cutoff_radiuses_;
 
-    std::vector<double> support_radiuses_;           /*!< The support radiuses of the influence nodes of the support domain. */
+    /*! The support radiuses of the influence nodes of the support domain. */
+    std::vector<double> support_radiuses_;
 };
 
 

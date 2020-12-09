@@ -89,7 +89,7 @@ public:
     virtual ~Dcpse2d();
 
 
-    void ComputeDerivs(mfem::GridFunction &geom_nodes,
+    void ComputeDerivs(const mfem::GridFunction &geom_nodes,
                        const std::vector<std::vector<int> > &support_nodes_ids,
                        const std::vector<double> &support_radiuses);
 
