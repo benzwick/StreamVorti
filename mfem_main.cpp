@@ -162,9 +162,10 @@ int main(int argc, char *argv[])
         }
 
         cout << "DC PSE derivatives." << endl;
-        Dcpse2d derivs;
+        Dcpse2d derivs(nodes);
         timer.Reset();
-        derivs.ComputeDerivs(nodes, neighs, support.SupportRadiuses());
+        derivs.Update();
+        // derivs.ComputeDerivs(nodes, neighs, support.SupportRadiuses());
         std::cout << Logger::Message("Execution time for DCPSE derivatives calculation: ")
                   << timer.PrintElapsedTime() << "\n";
 

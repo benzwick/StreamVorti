@@ -20,82 +20,33 @@
  *      Konstantinos A. MOUNTRIS
  */
 
-/*!
-   \file dcpse_2d.hpp
-   \brief Dcpse2d class header file.
-   \author Konstantinos A. Mountris
-   \date 12/01/2018
-*/
-
 #ifndef STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
 #define STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
 
-
 #include "StreamVorti/approximants/dcpse.hpp"
-#include "StreamVorti/vectors/vectors.hpp"
-#include "StreamVorti/elements/node.hpp"
-#include "StreamVorti/utilities/logger.hpp"
 
 #include "mfem.hpp"
-
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-
-#include <boost/filesystem.hpp>
-
-#include <iostream>
-#include <fstream>
-#include <iomanip>
-#include <vector>
-#include <algorithm>
-#include <string>
-#include <stdexcept>
-#include <exception>
 
 namespace StreamVorti {
 
 /*!
- *  \addtogroup Approximants
- *  @{
- */
-
-
-/*!
  * \class Dcpse2d
- * \brief Class implemmenting modified DCPSE function derivatives approximants in 2 dimensions.
+ * \brief DC PSE derivatives in 2D.
  */
-
 class Dcpse2d: public Dcpse
 {
-
 public:
-    /*!
-     * \brief Dcpse2d constructor.
-     */
-    Dcpse2d();
-
-
     /*!
      * \brief Dcpse2d constructor to match nodes of an MFEM H1 GridFunction.
      */
     Dcpse2d(mfem::GridFunction &gf,
             int CutoffRadAtNeighbor = 30,
-            int SupportRadAtNeighbor = 5);
+            int SupportRadAtNeighbor = 5)
+        : Dcpse(gf, CutoffRadAtNeighbor, SupportRadAtNeighbor) {}
 
-
-    /*!
-     * \brief Dcpse2d destructor.
-     */
-    virtual ~Dcpse2d();
-
-
-    void ComputeDerivs(const mfem::GridFunction &geom_nodes,
-                       const std::vector<std::vector<int> > &support_nodes_ids,
-                       const std::vector<double> &support_radiuses);
-
+    void Update();
 
     void SaveDerivToFile(const std::string &deriv, const std::string &filename) const;
-
 
     const mfem::SparseMatrix & D(int i) const {
         switch (i)
@@ -106,39 +57,20 @@ public:
         MFEM_ABORT( "Index " << i << " out of bounds." );
     }
 
-
     inline const mfem::SparseMatrix & ShapeFunctionDx() const { return this->sh_func_dx_; }
-
-
     inline const mfem::SparseMatrix & ShapeFunctionDy() const { return this->sh_func_dy_; }
-
-
     inline const mfem::SparseMatrix & ShapeFunctionDxx() const { return this->sh_func_dxx_; }
-
-
     inline const mfem::SparseMatrix & ShapeFunctionDyy() const { return this->sh_func_dyy_; }
-
-
     inline const mfem::SparseMatrix & ShapeFunctionDxy() const { return this->sh_func_dxy_; }
 
-
-
 private:
-
-    mfem::SparseMatrix sh_func_dx_;     /*!< The shape function 1st x derivative matrix. */
-
-    mfem::SparseMatrix sh_func_dy_;     /*!< The shape function 1st y derivative matrix. */
-
-    mfem::SparseMatrix sh_func_dxx_;     /*!< The shape function 2nd x derivative matrix. */
-
-    mfem::SparseMatrix sh_func_dyy_;     /*!< The shape function 2nd y derivative matrix. */
-
-    mfem::SparseMatrix sh_func_dxy_;     /*!< The shape function 2nd xy derivative matrix. */
+    mfem::SparseMatrix sh_func_dx_; /*!< The shape function 1st x derivative matrix. */
+    mfem::SparseMatrix sh_func_dy_; /*!< The shape function 1st y derivative matrix. */
+    mfem::SparseMatrix sh_func_dxx_; /*!< The shape function 2nd xx derivative matrix. */
+    mfem::SparseMatrix sh_func_dyy_; /*!< The shape function 2nd yy derivative matrix. */
+    mfem::SparseMatrix sh_func_dxy_; /*!< The shape function 2nd xy derivative matrix. */
 };
 
+} // namespace StreamVorti
 
-
-/*! @} End of Doxygen Groups*/
-} //end of namespace StreamVorti
-
-#endif //STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
+#endif // STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_

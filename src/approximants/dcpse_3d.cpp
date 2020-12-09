@@ -20,49 +20,22 @@
  *      Konstantinos A. MOUNTRIS
  */
 
-
 #include "StreamVorti/approximants/dcpse_3d.hpp"
-#include "StreamVorti/support_domain/support_domain.hpp"
 
+#include <boost/filesystem.hpp>
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
+
+#include "StreamVorti/utilities/logger.hpp"
 
 namespace StreamVorti {
 
-
-Dcpse3d::Dcpse3d()
-{}
-
-
-Dcpse3d::Dcpse3d(mfem::GridFunction &gf,
-                 int CutoffRadAtNeighbor,
-                 int SupportRadAtNeighbor)
+void Dcpse3d::Update()
 {
-    // TODO: move to parent class
-    // Initialize and compute DC PSE derivatives
-    SupportDomain support(gf);
-    support.ComputeCutOffRadiuses(CutoffRadAtNeighbor);
-    support.ComputeSupportRadiuses(SupportRadAtNeighbor);
-    auto neighs = support.NeighborIndices();
-    this->ComputeDerivs(support.SupportNodes(), neighs, support.SupportRadiuses());
+    mfem::GridFunction geom_nodes = this->SupportNodes();
+    std::vector<std::vector<int> > support_nodes_ids = this->NeighborIndices();
+    std::vector<double> support_radiuses = this->SupportRadiuses();
 
-    // ----------------------------------------------------------------------
-    // Use this in user code:
-    // GridFunction u_gf(fespace_h1);             // Nodal values
-    // StreamVorti::Dcpse3d derivs(u_gf, 30, 5);  // DC PSE derivatives object
-    // SparseMatrix dx(derivs.ShapeFunctionDx()); // DC PSE derivatives matrix
-    // GridFunction dudx_dcpse(fespace_h1);       // Derivatives of u wrt x
-    // dx.Mult(u_gf, dudx_dcpse);
-    // ----------------------------------------------------------------------
-}
-
-
-Dcpse3d::~Dcpse3d()
-{}
-
-
-void Dcpse3d::ComputeDerivs(const mfem::GridFunction &geom_nodes,
-                            const std::vector<std::vector<int> > &support_nodes_ids,
-                            const std::vector<double> &support_radiuses)
-{
     const mfem::FiniteElementSpace *fes = geom_nodes.FESpace();
     int nnodes = fes->GetNDofs();
 

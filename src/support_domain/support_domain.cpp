@@ -22,6 +22,15 @@
 
 #include "StreamVorti/support_domain/support_domain.hpp"
 
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/point_generators_3.h>
+#include <CGAL/Orthogonal_k_neighbor_search.h>
+#include <CGAL/Search_traits_3.h>
+#include <CGAL/Search_traits_adapter.h>
+#include <CGAL/Fuzzy_sphere.h>
+#include <boost/iterator/zip_iterator.hpp>
+
+#include <boost/filesystem.hpp>
 
 namespace StreamVorti {
 
@@ -269,4 +278,4 @@ void SupportDomain::SaveNeighsToFile(const std::vector<std::vector<int> > &neigh
 
 }
 
-} //end of namespace StreamVorti
+} // namespace StreamVorti

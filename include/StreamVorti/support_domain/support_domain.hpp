@@ -20,70 +20,30 @@
  *      Konstantinos A. MOUNTRIS
  */
 
-/*!
-   \file support_domain.hpp
-   \brief SupportDomain class header file.
-   \author Konstantinos A. Mountris
-   \date 12/01/2018
-*/
-
 #ifndef STREAMVORTI_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
 #define STREAMVORTI_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
-
-
-#include "StreamVorti/elements/node.hpp"
-#include "StreamVorti/vectors/vectors.hpp"
-#include "StreamVorti/utilities/logger.hpp"
 
 #include "mfem.hpp"
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/point_generators_3.h>
-#include <CGAL/Orthogonal_k_neighbor_search.h>
-#include <CGAL/Search_traits_3.h>
-#include <CGAL/Search_traits_adapter.h>
-#include <CGAL/Fuzzy_sphere.h>
-#include <boost/iterator/zip_iterator.hpp>
-
-#include <boost/filesystem.hpp>
-
-#include <iostream>
-#include <fstream>
-#include <list>
-#include <cmath>
-#include <string>
-#include <stdexcept>
-#include <exception>
-#include <limits>
-
 
 namespace StreamVorti {
 
 /*!
- *  \addtogroup Approximants
- *  @{
- */
-
-
-/*!
  * \class SupportDomain
  */
-
 class SupportDomain
 {
 public:
-
     /*!
      * \brief Serial SupportDomain constructor.
      */
     SupportDomain(const mfem::GridFunction &gf);
 
-
     /*!
      * \brief Parallel SupportDomain constructor.
      */
     SupportDomain(const mfem::ParGridFunction &gf, const mfem::Mesh &smesh);
-
 
     /*!
      * \brief SupportDomain destructor.
@@ -94,15 +54,11 @@ public:
         delete this->global_nodes_;
     };
 
-
     void ComputeCutOffRadiuses(const std::size_t &neighs_num);
-
 
     void ComputeSupportRadiuses(const std::size_t &neighs_num);
 
-
     inline const mfem::GridFunction & SupportNodes() const { return *this->support_nodes_; }
-
 
     inline CGAL::Exact_predicates_inexact_constructions_kernel::Point_3 SupportNodeAsPoint(int id) {
         double x = 0.;
@@ -114,19 +70,14 @@ public:
         return CGAL::Exact_predicates_inexact_constructions_kernel::Point_3(x, y, z);
     }
 
-
     inline const std::vector<double> & CutoffRadiuses() const { return this->cutoff_radiuses_; }
-
 
     inline const std::vector<double> & SupportRadiuses() const { return this->support_radiuses_; }
 
-
     const std::vector<std::vector<int> > NeighborIndices();
-
 
     void SaveNeighsToFile(const std::vector<std::vector<int> > &neighbor_ids,
                           const std::string &filename) const;
-
 
 private:
     /*! Dimension of the mesh */
@@ -149,8 +100,6 @@ private:
     std::vector<double> support_radiuses_;
 };
 
+} // namespace StreamVorti
 
-/*! @} End of Doxygen Groups*/
-} //end of namespace StreamVorti
-
-#endif //STREAMVORTI_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_
+#endif // STREAMVORTI_SUPPORT_DOMAIN_SUPPORT_DOMAIN_HPP_

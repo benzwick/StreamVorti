@@ -20,53 +20,48 @@
  *      Konstantinos A. MOUNTRIS
  */
 
-/*!
-   \file dcpse.hpp
-   \brief Dcpse base class header file.
-   \author Benjamin F. Zwick
-   \date 06/12/2020
-*/
-
 #ifndef STREAMVORTI_APPROXIMANTS_DCPSE_HPP_
 #define STREAMVORTI_APPROXIMANTS_DCPSE_HPP_
 
 #include "mfem.hpp"
 
+#include "StreamVorti/support_domain/support_domain.hpp"
+
 namespace StreamVorti {
 
 /*!
- *  \addtogroup Approximants
- *  @{
- */
-
-/*!
  * \class Dcpse
- * \brief Base class implemmenting modified DCPSE function derivatives approximants.
+ * \brief DC PSE derivatives base class.
  */
-
-class Dcpse
+class Dcpse: public SupportDomain
 {
-
 public:
     /*!
      * \brief Dcpse constructor to match nodes of an MFEM H1 GridFunction.
+     *
+     * Use this in user code:
+     *
+     *     GridFunction u_gf(fespace_h1);                  // Nodal values
+     *     StreamVorti::Dcpse[2d/3d] derivs(u_gf, 30, 5);  // DC PSE derivatives object
+     *     derivs.Update();                                // Update/compute matrices
+     *     SparseMatrix dx(derivs.ShapeFunctionDx());      // DC PSE derivatives matrix
+     *     SparseMatrix dx(derivs.D(0));                   // <--------- (or like this)
+     *     GridFunction dudx_dcpse(fespace_h1);            // Derivatives of u wrt x
+     *     dx.Mult(u_gf, dudx_dcpse);
      */
-    // TODO: move to base class
-    // Dcpse(mfem::GridFunction &gf,
-    //         int CutoffRadAtNeighbor = 30,
-    //         int SupportRadAtNeighbor = 5);
+    Dcpse(mfem::GridFunction &gf,
+          int CutoffRadAtNeighbor = 30,
+          int SupportRadAtNeighbor = 5);
 
-    /*!
-     * \brief Dcpse destructor.
-     */
-    virtual ~Dcpse() = 0;
+    virtual ~Dcpse();
+
+    virtual void Update() = 0;
+
+    virtual void SaveDerivToFile(const std::string &deriv, const std::string &filename) const = 0;
 
     virtual const mfem::SparseMatrix & D(int i) const = 0;
 };
 
-inline Dcpse::~Dcpse() {};
+} // namespace StreamVorti
 
-/*! @} End of Doxygen Groups*/
-} //end of namespace StreamVorti
-
-#endif //STREAMVORTI_APPROXIMANTS_DCPSE_HPP_
+#endif // STREAMVORTI_APPROXIMANTS_DCPSE_HPP_

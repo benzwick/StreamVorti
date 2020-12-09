@@ -9,7 +9,7 @@ PROJECT(Approximants)
 
 
 # Module source files.
-SET(SOURCES dcpse_2d.cpp dcpse_3d.cpp)
+SET(SOURCES dcpse.cpp dcpse_2d.cpp dcpse_3d.cpp)
 
 # Include the headers directory.
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
