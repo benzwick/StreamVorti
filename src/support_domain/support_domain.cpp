@@ -125,7 +125,7 @@ void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
         this->cutoff_radiuses_.emplace_back(distances.back());
     }
 
-    std::cout << "Execution time for cut-off radiuses computation for all nodes: "
+    std::cout << "SupportDomain: Execution time for cut-off radiuses computation for all nodes: "
               << timer.RealTime() << " s" << std::endl;
 }
 
@@ -175,7 +175,7 @@ void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
         this->support_radiuses_.emplace_back(distances.back());
     }
 
-    std::cout << "Execution time for support radiuses computation for all nodes: "
+    std::cout << "SupportDomain: Execution time for support radiuses computation for all nodes: "
               << timer.RealTime() << " s" << std::endl;
 }
 
@@ -239,7 +239,7 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
         domain_nodes.clear();
     }
 
-    std::cout << "Execution time for neighbor indices computation for all nodes: "
+    std::cout << "SupportDomain: Execution time for neighbor indices computation for all nodes: "
               << timer.RealTime() << " s" << std::endl;
 
     // Return the indices of the closest nodes to each evaluation point.
