@@ -135,28 +135,28 @@ int main(int argc, char *argv[])
     std::cout << "Loading configuration file: " << config_filename << std::endl;
 
     // Profiling spent time in StreamVorti
-    Timer timer;
+    mfem::StopWatch timer;
 
     cout << "Set support domain." << endl;
     SupportDomain support(nodes);
 
-    timer.Reset();
+    timer.Start();
     cout << "support: compute cutoff radiuses" << endl;
     support.ComputeCutOffRadiuses(config->RetrieveArgument<int>("DCPSE.CutoffRadAtNeighbor"));
     std::cout << "Execution time for cut-off radiuses computation for all nodes: "
-              << timer.PrintElapsedTime() << std::endl;
+              << timer.RealTime() << " s" << std::endl;
 
-    timer.Reset();
+    timer.Clear();
     cout << "support: compute support radiuses" << endl;
     support.ComputeSupportRadiuses(config->RetrieveArgument<int>("DCPSE.SupportRadAtNeighbor"));
     std::cout << "Execution time for support radiuses computation for all nodes: "
-              << timer.PrintElapsedTime() << std::endl;
+              << timer.RealTime() << " s" << std::endl;
 
-    timer.Reset();
+    timer.Clear();
     cout << "support: compute neighbor indices" << endl;
     auto neighs = support.NeighborIndices();
     std::cout << "Execution time for neighbor indices computation for all nodes: "
-              << timer.PrintElapsedTime() << std::endl;
+              << timer.RealTime() << " s" << std::endl;
 
     if (config->RetrieveArgument<std::string>("DCPSE.SaveNeighborsToFile") != "") {
         cout << "support: save neighbor indices to file" << endl;
@@ -165,11 +165,11 @@ int main(int argc, char *argv[])
 
     cout << "DC PSE derivatives." << endl;
     Dcpse2d derivs(nodes);
-    timer.Reset();
+    timer.Clear();
     derivs.Update();
     // derivs.ComputeDerivs(nodes, neighs, support.SupportRadiuses());
     std::cout << "Execution time for DCPSE derivatives calculation: "
-              << timer.PrintElapsedTime() << std::endl;
+              << timer.RealTime() << " s" << std::endl;
 
     if (config->RetrieveArgument<std::string>("DCPSE.SaveDxToFile") != "") {
         derivs.SaveDerivToFile("dx", config->RetrieveArgument<std::string>("DCPSE.SaveDxToFile"));
