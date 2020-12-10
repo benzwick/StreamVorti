@@ -31,6 +31,10 @@ namespace StreamVorti {
 
 void Dcpse2d::Update()
 {
+    mfem::StopWatch timer;
+    timer.Start();
+    std::cout << "Dcpse2d: update derivative matrices" << std::endl;
+
     mfem::GridFunction geom_nodes = this->SupportNodes();
     std::vector<std::vector<int> > support_nodes_ids = this->NeighborIndices();
     std::vector<double> support_radiuses = this->SupportRadiuses();
@@ -238,6 +242,8 @@ void Dcpse2d::Update()
     this->sh_func_dyy_.Finalize();
     this->sh_func_dxy_.Finalize();
 
+    std::cout << "Dcpse2d: Execution time for DC PSE derivatives: "
+              << timer.RealTime() << " s" << std::endl;
 }
 
 
