@@ -1,19 +1,13 @@
 
 #include <StreamVorti/stream_vorti.hpp>
 
-#include <filesystem>
 #include <cstddef>
-#include <string>
+#include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <string>
 
 #include "mfem.hpp"
-#include <iostream>
-
-
-using namespace StreamVorti;
-
-using namespace std;
-using namespace mfem;
 
 int main(int argc, char *argv[])
 {
@@ -37,21 +31,21 @@ int main(int argc, char *argv[])
     bool save_dzz = true;
 
     // Mesh mesh(10, 10, Element::QUADRILATERAL);
-    Mesh mesh(10, 10, Element::QUADRILATERAL, false, 1.0, 1.0, false);
+    mfem::Mesh mesh(10, 10, mfem::Element::QUADRILATERAL, false, 1.0, 1.0, false);
 
-    ofstream mesh_ofs("mfem_square10x10.mesh");
+    std::ofstream mesh_ofs("mfem_square10x10.mesh");
     mesh_ofs.precision(8);
     mesh.Print(mesh_ofs);
 
     const int dim = mesh.Dimension();
     const int order = 1;
-    H1_FECollection fec(order, dim);
-    FiniteElementSpace fes(&mesh, &fec, dim);
+    mfem::H1_FECollection fec(order, dim);
+    mfem::FiniteElementSpace fes(&mesh, &fec, dim);
 
-    GridFunction nodes(&fes);
+    mfem::GridFunction nodes(&fes);
     mesh.GetNodes(nodes);
 
-    // cout << nodes;
+    // std::cout << nodes;
 
     // const int nNodes = nodes.Size() / dim;
     // double coord[dim]; // coordinates of a node
@@ -60,43 +54,43 @@ int main(int argc, char *argv[])
     //     for (int j = 0; j < dim; ++j)
     //     {
     //         coord[j] = nodes(j * nNodes + i);
-    //         cout << coord[j] << " ";
+    //         std::cout << coord[j] << " ";
     //     }
-    //     cout << endl;
+    //     std::cout << std::endl;
     // }
 
     // Profiling spent time in StreamVorti
     mfem::StopWatch timer;
 
-    cout << "Set support domain." << endl;
-    SupportDomain support(nodes);
+    std::cout << "Set support domain." << std::endl;
+    StreamVorti::SupportDomain support(nodes);
 
     timer.Start();
-    cout << "support: compute cutoff radiuses" << endl;
+    std::cout << "support: compute cutoff radiuses" << std::endl;
     support.ComputeCutOffRadiuses(CutoffRadAtNeighbor);
     std::cout << "Execution time for cut-off radiuses computation for all nodes: "
               << timer.RealTime() << " s" << std::endl;
 
     timer.Clear();
-    cout << "support: compute support radiuses" << endl;
+    std::cout << "support: compute support radiuses" << std::endl;
     support.ComputeSupportRadiuses(SupportRadAtNeighbor);
     std::cout << "Execution time for support radiuses computation for all nodes: "
               << timer.RealTime() << " s" << std::endl;
 
     timer.Clear();
-    cout << "support: compute neighbor indices" << endl;
+    std::cout << "support: compute neighbor indices" << std::endl;
     auto neighs = support.NeighborIndices();
     std::cout << "Execution time for neighbor indices computation for all nodes: "
               << timer.RealTime() << " s" << std::endl;
 
     if (save_neighbors)
     {
-        cout << "support: save neighbor indices to file" << endl;
+        std::cout << "support: save neighbor indices to file" << std::endl;
         support.SaveNeighsToFile(neighs, fname + ".neighbors" + fext);
     }
 
-    cout << "DC PSE derivatives." << endl;
-    Dcpse2d derivs(nodes);
+    std::cout << "DC PSE derivatives." << std::endl;
+    StreamVorti::Dcpse2d derivs(nodes);
     timer.Clear();
     derivs.Update();
     std::cout << "Execution time for DCPSE derivatives calculation: "
