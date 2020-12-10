@@ -75,6 +75,10 @@ int main(int argc, char *argv[])
         MFEM_ABORT( "This would overwrite mesh already exists!");
     }
 
+    // Timer
+    mfem::StopWatch timer;
+    timer.Start();
+
     // Generate (if no file provided) or read mesh from file
     mfem::Mesh *mesh;
     if (mesh_file[0] == '\0')
@@ -101,38 +105,18 @@ int main(int argc, char *argv[])
 
     mfem::GridFunction gf(&fes);
 
-    // Profiling spent time in StreamVorti
-    mfem::StopWatch timer;
-
-    std::cout << "Set support domain." << std::endl;
-    StreamVorti::SupportDomain support(gf);
-
-    timer.Start();
-    std::cout << "support: compute cutoff radiuses" << std::endl;
-    support.ComputeCutOffRadiuses(CutoffRadAtNeighbor);
-    std::cout << "Execution time for cut-off radiuses computation for all nodes: "
-              << timer.RealTime() << " s" << std::endl;
-
+    std::cout << "DC PSE derivatives." << std::endl;
     timer.Clear();
-    std::cout << "support: compute support radiuses" << std::endl;
-    support.ComputeSupportRadiuses(SupportRadAtNeighbor);
-    std::cout << "Execution time for support radiuses computation for all nodes: "
-              << timer.RealTime() << " s" << std::endl;
-
-    timer.Clear();
-    std::cout << "support: compute neighbor indices" << std::endl;
-    auto neighs = support.NeighborIndices();
-    std::cout << "Execution time for neighbor indices computation for all nodes: "
+    StreamVorti::Dcpse2d derivs(gf);
+    std::cout << "Execution time for DCPSE derivatives initialization: "
               << timer.RealTime() << " s" << std::endl;
 
     if (save_neighbors)
     {
         std::cout << "support: save neighbor indices to file" << std::endl;
-        support.SaveNeighsToFile(neighs, fname + ".neighbors" + fext);
+        derivs.SaveNeighsToFile(derivs.NeighborIndices(), fname + ".neighbors" + fext);
     }
 
-    std::cout << "DC PSE derivatives." << std::endl;
-    StreamVorti::Dcpse2d derivs(gf);
     timer.Clear();
     derivs.Update();
     std::cout << "Execution time for DCPSE derivatives calculation: "

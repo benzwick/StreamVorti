@@ -82,6 +82,10 @@ SupportDomain::SupportDomain(const mfem::ParGridFunction &gf, const mfem::Mesh &
 
 void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
 {
+    mfem::StopWatch timer;
+    timer.Start();
+    std::cout << "SupportDomain: compute cutoff radiuses" << std::endl;
+
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
     typedef K::Point_3 Point_3d;
     typedef CGAL::Search_traits_3<K> TreeTraits;
@@ -121,12 +125,17 @@ void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
         this->cutoff_radiuses_.emplace_back(distances.back());
     }
 
-
+    std::cout << "Execution time for cut-off radiuses computation for all nodes: "
+              << timer.RealTime() << " s" << std::endl;
 }
 
 
 void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
 {
+    mfem::StopWatch timer;
+    timer.Start();
+    std::cout << "SupportDomain: compute support radiuses" << std::endl;
+
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
     typedef K::Point_3 Point_3d;
     typedef CGAL::Search_traits_3<K> TreeTraits;
@@ -166,12 +175,17 @@ void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
         this->support_radiuses_.emplace_back(distances.back());
     }
 
-
+    std::cout << "Execution time for support radiuses computation for all nodes: "
+              << timer.RealTime() << " s" << std::endl;
 }
 
 
 const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
 {
+    mfem::StopWatch timer;
+    timer.Start();
+    std::cout << "SupportDomain: compute neighbor indices" << std::endl;
+
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
     typedef K::Point_3 Point_3d;
     typedef std::tuple<Point_3d,int> Point_and_int;
@@ -225,6 +239,8 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
         domain_nodes.clear();
     }
 
+    std::cout << "Execution time for neighbor indices computation for all nodes: "
+              << timer.RealTime() << " s" << std::endl;
 
     // Return the indices of the closest nodes to each evaluation point.
     return closest_nodes_ids;
