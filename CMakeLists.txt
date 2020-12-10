@@ -84,7 +84,6 @@ ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/elements)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/options_configuration)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/support_domain)
-ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/utilities)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/vectors)
 
 
@@ -95,7 +94,6 @@ IF( STREAMVORTI_BUILD_SHARED_LIBS )
         $<TARGET_OBJECTS:OptionsConfiguration>
         $<TARGET_OBJECTS:Approximants>
         $<TARGET_OBJECTS:SupportDomain>
-        $<TARGET_OBJECTS:Utilities>
         $<TARGET_OBJECTS:Vectors>)
 
     # Link with dependencies
@@ -122,7 +120,6 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
         $<TARGET_OBJECTS:OptionsConfiguration>
         $<TARGET_OBJECTS:Approximants>
         $<TARGET_OBJECTS:SupportDomain>
-        $<TARGET_OBJECTS:Utilities>
         $<TARGET_OBJECTS:Vectors>)
     
     # Link with dependencies
