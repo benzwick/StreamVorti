@@ -77,7 +77,6 @@ INCLUDE_DIRECTORIES(${MFEM_INCLUDE_DIRS})
 # Subdirectories of StreamVorti.
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
-ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/elements)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/support_domain)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/vectors)
 
@@ -85,7 +84,6 @@ ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/vectors)
 # Compilation of the shared library.
 IF( STREAMVORTI_BUILD_SHARED_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
-        $<TARGET_OBJECTS:Elements>
         $<TARGET_OBJECTS:Approximants>
         $<TARGET_OBJECTS:SupportDomain>
         $<TARGET_OBJECTS:Vectors>)
@@ -110,7 +108,6 @@ ENDIF()
 # Compilation of the static library.
 IF( STREAMVORTI_BUILD_STATIC_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
-        $<TARGET_OBJECTS:Elements>
         $<TARGET_OBJECTS:Approximants>
         $<TARGET_OBJECTS:SupportDomain>
         $<TARGET_OBJECTS:Vectors>)

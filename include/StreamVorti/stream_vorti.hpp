@@ -37,7 +37,6 @@
 #include "StreamVorti/approximants/dcpse.hpp"
 #include "StreamVorti/approximants/dcpse_2d.hpp"
 #include "StreamVorti/approximants/dcpse_3d.hpp"
-#include "StreamVorti/elements/node.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 #include "StreamVorti/vectors/vectors.hpp"
 
