@@ -78,15 +78,13 @@ INCLUDE_DIRECTORIES(${MFEM_INCLUDE_DIRS})
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/support_domain)
-ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/vectors)
 
 
 # Compilation of the shared library.
 IF( STREAMVORTI_BUILD_SHARED_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
         $<TARGET_OBJECTS:Approximants>
-        $<TARGET_OBJECTS:SupportDomain>
-        $<TARGET_OBJECTS:Vectors>)
+        $<TARGET_OBJECTS:SupportDomain>)
 
     # Link with dependencies
     TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${CGAL_LIBRARIES} ${MFEM_LIBRARIES})
@@ -109,8 +107,7 @@ ENDIF()
 IF( STREAMVORTI_BUILD_STATIC_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
         $<TARGET_OBJECTS:Approximants>
-        $<TARGET_OBJECTS:SupportDomain>
-        $<TARGET_OBJECTS:Vectors>)
+        $<TARGET_OBJECTS:SupportDomain>)
     
     # Link with dependencies
     TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static ${CGAL_LIBRARIES} ${MFEM_LIBRARIES})
