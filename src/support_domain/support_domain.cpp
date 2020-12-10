@@ -23,6 +23,8 @@
 #include "StreamVorti/support_domain/support_domain.hpp"
 
 #include <filesystem>
+#include <list>
+#include <tuple>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/point_generators_3.h>
@@ -30,7 +32,6 @@
 #include <CGAL/Search_traits_3.h>
 #include <CGAL/Search_traits_adapter.h>
 #include <CGAL/Fuzzy_sphere.h>
-#include <boost/iterator/zip_iterator.hpp>
 
 namespace StreamVorti {
 
@@ -173,7 +174,7 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
 {
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
     typedef K::Point_3 Point_3d;
-    typedef boost::tuple<Point_3d,int> Point_and_int;
+    typedef std::tuple<Point_3d,int> Point_and_int;
     typedef CGAL::Search_traits_3<K> Traits_base;
     typedef CGAL::Search_traits_adapter<Point_and_int,
                                         CGAL::Nth_of_tuple_property_map<0, Point_and_int>, Traits_base> Traits;
@@ -183,19 +184,16 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
     // Create container of neighbors indices for each node.
     std::vector<std::vector<int> > closest_nodes_ids;
 
-    //Vectors to store coordinates and ids of point to be passed in tree tuples.
-    std::vector<Point_3d> points;
-    std::vector<int> points_indices;
+    // List to store coordinates and ids of point to be passed in tree tuples.
+    std::list<std::tuple<Point_3d, int>> points_and_indices;
 
     for (int id = 0; id < this->num_support_nodes_; ++id)
     {
-        points.emplace_back(this->SupportNodeAsPoint(id));
-        points_indices.emplace_back(id);
+        points_and_indices.emplace_back(std::make_tuple(this->SupportNodeAsPoint(id), id));
     }
 
     //Insert <point,id> tuples in the searching tree.
-    Tree tree(boost::make_zip_iterator(boost::make_tuple(points.begin(), points_indices.begin() )),
-              boost::make_zip_iterator(boost::make_tuple(points.end(), points_indices.end() )) );
+    Tree tree(points_and_indices.begin(), points_and_indices.end());
 
     //Vector containing the domain nodes for a given grid node.
     std::vector<Point_and_int> domain_nodes;
@@ -218,7 +216,7 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
         //Iterate over domain nodes.
         for (auto d_node : domain_nodes) {
             //Store domain nodes indices.
-            neigh_indices.emplace_back(boost::get<1>(d_node));
+            neigh_indices.emplace_back(std::get<1>(d_node));
         }
 
         closest_nodes_ids.emplace_back(neigh_indices);
