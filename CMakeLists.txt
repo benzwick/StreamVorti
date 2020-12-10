@@ -16,7 +16,7 @@ OPTION(STREAMVORTI_BUILD_SHARED_LIBS "Build as shared library" OFF )
 OPTION(STREAMVORTI_BUILD_STATIC_LIBS "Build as static library" ON )
 
 # Set the version of C++.
-SET(CMAKE_CXX_STANDARD 14)
+SET(CMAKE_CXX_STANDARD 17)
 
 
 # Set additional C++ flags for supported compilers.
@@ -49,7 +49,7 @@ INCLUDE(${CGAL_USE_FILE})
 FIND_PACKAGE(Eigen3  REQUIRED)
 INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIRS})
 
-FIND_PACKAGE(Boost REQUIRED COMPONENTS system filesystem program_options)
+FIND_PACKAGE(Boost REQUIRED COMPONENTS system program_options)
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
 LINK_DIRECTORIES(${Boost_LIBRARY_DIR})
 

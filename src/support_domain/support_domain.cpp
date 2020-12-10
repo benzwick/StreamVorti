@@ -22,6 +22,8 @@
 
 #include "StreamVorti/support_domain/support_domain.hpp"
 
+#include <filesystem>
+
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/point_generators_3.h>
 #include <CGAL/Orthogonal_k_neighbor_search.h>
@@ -29,8 +31,6 @@
 #include <CGAL/Search_traits_adapter.h>
 #include <CGAL/Fuzzy_sphere.h>
 #include <boost/iterator/zip_iterator.hpp>
-
-#include <boost/filesystem.hpp>
 
 namespace StreamVorti {
 
@@ -249,9 +249,9 @@ void SupportDomain::SaveNeighsToFile(const std::vector<std::vector<int> > &neigh
     }
 
     // Create the path's directory if it doesn't exist.
-    boost::filesystem::path dir(path);
-    if (!path.empty() && !boost::filesystem::exists(dir)) {
-        boost::filesystem::create_directories(dir);
+    std::filesystem::path dir(path);
+    if (!path.empty() && !std::filesystem::exists(dir)) {
+        std::filesystem::create_directories(dir);
     }
 
     // Initialize the exporting file name's extension.

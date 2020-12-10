@@ -22,7 +22,8 @@
 
 #include "StreamVorti/approximants/dcpse_3d.hpp"
 
-#include <boost/filesystem.hpp>
+#include <filesystem>
+
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
@@ -344,9 +345,9 @@ void Dcpse3d::SaveDerivToFile(const std::string &deriv, const std::string &filen
     }
 
     // Create the path's directory if it doesn't exist.
-    boost::filesystem::path dir(path);
-    if (!path.empty() && !boost::filesystem::exists(dir)) {
-        boost::filesystem::create_directories(dir);
+    std::filesystem::path dir(path);
+    if (!path.empty() && !std::filesystem::exists(dir)) {
+        std::filesystem::create_directories(dir);
     }
 
     // Initialize the exporting file name's extension.

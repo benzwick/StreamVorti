@@ -1,8 +1,7 @@
 
 #include <StreamVorti/stream_vorti.hpp>
 
-#include <boost/filesystem.hpp>
-
+#include <filesystem>
 #include <cstddef>
 #include <string>
 #include <fstream>
@@ -90,9 +89,9 @@ int main(int argc, char *argv[])
                 }
 
                 // Create the path's directory if it doesn't exist.
-                boost::filesystem::path dir(sample_path);
-                if (!sample_path.empty() && !boost::filesystem::exists(dir)) {
-                    boost::filesystem::create_directories(dir);
+                std::filesystem::path dir(sample_path);
+                if (!sample_path.empty() && !std::filesystem::exists(dir)) {
+                    std::filesystem::create_directories(dir);
                 }
 
                 // Position of the last slash in the exporting file's name.
