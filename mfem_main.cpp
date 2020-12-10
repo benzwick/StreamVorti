@@ -40,30 +40,15 @@ int main(int argc, char *argv[])
     const int dim = mesh.Dimension();
     const int order = 1;
     mfem::H1_FECollection fec(order, dim);
-    mfem::FiniteElementSpace fes(&mesh, &fec, dim);
+    mfem::FiniteElementSpace fes(&mesh, &fec, 1);
 
-    mfem::GridFunction nodes(&fes);
-    mesh.GetNodes(nodes);
-
-    // std::cout << nodes;
-
-    // const int nNodes = nodes.Size() / dim;
-    // double coord[dim]; // coordinates of a node
-    // for (int i = 0; i < nNodes; ++i)
-    // {
-    //     for (int j = 0; j < dim; ++j)
-    //     {
-    //         coord[j] = nodes(j * nNodes + i);
-    //         std::cout << coord[j] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
+    mfem::GridFunction gf(&fes);
 
     // Profiling spent time in StreamVorti
     mfem::StopWatch timer;
 
     std::cout << "Set support domain." << std::endl;
-    StreamVorti::SupportDomain support(nodes);
+    StreamVorti::SupportDomain support(gf);
 
     timer.Start();
     std::cout << "support: compute cutoff radiuses" << std::endl;
@@ -90,7 +75,7 @@ int main(int argc, char *argv[])
     }
 
     std::cout << "DC PSE derivatives." << std::endl;
-    StreamVorti::Dcpse2d derivs(nodes);
+    StreamVorti::Dcpse2d derivs(gf);
     timer.Clear();
     derivs.Update();
     std::cout << "Execution time for DCPSE derivatives calculation: "
