@@ -49,10 +49,6 @@ INCLUDE(${CGAL_USE_FILE})
 FIND_PACKAGE(Eigen3  REQUIRED)
 INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIRS})
 
-FIND_PACKAGE(Boost REQUIRED COMPONENTS system)
-INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
-LINK_DIRECTORIES(${Boost_LIBRARY_DIR})
-
 # From https://github.com/GLVis/glvis/blob/9f2df220342d13ef42c2985257ed96ba43f3bb70/CMakeLists.txt
 # Import MFEM. The following variables can be used to help CMake find MFEM:
 #  * MFEM_DIR - absolute path to the MFEM build or install prefix.
@@ -95,7 +91,7 @@ IF( STREAMVORTI_BUILD_SHARED_LIBS )
         $<TARGET_OBJECTS:Vectors>)
 
     # Link with dependencies
-    TARGET_LINK_LIBRARIES(${PROJECT_NAME}  ${CGAL_LIBRARIES}  ${Boost_LIBRARIES} ${MFEM_LIBRARIES})
+    TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${CGAL_LIBRARIES} ${MFEM_LIBRARIES})
 
     # Set build folders.
     SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES
@@ -120,7 +116,7 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
         $<TARGET_OBJECTS:Vectors>)
     
     # Link with dependencies
-    TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static  ${CGAL_LIBRARIES}  ${Boost_LIBRARIES} ${MFEM_LIBRARIES})
+    TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static ${CGAL_LIBRARIES} ${MFEM_LIBRARIES})
     
     # Set build folders   
     SET_TARGET_PROPERTIES(${PROJECT_NAME}_static PROPERTIES
