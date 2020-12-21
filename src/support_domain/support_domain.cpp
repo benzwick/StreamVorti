@@ -86,6 +86,11 @@ void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
     timer.Start();
     std::cout << "SupportDomain: compute support radiuses" << std::endl;
 
+    if (neighs_num < 1)
+    {
+        MFEM_ABORT("Number of neighbors = " << neighs_num << " < 1.")
+    }
+
     typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
     typedef K::Point_3 Point_3d;
     typedef CGAL::Search_traits_3<K> TreeTraits;
