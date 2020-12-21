@@ -31,6 +31,9 @@ namespace StreamVorti {
 
 void Dcpse3d::Update()
 {
+    // If something goes wrong we abort; but for now everything is OK so
+    bool abort = false;
+
     mfem::StopWatch timer;
     timer.Start();
     std::cout << "Dcpse3d: update derivative matrices" << std::endl;
@@ -53,23 +56,45 @@ void Dcpse3d::Update()
     this->sh_func_dxz_ = mfem::SparseMatrix(nnodes, nnodes);
     this->sh_func_dyz_ = mfem::SparseMatrix(nnodes, nnodes);
 
+    // Keep track of min/max number of support nodes
+    // TODO: Save these to paraview:
+    // Add as members to DCPSE class as grid functions!
+    // then let the user decide if they want to output them or not!
+    // - number of neighbors
+    // - cond(A)
+    int min_supp_nodes = INT_MAX;
+    int max_supp_nodes = INT_MIN;
+    double min_cond_A1 = DBL_MAX;
+    double max_cond_A1 = DBL_MIN;
+
     // Iterate over all the nodes of the grid.
     for (int node_id = 0; node_id < nnodes; ++node_id)
     {
         // for(const auto &node: geom_nodes) {
         //     auto node_id = &node - &geom_nodes[0];
 
+        int nsupp = support_nodes_ids[node_id].size();
+        min_supp_nodes = std::min(min_supp_nodes, nsupp);
+        max_supp_nodes = std::max(max_supp_nodes, nsupp);
+        if (nsupp < 1)
+        {
+            // std::cout << "Node " << node_id << " has no neighbors!" << std::endl;
+            MFEM_WARNING("Node " << node_id << " has no neighbors. Abort!");
+            abort = true;
+            goto finish;
+        }
+
         double node_X = geom_nodes(fes->DofToVDof(node_id, 0));
         double node_Y = geom_nodes(fes->DofToVDof(node_id, 1));
         double node_Z = geom_nodes(fes->DofToVDof(node_id, 2));
 
         // Monomial basis - Vandermonde matrices.
-        Eigen::MatrixXd V1(support_nodes_ids[node_id].size(), 10);
-        Eigen::MatrixXd V2(support_nodes_ids[node_id].size(), 9);
+        Eigen::MatrixXd V1(nsupp, 10);
+        Eigen::MatrixXd V2(nsupp, 9);
 
-        Eigen::VectorXd expWd(support_nodes_ids[node_id].size());
+        Eigen::VectorXd expWd(nsupp);
         std::vector<Eigen::Triplet<double> > expW;
-        expW.reserve(support_nodes_ids[node_id].size());
+        expW.reserve(nsupp);
 
         double x = 0.; double y = 0.; double z = 0.;
         double Wd = 0.;
@@ -77,7 +102,7 @@ void Dcpse3d::Update()
         double epsilon = 0.;
 
         // Iterate over node's neighbors.
-        for (long unsigned int it = 0; it < support_nodes_ids[node_id].size(); ++it)
+        for (long unsigned int it = 0; it < nsupp; ++it)
         {
         // for (const auto &neigh_id : support_nodes_ids[node_id]) {
         //     auto it = &neigh_id - &support_nodes_ids[node_id][0];
@@ -132,16 +157,43 @@ void Dcpse3d::Update()
 
         } // End Iterate over node's neighbors.
 
-        Eigen::SparseMatrix<double> E(support_nodes_ids[node_id].size(), support_nodes_ids[node_id].size());
+        Eigen::SparseMatrix<double> E(nsupp, nsupp);
         E.setFromTriplets(expW.begin(), expW.end());
 
         //1st order.
         Eigen::Matrix<double, 10, 10> A1;
-        Eigen::MatrixXd B1(support_nodes_ids[node_id].size(), 10);
-        Eigen::MatrixXd B1_trans(10, support_nodes_ids[node_id].size());
+        Eigen::MatrixXd B1(nsupp, 10);
+        Eigen::MatrixXd B1_trans(10, nsupp);
         B1 = E*V1;
         B1_trans = B1.transpose();
         A1 = B1_trans*B1;
+
+        // Condition number of 1st order A matrix
+        {
+            // double condA1 = Eigen::pseudoInverse(A1).norm() * A1.norm(); // not recommended?
+            //
+            // https://forum.kde.org/viewtopic.php?f=74&t=117430#p292018
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A1);
+            double condA1 = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
+            min_cond_A1 = std::min(min_cond_A1, condA1);
+            max_cond_A1 = std::max(max_cond_A1, condA1);
+            // Check if cond(A) is within allowable limits
+            if (condA1 > this->cond_A_limit_warn || condA1 <= 0.0)
+            {
+                // TODO: create string first then call the macro
+                // if (num_condA_warnings > 3)
+                MFEM_WARNING("cond(A1) = " << condA1
+                             << " at node " << node_id << ".");
+                if (condA1 > this->cond_A_limit_abort || condA1 <= 0.0)
+                {
+                    MFEM_WARNING("cond(A1) exceeds limit of " << cond_A_limit_abort
+                                 << " at node " << node_id << "."
+                                 << " Abort!");
+                    abort = true;
+                    goto finish;
+                }
+            }
+        }
 
         //x & y derivatives vectors.
         Eigen::Matrix<double, 10, 1> bx, by, bz;
@@ -157,22 +209,22 @@ void Dcpse3d::Update()
         aTy = sol1.solve(by);
         aTz = sol1.solve(bz);
 
-        Eigen::VectorXd coeffsx(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsx(nsupp);
         coeffsx = V1*aTx;
         coeffsx = coeffsx.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsy(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsy(nsupp);
         coeffsy = V1*aTy;
         coeffsy = coeffsy.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsz(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsz(nsupp);
         coeffsz = V1*aTz;
         coeffsz = coeffsz.cwiseProduct(expWd);
 
         //2nd order.
         Eigen::Matrix<double, 9, 9> A2;
-        Eigen::MatrixXd B2(support_nodes_ids[node_id].size(), 9);
-        Eigen::MatrixXd B2_trans(9, support_nodes_ids[node_id].size());
+        Eigen::MatrixXd B2(nsupp, 9);
+        Eigen::MatrixXd B2_trans(9, nsupp);
         B2 = E*V2;
         B2_trans = B2.transpose();
         A2 = B2_trans*B2;
@@ -197,40 +249,40 @@ void Dcpse3d::Update()
         aTxz = sol2.solve(bxz);
         aTyz = sol2.solve(byz);
 
-        Eigen::VectorXd coeffsxx(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsxx(nsupp);
         coeffsxx = V2*aTxx;
         coeffsxx = coeffsxx.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsyy(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsyy(nsupp);
         coeffsyy = V2*aTyy;
         coeffsyy = coeffsyy.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffszz(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffszz(nsupp);
         coeffszz = V2*aTzz;
         coeffszz = coeffszz.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsxy(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsxy(nsupp);
         coeffsxy = V2*aTxy;
         coeffsxy = coeffsxy.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsxz(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsxz(nsupp);
         coeffsxz = V2*aTxz;
         coeffsxz = coeffsxz.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsyz(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsyz(nsupp);
         coeffsyz = V2*aTyz;
         coeffsyz = coeffsyz.cwiseProduct(expWd);
 
         //Shape functions derivatives components
-        Eigen::VectorXd valX(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valY(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valZ(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valXX(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valYY(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valZZ(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valXY(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valXZ(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valYZ(support_nodes_ids[node_id].size());
+        Eigen::VectorXd valX(nsupp);
+        Eigen::VectorXd valY(nsupp);
+        Eigen::VectorXd valZ(nsupp);
+        Eigen::VectorXd valXX(nsupp);
+        Eigen::VectorXd valYY(nsupp);
+        Eigen::VectorXd valZZ(nsupp);
+        Eigen::VectorXd valXY(nsupp);
+        Eigen::VectorXd valXZ(nsupp);
+        Eigen::VectorXd valYZ(nsupp);
 
         valX.setZero(); valY.setZero(); valZ.setZero();
         valXX.setZero(); valYY.setZero(); valZZ.setZero();
@@ -314,8 +366,19 @@ void Dcpse3d::Update()
     this->sh_func_dxz_.Finalize();
     this->sh_func_dyz_.Finalize();
 
+finish:
+    std::cout << "Dcpse3d: Min number of support nodes: " << min_supp_nodes << std::endl;
+    std::cout << "Dcpse3d: Max number of support nodes: " << max_supp_nodes << std::endl;
+    std::cout << "Dcpse3d: Min condition number of A1 matrix: " << min_cond_A1 << std::endl;
+    std::cout << "Dcpse3d: Max condition number of A1 matrix: " << max_cond_A1 << std::endl;
+
     std::cout << "Dcpse3d: Execution time for DC PSE derivatives: "
               << timer.RealTime() << " s" << std::endl;
+
+    if (abort)
+    {
+        MFEM_ABORT("Dcpse3d: Something bad happened.");
+    }
 }
 
 

@@ -55,11 +55,19 @@ public:
 
     virtual ~Dcpse();
 
+    // Limits on condition number of A matrix
+    const double cond_A_limit_warn  = 1000;
+    const double cond_A_limit_abort = 10000;
+
     virtual void Update() = 0;
 
     virtual void SaveDerivToFile(const std::string &deriv, const std::string &filename) const = 0;
 
     virtual const mfem::SparseMatrix & D(int i) const = 0;
+
+    // TODO: Create these and let user output to file themselves
+    // mfem::GridFunction num_support_nodes; // is this already in support domain? Best to put it there instead
+    // mfem::GridFunction condition_number;
 };
 
 } // namespace StreamVorti
