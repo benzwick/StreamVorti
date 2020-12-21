@@ -54,8 +54,6 @@ public:
         delete this->global_nodes_;
     };
 
-    void ComputeCutOffRadiuses(const std::size_t &neighs_num);
-
     void ComputeSupportRadiuses(const std::size_t &neighs_num);
 
     inline const mfem::GridFunction & SupportNodes() const { return *this->support_nodes_; }
@@ -69,8 +67,6 @@ public:
         if (dim_ > 2) z = (*support_nodes_)(fespace_->DofToVDof(id, 2));
         return CGAL::Exact_predicates_inexact_constructions_kernel::Point_3(x, y, z);
     }
-
-    inline const std::vector<double> & CutoffRadiuses() const { return this->cutoff_radiuses_; }
 
     inline const std::vector<double> & SupportRadiuses() const { return this->support_radiuses_; }
 
@@ -93,8 +89,6 @@ private:
 
     /*! The global support nodes of the support domain. */
     mfem::GridFunction *global_nodes_;
-
-    std::vector<double> cutoff_radiuses_;
 
     /*! The support radiuses of the influence nodes of the support domain. */
     std::vector<double> support_radiuses_;

@@ -32,7 +32,6 @@ Dcpse::Dcpse(mfem::GridFunction &gf,
              int SupportRadAtNeighbor)
     : SupportDomain(gf)
 {
-    this->ComputeCutOffRadiuses(CutoffRadAtNeighbor);
     this->ComputeSupportRadiuses(SupportRadAtNeighbor);
 }
 

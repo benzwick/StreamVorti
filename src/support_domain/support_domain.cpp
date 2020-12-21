@@ -80,56 +80,6 @@ SupportDomain::SupportDomain(const mfem::ParGridFunction &gf, const mfem::Mesh &
 }
 
 
-void SupportDomain::ComputeCutOffRadiuses(const std::size_t &neighs_num)
-{
-    mfem::StopWatch timer;
-    timer.Start();
-    std::cout << "SupportDomain: compute cutoff radiuses" << std::endl;
-
-    typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-    typedef K::Point_3 Point_3d;
-    typedef CGAL::Search_traits_3<K> TreeTraits;
-    typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
-    typedef Neighbor_search::Tree Tree;
-
-    this->cutoff_radiuses_.clear();
-    this->cutoff_radiuses_.reserve(this->num_support_nodes_);
-
-    std::vector<Point_3d> support_coords;
-    for (int i = 0; i < this->num_support_nodes_; ++i)
-    {
-        support_coords.emplace_back(this->SupportNodeAsPoint(i));
-    }
-
-    Tree tree(support_coords.begin(), support_coords.end());
-
-    for (int i = 0; i < this->num_support_nodes_; ++i)
-    {
-        Point_3d query = this->SupportNodeAsPoint(i);
-
-        // Initialize the search structure, and search all N points
-        Neighbor_search search(tree, query, neighs_num);
-
-        std::vector<double> distances;
-        distances.reserve(neighs_num);
-
-        // report the N nearest neighbors and their distance
-        // This should sort all N points by increasing distance from origin
-        for(Neighbor_search::iterator it = search.begin(); it != search.end(); ++it){
-          distances.emplace_back(std::sqrt(it->second));
-        }
-
-        // Sort distances.
-        std::sort(distances.begin(), distances.end());
-
-        this->cutoff_radiuses_.emplace_back(distances.back());
-    }
-
-    std::cout << "SupportDomain: Execution time for cut-off radiuses computation for all nodes: "
-              << timer.RealTime() << " s" << std::endl;
-}
-
-
 void SupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
 {
     mfem::StopWatch timer;
@@ -219,7 +169,7 @@ const std::vector<std::vector<int> > SupportDomain::NeighborIndices()
         Point_3d center = this->SupportNodeAsPoint(id);
 
         // Searching sphere.
-        Fuzzy_sphere fs(center, this->cutoff_radiuses_[id]);
+        Fuzzy_sphere fs(center, this->support_radiuses_[id]);
 
         //Neighbors search
         tree.search( std::back_inserter(domain_nodes), fs);
