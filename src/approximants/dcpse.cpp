@@ -27,12 +27,10 @@ namespace StreamVorti {
 Dcpse::~Dcpse()
 {}
 
-Dcpse::Dcpse(mfem::GridFunction &gf,
-             int CutoffRadAtNeighbor,
-             int SupportRadAtNeighbor)
+Dcpse::Dcpse(mfem::GridFunction &gf, int NumNeighbors)
     : SupportDomain(gf)
 {
-    this->ComputeSupportRadiuses(SupportRadAtNeighbor);
+    this->ComputeSupportRadiuses(NumNeighbors);
 }
 
 } // namespace StreamVorti

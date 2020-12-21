@@ -39,10 +39,8 @@ public:
     /*!
      * \brief Dcpse3d constructor to match nodes of an MFEM H1 GridFunction.
      */
-    Dcpse3d(mfem::GridFunction &gf,
-            int CutoffRadAtNeighbor = 30,
-            int SupportRadAtNeighbor = 5)
-        : Dcpse(gf, CutoffRadAtNeighbor, SupportRadAtNeighbor) {}
+    Dcpse3d(mfem::GridFunction &gf, int NumNeighbors)
+        : Dcpse(gf, NumNeighbors) {}
 
     void Update();
 

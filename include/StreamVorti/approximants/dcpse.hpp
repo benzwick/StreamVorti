@@ -49,9 +49,7 @@ public:
      *     GridFunction dudx_dcpse(fespace_h1);            // Derivatives of u wrt x
      *     dx.Mult(u_gf, dudx_dcpse);
      */
-    Dcpse(mfem::GridFunction &gf,
-          int CutoffRadAtNeighbor = 30,
-          int SupportRadAtNeighbor = 5);
+    Dcpse(mfem::GridFunction &gf, int NumNeighbors);
 
     virtual ~Dcpse();
 

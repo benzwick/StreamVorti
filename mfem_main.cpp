@@ -1,3 +1,5 @@
+// Demo usage:
+//     MfemRun -sd -sn
 
 #include <StreamVorti/stream_vorti.hpp>
 
@@ -22,23 +24,31 @@ int main(int argc, char *argv[])
     std::string fext = ".dat";
 
     // DC PSE parameters
-    int CutoffRadAtNeighbor = 30;
-    int SupportRadAtNeighbor = 5;
+    int NumNeighbors = 35;
+
+    // Mesh generation
+    int dim = 2;
+    int nx = 10;
+    int ny = 10;
+    int nz = 10;
+    double sx = 1.0;
+    double sy = 1.0;
+    double sz = 1.0;
 
     // Output requests
-    bool save_mesh = true;
-    bool save_neighbors = true;
-    bool save_d = true;
-    bool save_dd = true;
-    bool save_dx = true;
-    bool save_dy = true;
-    bool save_dz = true;
-    bool save_dxx = true;
-    bool save_dxy = true;
-    bool save_dxz = true;
-    bool save_dyy = true;
-    bool save_dyz = true;
-    bool save_dzz = true;
+    bool save_mesh = false;
+    bool save_neighbors = false;
+    bool save_d = false;        // all 1st derivatives (gradient)
+    bool save_dd = false;       // all 2nd derivatives (Hessian)
+    bool save_dx = false;
+    bool save_dy = false;
+    bool save_dz = false;
+    bool save_dxx = false;
+    bool save_dxy = false;
+    bool save_dxz = false;
+    bool save_dyy = false;
+    bool save_dyz = false;
+    bool save_dzz = false;
 
     // Parse command-line options
     mfem::OptionsParser args(argc, argv);
@@ -46,6 +56,20 @@ int main(int argc, char *argv[])
                    "Mesh file to use.");
     args.AddOption(&order, "-o", "--order",
                    "Finite element order (polynomial degree).");
+    args.AddOption(&dim, "-dim", "--dimension",
+                   "Dimension of mesh (applies to generated mesh only).");
+    args.AddOption(&nx, "-nx", "--num-x-divisions",
+                   "Number of x divisions.");
+    args.AddOption(&ny, "-ny", "--num-y-divisions",
+                   "Number of y divisions.");
+    args.AddOption(&nz, "-nz", "--num-z-divisions",
+                   "Number of z divisions.");
+    args.AddOption(&sx, "-sx", "--size-x",
+                   "Mesh size in x direction.");
+    args.AddOption(&sy, "-sy", "--size-y",
+                   "Mesh size in y direction.");
+    args.AddOption(&sz, "-sz", "--size-z",
+                   "Mesh size in z direction.");
     args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
                    "--no-visualization",
                    "Enable or disable GLVis visualization.");
@@ -69,6 +93,15 @@ int main(int argc, char *argv[])
     }
     args.PrintOptions(std::cout);
 
+    if (save_d)
+    {
+        save_dx = save_dy = save_dz = save_d;
+    }
+    if (save_dd)
+    {
+        save_dxx = save_dxy = save_dxz = save_dyy = save_dyz = save_dzz = save_dd;
+    }
+
     // mesh_file and save_mesh are mutually exclusive options
     if (mesh_file[0] != '\0' && save_mesh)
     {
@@ -83,8 +116,21 @@ int main(int argc, char *argv[])
     mfem::Mesh *mesh;
     if (mesh_file[0] == '\0')
     {
-        std::cout << "Generating a new mesh... " << std::flush;
-        mesh = new mfem::Mesh(10, 10, mfem::Element::QUADRILATERAL, false, 1.0, 1.0, false);
+        std::cout << "main: Generating a new mesh... " << std::flush;
+        if (dim == 2)
+        {
+            mesh = new mfem::Mesh(nx, ny, mfem::Element::QUADRILATERAL,
+                                  false, sx, sy, false);
+        }
+        else if (dim == 3)
+        {
+            mesh = new mfem::Mesh(nx, ny, nz, mfem::Element::HEXAHEDRON,
+                                  false, sx, sy, sz, false);
+        }
+        else
+        {
+            MFEM_ABORT( "Unsupported mesh dimension: " << dim );
+        }
         if (save_mesh)
         {
             std::ofstream mesh_ofs("mfem_square10x10.mesh");
@@ -94,44 +140,66 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::cout << "Read the mesh from the given mesh file... " << std::flush;
+        std::cout << "main: Read the mesh from the given mesh file... " << std::flush;
         mesh = new mfem::Mesh(mesh_file, 1, 1);
     }
     std::cout << "done." << std::endl;
 
-    const int dim = mesh->Dimension();
+    dim = mesh->Dimension();    // The actual mesh dimension
+    std::cout << "main: Mesh dimension: " << dim << std::endl;
     mfem::H1_FECollection fec(order, dim);
     mfem::FiniteElementSpace fes(mesh, &fec, 1);
 
     mfem::GridFunction gf(&fes);
 
-    std::cout << "DC PSE derivatives." << std::endl;
+    std::cout << "main: DC PSE derivatives." << std::endl;
     timer.Clear();
-    StreamVorti::Dcpse2d derivs(gf);
-    std::cout << "Execution time for DCPSE derivatives initialization: "
+    StreamVorti::Dcpse *derivs;
+    if (dim == 2)
+    {
+        derivs = new StreamVorti::Dcpse2d(
+            gf, NumNeighbors);
+    }
+    else if (dim == 3)
+    {
+        derivs = new StreamVorti::Dcpse3d(
+            gf, NumNeighbors);
+    }
+    else
+    {
+        MFEM_ABORT( "Unsupported dimension: " << dim << "." );
+    }
+    std::cout << "main: Execution time for DCPSE derivatives initialization: "
+              << timer.RealTime() << " s" << std::endl;
+
+    timer.Clear();
+    derivs->Update();
+    std::cout << "main: Execution time for DCPSE derivatives calculation: "
               << timer.RealTime() << " s" << std::endl;
 
     if (save_neighbors)
     {
-        std::cout << "support: save neighbor indices to file" << std::endl;
-        derivs.SaveNeighsToFile(derivs.NeighborIndices(), fname + ".neighbors" + fext);
+        std::cout << "main: Save neighbor indices to file... " << std::endl;
+        derivs->SaveNeighsToFile(derivs->NeighborIndices(), fname + ".neighbors" + fext);
+        std::cout << "done." << std::endl;
     }
 
-    timer.Clear();
-    derivs.Update();
-    std::cout << "Execution time for DCPSE derivatives calculation: "
-              << timer.RealTime() << " s" << std::endl;
-
-    if (save_dx)  {derivs.SaveDerivToFile("dx", fname + ".dx" + fext);}
-    if (save_dy)  {derivs.SaveDerivToFile("dy", fname + ".dy" + fext);}
-    if (save_dxx) {derivs.SaveDerivToFile("dxx", fname + ".dxx" + fext);}
-    if (save_dxy) {derivs.SaveDerivToFile("dxy", fname + ".dxy" + fext);}
-    if (save_dyy) {derivs.SaveDerivToFile("dyy", fname + ".dyy" + fext);}
-
-    std::cout << "Simulation terminated successfully." << std::endl;
+    std::cout << "main: Save derivative operator matrices to file... " << std::flush;
+    if (dim > 1) {if (save_dx)  {derivs->SaveDerivToFile("dx",  fname + ".dx"  + fext);}}
+    if (dim > 1) {if (save_dy)  {derivs->SaveDerivToFile("dy",  fname + ".dy"  + fext);}}
+    if (dim > 2) {if (save_dz)  {derivs->SaveDerivToFile("dy",  fname + ".dy"  + fext);}}
+    if (dim > 1) {if (save_dxx) {derivs->SaveDerivToFile("dxx", fname + ".dxx" + fext);}}
+    if (dim > 1) {if (save_dxy) {derivs->SaveDerivToFile("dxy", fname + ".dxy" + fext);}}
+    if (dim > 2) {if (save_dxz) {derivs->SaveDerivToFile("dxz", fname + ".dxz" + fext);}}
+    if (dim > 1) {if (save_dyy) {derivs->SaveDerivToFile("dyy", fname + ".dyy" + fext);}}
+    if (dim > 2) {if (save_dyz) {derivs->SaveDerivToFile("dyz", fname + ".dyz" + fext);}}
+    if (dim > 2) {if (save_dzz) {derivs->SaveDerivToFile("dzz", fname + ".dzz" + fext);}}
+    std::cout << "done." << std::endl;
 
     // Free the used memory
     delete mesh;
+
+    std::cout << "main: success!" << std::endl;
 
     return EXIT_SUCCESS;
 }
