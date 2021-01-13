@@ -46,7 +46,6 @@ public:
 
     void SaveDerivToFile(const std::string &deriv, const std::string &filename) const;
 
-
     const mfem::SparseMatrix & D(int i) const {
         switch (i)
         {
