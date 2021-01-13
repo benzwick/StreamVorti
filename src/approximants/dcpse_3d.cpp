@@ -36,7 +36,7 @@ void Dcpse3d::Update()
 
     mfem::StopWatch timer;
     timer.Start();
-    std::cout << "Dcpse3d: update derivative matrices" << std::endl;
+    std::cout << "DCPSE: update derivative matrices" << std::endl;
 
     mfem::GridFunction geom_nodes = this->SupportNodes();
     std::vector<std::vector<int> > support_nodes_ids = this->NeighborIndices();
@@ -96,7 +96,9 @@ void Dcpse3d::Update()
         std::vector<Eigen::Triplet<double> > expW;
         expW.reserve(nsupp);
 
-        double x = 0.; double y = 0.; double z = 0.;
+        double x = 0.;
+        double y = 0.;
+        double z = 0.;
         double Wd = 0.;
         double val = 0.; double temp = 0.;
         double epsilon = 0.;
@@ -320,8 +322,6 @@ void Dcpse3d::Update()
 
             valYZ(it) = coeffsyz(it) / (epsilon*epsilon);
             sumCoeffsyz += coeffsyz(it);
-
-
         }
 
         for(const auto &neigh_id : support_nodes_ids[node_id]) {
@@ -367,17 +367,17 @@ void Dcpse3d::Update()
     this->sh_func_dyz_.Finalize();
 
 finish:
-    std::cout << "Dcpse3d: Min number of support nodes: " << min_supp_nodes << std::endl;
-    std::cout << "Dcpse3d: Max number of support nodes: " << max_supp_nodes << std::endl;
-    std::cout << "Dcpse3d: Min condition number of A1 matrix: " << min_cond_A1 << std::endl;
-    std::cout << "Dcpse3d: Max condition number of A1 matrix: " << max_cond_A1 << std::endl;
+    std::cout << "DCPSE: Min number of support nodes: " << min_supp_nodes << std::endl;
+    std::cout << "DCPSE: Max number of support nodes: " << max_supp_nodes << std::endl;
+    std::cout << "DCPSE: Min condition number of A1 matrix: " << min_cond_A1 << std::endl;
+    std::cout << "DCPSE: Max condition number of A1 matrix: " << max_cond_A1 << std::endl;
 
-    std::cout << "Dcpse3d: Execution time for DC PSE derivatives: "
+    std::cout << "DCPSE: Execution time for DC PSE derivatives: "
               << timer.RealTime() << " s" << std::endl;
 
     if (abort)
     {
-        MFEM_ABORT("Dcpse3d: Something bad happened.");
+        MFEM_ABORT("DCPSE: Something bad happened.");
     }
 }
 
@@ -440,5 +440,4 @@ void Dcpse3d::SaveDerivToFile(const std::string &deriv, const std::string &filen
 
 }
 
-
-} //end of namespace StreamVorti
+} // namespace StreamVorti

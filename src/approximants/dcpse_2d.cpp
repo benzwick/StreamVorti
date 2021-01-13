@@ -36,7 +36,7 @@ void Dcpse2d::Update()
 
     mfem::StopWatch timer;
     timer.Start();
-    std::cout << "Dcpse2d: update derivative matrices" << std::endl;
+    std::cout << "DCPSE: update derivative matrices" << std::endl;
 
     mfem::GridFunction geom_nodes = this->SupportNodes();
     std::vector<std::vector<int> > support_nodes_ids = this->NeighborIndices();
@@ -46,8 +46,8 @@ void Dcpse2d::Update()
     int nnodes = fes->GetNDofs();
 
     // Initialize shape function derivative matrices.
-    this->sh_func_dx_  = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dy_  = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dx_ = mfem::SparseMatrix(nnodes, nnodes);
+    this->sh_func_dy_ = mfem::SparseMatrix(nnodes, nnodes);
     this->sh_func_dxx_ = mfem::SparseMatrix(nnodes, nnodes);
     this->sh_func_dyy_ = mfem::SparseMatrix(nnodes, nnodes);
     this->sh_func_dxy_ = mfem::SparseMatrix(nnodes, nnodes);
@@ -84,14 +84,15 @@ void Dcpse2d::Update()
         double node_Y = geom_nodes(fes->DofToVDof(node_id, 1));
 
         // Monomial basis - Vandermonde matrices.
-        Eigen::MatrixXd V1(nsupp,6);
-        Eigen::MatrixXd V2(nsupp,5);
+        Eigen::MatrixXd V1(nsupp, 6);
+        Eigen::MatrixXd V2(nsupp, 5);
 
         Eigen::VectorXd expWd(nsupp);
         std::vector<Eigen::Triplet<double> > expW;
         expW.reserve(nsupp);
 
-        double x = 0.; double y = 0.;
+        double x = 0.;
+        double y = 0.;
         double Wd = 0.;
         double val = 0.; double temp = 0.;
         double epsilon = 0.;
@@ -180,8 +181,8 @@ void Dcpse2d::Update()
 
         //x & y derivatives vectors.
         Eigen::Matrix<double, 6, 1> bx, by;
-        bx(0) = 0.; bx(1) = -1.; bx(2) = 0.; bx(3) = 0.; bx(4)=0., bx(5)=0.;
-        by(0) = 0.; by(1) = 0.; by(2) = -1.; by(3) = 0.; by(4)=0., by(5)=0.;
+        bx.setZero(); bx(1) = -1.;
+        by.setZero(); by(2) = -1.;
 
         //Solve linear systems.
         Eigen::Matrix<double, 6, 1> aTx, aTy;
@@ -208,9 +209,9 @@ void Dcpse2d::Update()
 
         //xx & yy derivatives vectors
         Eigen::Matrix<double, 5, 1> bxx, byy, bxy;
-        bxx(0) = 0.; bxx(1) = 0.; bxx(2) = 2.; bxx(3) = 0.; bxx(4)=0.;
-        byy(0) = 0.; byy(1) = 0.; byy(2) = 0.; byy(3) = 0.; byy(4)=2.;
-        bxy(0) = 0.; bxy(1) = 0.; bxy(2) = 0.; bxy(3) = 1.; bxy(4)=0.;
+        bxx.setZero(); bxx(2) = 2.;
+        byy.setZero(); byy(4) = 2.;
+        bxy.setZero(); bxy(3) = 1.;
 
         //solve linear systems
         Eigen::VectorXd aTxx(5), aTyy(5), aTxy(5);
@@ -239,10 +240,13 @@ void Dcpse2d::Update()
         Eigen::VectorXd valYY(nsupp);
         Eigen::VectorXd valXY(nsupp);
 
-        valX.setZero(); valY.setZero(); valXX.setZero();
-        valYY.setZero(); valXY.setZero();
+        valX.setZero(); valY.setZero();
+        valXX.setZero(); valYY.setZero();
+        valXY.setZero();
 
-        double sumCoeffsx = 0., sumCoeffsy = 0., sumCoeffsxx = 0., sumCoeffsyy = 0., sumCoeffsxy = 0.;
+        double sumCoeffsx = 0., sumCoeffsy = 0.,
+          sumCoeffsxx = 0., sumCoeffsyy = 0.,
+          sumCoeffsxy = 0.;
         for(const auto &neigh_id : support_nodes_ids[node_id]) {
             auto it = &neigh_id - &support_nodes_ids[node_id][0];
 
@@ -260,8 +264,6 @@ void Dcpse2d::Update()
 
             valXY(it) = coeffsxy(it) / (epsilon*epsilon);
             sumCoeffsxy += coeffsxy(it);
-
-
         }
 
         for(const auto &neigh_id : support_nodes_ids[node_id]) {
@@ -295,17 +297,17 @@ void Dcpse2d::Update()
     this->sh_func_dxy_.Finalize();
 
 finish:
-    std::cout << "Dcpse2d: Min number of support nodes: " << min_supp_nodes << std::endl;
-    std::cout << "Dcpse2d: Max number of support nodes: " << max_supp_nodes << std::endl;
-    std::cout << "Dcpse2d: Min condition number of A1 matrix: " << min_cond_A1 << std::endl;
-    std::cout << "Dcpse2d: Max condition number of A1 matrix: " << max_cond_A1 << std::endl;
+    std::cout << "DCPSE: Min number of support nodes: " << min_supp_nodes << std::endl;
+    std::cout << "DCPSE: Max number of support nodes: " << max_supp_nodes << std::endl;
+    std::cout << "DCPSE: Min condition number of A1 matrix: " << min_cond_A1 << std::endl;
+    std::cout << "DCPSE: Max condition number of A1 matrix: " << max_cond_A1 << std::endl;
 
-    std::cout << "Dcpse2d: Execution time for DC PSE derivatives: "
+    std::cout << "DCPSE: Execution time for DC PSE derivatives: "
               << timer.RealTime() << " s" << std::endl;
 
     if (abort)
     {
-        MFEM_ABORT("Dcpse2d: Something bad happened.");
+        MFEM_ABORT("DCPSE: Something bad happened.");
     }
 }
 
@@ -314,8 +316,8 @@ void Dcpse2d::SaveDerivToFile(const std::string &deriv, const std::string &filen
 {
     mfem::SparseMatrix derivative;
 
-    if (deriv == "dx") { derivative = this->sh_func_dx_; }
-    else if (deriv == "dy") { derivative = this->sh_func_dy_; }
+    if      (deriv == "dx")  { derivative = this->sh_func_dx_; }
+    else if (deriv == "dy")  { derivative = this->sh_func_dy_; }
     else if (deriv == "dxx") { derivative = this->sh_func_dxx_; }
     else if (deriv == "dyy") { derivative = this->sh_func_dyy_; }
     else if (deriv == "dxy") { derivative = this->sh_func_dxy_; }
