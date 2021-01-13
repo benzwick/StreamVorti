@@ -84,12 +84,12 @@ void Dcpse2d::Update()
         double node_Y = geom_nodes(fes->DofToVDof(node_id, 1));
 
         // Monomial basis - Vandermonde matrices.
-        Eigen::MatrixXd V1(support_nodes_ids[node_id].size(),6);
-        Eigen::MatrixXd V2(support_nodes_ids[node_id].size(),5);
+        Eigen::MatrixXd V1(nsupp,6);
+        Eigen::MatrixXd V2(nsupp,5);
 
-        Eigen::VectorXd expWd(support_nodes_ids[node_id].size());
+        Eigen::VectorXd expWd(nsupp);
         std::vector<Eigen::Triplet<double> > expW;
-        expW.reserve(support_nodes_ids[node_id].size());
+        expW.reserve(nsupp);
 
         double x = 0.; double y = 0.;
         double Wd = 0.;
@@ -97,7 +97,7 @@ void Dcpse2d::Update()
         double epsilon = 0.;
 
         // Iterate over node's neighbors.
-        for (long unsigned int it = 0; it < support_nodes_ids[node_id].size(); ++it)
+        for (long unsigned int it = 0; it < nsupp; ++it)
         {
         // for (const auto &neigh_id : support_nodes_ids[node_id]) {
         //     auto it = &neigh_id - &support_nodes_ids[node_id][0];
@@ -140,13 +140,13 @@ void Dcpse2d::Update()
 
         } // End Iterate over node's neighbors.
 
-        Eigen::SparseMatrix<double> E(support_nodes_ids[node_id].size(), support_nodes_ids[node_id].size());
+        Eigen::SparseMatrix<double> E(nsupp, nsupp);
         E.setFromTriplets(expW.begin(), expW.end());
 
         //1st order.
         Eigen::Matrix<double, 6, 6> A1;
-        Eigen::MatrixXd B1(support_nodes_ids[node_id].size(), 6);
-        Eigen::MatrixXd B1_trans(6, support_nodes_ids[node_id].size());
+        Eigen::MatrixXd B1(nsupp, 6);
+        Eigen::MatrixXd B1_trans(6, nsupp);
         B1 = E*V1;
         B1_trans = B1.transpose();
         A1 = B1_trans*B1;
@@ -190,18 +190,18 @@ void Dcpse2d::Update()
         aTx = sol1.solve(bx);
         aTy = sol1.solve(by);
 
-        Eigen::VectorXd coeffsx(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsx(nsupp);
         coeffsx = V1*aTx;
         coeffsx = coeffsx.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsy(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsy(nsupp);
         coeffsy = V1*aTy;
         coeffsy = coeffsy.cwiseProduct(expWd);
 
         //2nd order.
         Eigen::Matrix<double, 5, 5> A2;
-        Eigen::MatrixXd B2(support_nodes_ids[node_id].size(), 5);
-        Eigen::MatrixXd B2_trans(5, support_nodes_ids[node_id].size());
+        Eigen::MatrixXd B2(nsupp, 5);
+        Eigen::MatrixXd B2_trans(5, nsupp);
         B2 = E*V2;
         B2_trans = B2.transpose();
         A2 = B2_trans*B2;
@@ -220,24 +220,24 @@ void Dcpse2d::Update()
         aTyy = sol2.solve(byy);
         aTxy = sol2.solve(bxy);
 
-        Eigen::VectorXd coeffsxx(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsxx(nsupp);
         coeffsxx = V2*aTxx;
         coeffsxx = coeffsxx.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsyy(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsyy(nsupp);
         coeffsyy = V2*aTyy;
         coeffsyy = coeffsyy.cwiseProduct(expWd);
 
-        Eigen::VectorXd coeffsxy(support_nodes_ids[node_id].size());
+        Eigen::VectorXd coeffsxy(nsupp);
         coeffsxy = V2*aTxy;
         coeffsxy = coeffsxy.cwiseProduct(expWd);
 
         //Shape functions derivatives components
-        Eigen::VectorXd valX(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valY(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valXX(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valYY(support_nodes_ids[node_id].size());
-        Eigen::VectorXd valXY(support_nodes_ids[node_id].size());
+        Eigen::VectorXd valX(nsupp);
+        Eigen::VectorXd valY(nsupp);
+        Eigen::VectorXd valXX(nsupp);
+        Eigen::VectorXd valYY(nsupp);
+        Eigen::VectorXd valXY(nsupp);
 
         valX.setZero(); valY.setZero(); valXX.setZero();
         valYY.setZero(); valXY.setZero();
