@@ -31,6 +31,9 @@ namespace StreamVorti {
 
 void Dcpse2d::Update()
 {
+    // If something goes wrong we abort; but for now everything is OK so
+    bool abort = false;
+
     mfem::StopWatch timer;
     timer.Start();
     std::cout << "Dcpse2d: update derivative matrices" << std::endl;
@@ -49,11 +52,33 @@ void Dcpse2d::Update()
     this->sh_func_dyy_ = mfem::SparseMatrix(nnodes, nnodes);
     this->sh_func_dxy_ = mfem::SparseMatrix(nnodes, nnodes);
 
+    // Keep track of min/max number of support nodes
+    // TODO: Save these to paraview:
+    // Add as members to DCPSE class as grid functions!
+    // then let the user decide if they want to output them or not!
+    // - number of neighbors
+    // - cond(A)
+    int min_supp_nodes = INT_MAX;
+    int max_supp_nodes = INT_MIN;
+    double min_cond_A1 = DBL_MAX;
+    double max_cond_A1 = DBL_MIN;
+
     // Iterate over all the nodes of the grid.
     for (int node_id = 0; node_id < nnodes; ++node_id)
     {
         // for(const auto &node: geom_nodes) {
         //     auto node_id = &node - &geom_nodes[0];
+
+        int nsupp = support_nodes_ids[node_id].size();
+        min_supp_nodes = std::min(min_supp_nodes, nsupp);
+        max_supp_nodes = std::max(max_supp_nodes, nsupp);
+        if (nsupp < 1)
+        {
+            // std::cout << "Node " << node_id << " has no neighbors!" << std::endl;
+            MFEM_WARNING("Node " << node_id << " has no neighbors. Abort!");
+            abort = true;
+            goto finish;
+        }
 
         double node_X = geom_nodes(fes->DofToVDof(node_id, 0));
         double node_Y = geom_nodes(fes->DofToVDof(node_id, 1));
@@ -125,6 +150,33 @@ void Dcpse2d::Update()
         B1 = E*V1;
         B1_trans = B1.transpose();
         A1 = B1_trans*B1;
+
+        // Condition number of 1st order A matrix
+        {
+            // double condA1 = Eigen::pseudoInverse(A1).norm() * A1.norm(); // not recommended?
+            //
+            // https://forum.kde.org/viewtopic.php?f=74&t=117430#p292018
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A1);
+            double condA1 = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
+            min_cond_A1 = std::min(min_cond_A1, condA1);
+            max_cond_A1 = std::max(max_cond_A1, condA1);
+            // Check if cond(A) is within allowable limits
+            if (condA1 > this->cond_A_limit_warn || condA1 <= 0.0)
+            {
+                // TODO: create string first then call the macro
+                // if (num_condA_warnings > 3)
+                MFEM_WARNING("cond(A1) = " << condA1
+                             << " at node " << node_id << ".");
+                if (condA1 > this->cond_A_limit_abort || condA1 <= 0.0)
+                {
+                    MFEM_WARNING("cond(A1) exceeds limit of " << cond_A_limit_abort
+                                 << " at node " << node_id << "."
+                                 << " Abort!");
+                    abort = true;
+                    goto finish;
+                }
+            }
+        }
 
         //x & y derivatives vectors.
         Eigen::Matrix<double, 6, 1> bx, by;
@@ -242,8 +294,19 @@ void Dcpse2d::Update()
     this->sh_func_dyy_.Finalize();
     this->sh_func_dxy_.Finalize();
 
+finish:
+    std::cout << "Dcpse2d: Min number of support nodes: " << min_supp_nodes << std::endl;
+    std::cout << "Dcpse2d: Max number of support nodes: " << max_supp_nodes << std::endl;
+    std::cout << "Dcpse2d: Min condition number of A1 matrix: " << min_cond_A1 << std::endl;
+    std::cout << "Dcpse2d: Max condition number of A1 matrix: " << max_cond_A1 << std::endl;
+
     std::cout << "Dcpse2d: Execution time for DC PSE derivatives: "
               << timer.RealTime() << " s" << std::endl;
+
+    if (abort)
+    {
+        MFEM_ABORT("Dcpse2d: Something bad happened.");
+    }
 }
 
 
