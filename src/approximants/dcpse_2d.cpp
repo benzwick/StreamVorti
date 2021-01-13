@@ -107,7 +107,8 @@ void Dcpse2d::Update()
             double neigh_X = geom_nodes(fes->DofToVDof(neigh_id, 0));
             double neigh_Y = geom_nodes(fes->DofToVDof(neigh_id, 1));
 
-            epsilon = support_radiuses[node_id];
+            // FIXME: should scale by 0.3 or not?
+            epsilon = 0.3 * support_radiuses[node_id];
             x = (node_X - neigh_X) / epsilon;
             y = (node_Y - neigh_Y) / epsilon;
 
