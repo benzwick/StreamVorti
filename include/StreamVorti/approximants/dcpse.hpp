@@ -54,8 +54,8 @@ public:
     virtual ~Dcpse();
 
     // Limits on condition number of A matrix
-    const double cond_A_limit_warn  = 1000;
-    const double cond_A_limit_abort = 10000;
+    const double cond_A_limit_warn  = 1e6;
+    const double cond_A_limit_abort = 1e6;
 
     virtual void Update() = 0;
 
