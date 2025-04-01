@@ -167,8 +167,10 @@ void Dcpse2d::Update()
             {
                 // TODO: create string first then call the macro
                 // if (num_condA_warnings > 3)
-                MFEM_WARNING("cond(A1) = " << condA1
-                             << " at node " << node_id << ".");
+                //// NOTE: this is too noisy so comment out for now
+                // MFEM_WARNING("cond(A1) = " << condA1
+                //              << " at node " << node_id << ".");
+                ////
                 if (condA1 > this->cond_A_limit_abort || condA1 <= 0.0)
                 {
                     MFEM_WARNING("cond(A1) exceeds limit of " << cond_A_limit_abort
