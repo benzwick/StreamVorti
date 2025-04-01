@@ -55,7 +55,7 @@ public:
 
     // Limits on condition number of A matrix
     const double cond_A_limit_warn  = 1e6;
-    const double cond_A_limit_abort = 1e6;
+    const double cond_A_limit_abort = 1e30;
 
     virtual void Update() = 0;
 
