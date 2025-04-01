@@ -58,6 +58,18 @@ public:
 
     inline const mfem::GridFunction & SupportNodes() const { return *this->support_nodes_; }
 
+    // inline double X(int i) {
+    //     return (dim_ > 0) ? (*support_nodes_)(fespace_->DofToVDof(i, 0)) : 0.0;
+    // }
+
+    // inline double Y(int i) {
+    //     return (dim_ > 1) ? (*support_nodes_)(fespace_->DofToVDof(i, 1)) : 0.0;
+    // }
+
+    // inline double Z(int i) {
+    //     return (dim_ > 2) ? (*support_nodes_)(fespace_->DofToVDof(i, 2)) : 0.0;
+    // }
+
     inline CGAL::Exact_predicates_inexact_constructions_kernel::Point_3 SupportNodeAsPoint(int id) {
         double x = 0.;
         double y = 0.;
