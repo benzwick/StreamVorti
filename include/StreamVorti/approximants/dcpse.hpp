@@ -1,6 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
- * Copyright (C) 2017  <Konstantinos A. Mountris> <konstantinos.mountris@gmail.com>
+ * Copyright (C) 2017 Konstantinos A. Mountris
+ * Copyright (C) 2020-2025 Benjamin F. Zwick
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +19,7 @@
  * Contributors (alphabetically):
  *      George C. BOURANTAS
  *      Konstantinos A. MOUNTRIS
+ *      Benjamin F. ZWICK
  */
 
 #ifndef STREAMVORTI_APPROXIMANTS_DCPSE_HPP_
