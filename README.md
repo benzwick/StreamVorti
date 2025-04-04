@@ -1,4 +1,4 @@
-# My project's README
+# StreamVorti
 
 # Installing
 
