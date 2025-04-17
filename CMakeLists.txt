@@ -1,8 +1,8 @@
 #--------------------------------------------------------------
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0 FATAL_ERROR)
+CMAKE_MINIMUM_REQUIRED(VERSION 4.0)
 
-IF(POLICY CMP0053)
-  CMAKE_POLICY(SET CMP0053 NEW) # CMake 3.1
+IF(POLICY CMP0181)
+  CMAKE_POLICY(SET CMP0181 NEW) # CMake 3.30
 ENDIF()
 
 PROJECT(StreamVorti VERSION 1.0.0)
@@ -24,10 +24,12 @@ IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Ob2")
 ELSEIF (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
+    #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -msse2 -ffast-math -fPIC -Wall")
 ELSEIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
+    #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -msse2 -O3 -ffast-math -fPIC -Wall")
 ENDIF ()
 
 # Include path to the headers of StreamVorti.
@@ -43,10 +45,13 @@ SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/stream_vorti.hpp )
 
 # Find CGAL.
 FIND_PACKAGE(CGAL  REQUIRED COMPONENTS Core)
-INCLUDE(${CGAL_USE_FILE})
+#INCLUDE(${CGAL_USE_FILE})
+add_executable(MfemRun  mfem_main.cpp)  # Add your executable
+target_link_libraries(MfemRun CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targets
 
 # Find Eigen
 FIND_PACKAGE(Eigen3  REQUIRED)
+INCLUDE_DIRECTORIES(~/include)
 INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIRS})
 
 # From https://github.com/GLVis/glvis/blob/9f2df220342d13ef42c2985257ed96ba43f3bb70/CMakeLists.txt
@@ -95,7 +100,7 @@ IF( STREAMVORTI_BUILD_SHARED_LIBS )
                                           ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
                                           LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
                                           RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/StreamVorti")
-                              
+
     # Install the executable to 'bin' directory under CMAKE_INSTALL_PREFIX.
     INSTALL(TARGETS ${PROJECT_NAME} ARCHIVE DESTINATION lib/StreamVorti
                                     LIBRARY DESTINATION lib/StreamVorti
@@ -108,26 +113,26 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
         $<TARGET_OBJECTS:Approximants>
         $<TARGET_OBJECTS:SupportDomain>)
-    
+
     # Link with dependencies
     TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static ${CGAL_LIBRARIES} ${MFEM_LIBRARIES})
-    
-    # Set build folders   
+
+    # Set build folders
     SET_TARGET_PROPERTIES(${PROJECT_NAME}_static PROPERTIES
                                                  LINKER_LANGUAGE CXX
                                                  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
                                                  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
                                                  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/StreamVorti" )
-                                     
+
     # Install the executable to 'bin' directory under CMAKE_INSTALL_PREFIX
     INSTALL(TARGETS ${PROJECT_NAME}_static ARCHIVE DESTINATION lib/StreamVorti
                                            LIBRARY DESTINATION lib/StreamVorti
                                            RUNTIME DESTINATION bin/StreamVorti)
-                        
+
 ENDIF()
 
 # MFEM simulation executable.
-ADD_EXECUTABLE(MfemRun  mfem_main.cpp)
+#ADD_EXECUTABLE(MfemRun  mfem_main.cpp)
 IF(STREAMVORTI_BUILD_SHARED_LIBS)
     TARGET_LINK_LIBRARIES(MfemRun  ${PROJECT_NAME})
 ELSE()
