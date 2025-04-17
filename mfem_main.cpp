@@ -211,7 +211,7 @@ int main(int argc, char *argv[])
     std::cout << "main: Save derivative operator matrices to file... " << std::flush;
     if (dim > 1) {if (save_dx)  {derivs->SaveDerivToFile("dx",  fname + ".dx"  + fext);}}
     if (dim > 1) {if (save_dy)  {derivs->SaveDerivToFile("dy",  fname + ".dy"  + fext);}}
-    if (dim > 2) {if (save_dz)  {derivs->SaveDerivToFile("dy",  fname + ".dy"  + fext);}}
+    if (dim > 2) {if (save_dz)  {derivs->SaveDerivToFile("dz",  fname + ".dz"  + fext);}}
     if (dim > 1) {if (save_dxx) {derivs->SaveDerivToFile("dxx", fname + ".dxx" + fext);}}
     if (dim > 1) {if (save_dxy) {derivs->SaveDerivToFile("dxy", fname + ".dxy" + fext);}}
     if (dim > 2) {if (save_dxz) {derivs->SaveDerivToFile("dxz", fname + ".dxz" + fext);}}
