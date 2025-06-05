@@ -2,3 +2,5 @@
 build/
 build-*/
 *build*/
+.spack-env/*
+.DS_Store
