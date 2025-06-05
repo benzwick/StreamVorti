@@ -17,8 +17,8 @@ Parallel build:
     mkdir build
     cd build
     cmake -DCMAKE_INSTALL_PREFIX=/opt/mfem/mfem-4.8 -DMFEM_USE_MPI=YES  -DCMAKE_BUILD_TYPE=Debug ..
-    #make -j 8                  # Build MFEM
-    make parallel -j 8
+    make -j 8                  # Build MFEM
+
 
 
     make tests -j 8            # Build unit-tests
@@ -43,3 +43,25 @@ Note: On Debian Linux, if you encounter `fatal error: Eigen/Dense: No such file 
     cd /usr/include
     sudo ln -sf eigen3/Eigen Eigen
     sudo ln -sf eigen3/unsupported unsupported
+
+# Usage
+
+```
+MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -sm -sn -sd -sdd
+```
+
+Read derivatives saved by streamvorti mfem into matlab
+check this first:
+
+x: (in MATLAB)
+load 'mfem_square10x10.dx.dat'
+fx=spconvert(mfem_square10x10_dx)
+
+same for y, xx, yy
+
+
+TODO:
+output the mesh nodes similar to matlab geometry
+
+Read mesh nodes into matlab from file
+nodes=load('mfem_square10x10.mesh.geom.dat');
