@@ -23,7 +23,7 @@
  */
 
 // Demo usage:
-//     MfemRun -sd -sn
+//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -sm -sn -sd -sdd
 
 #include <StreamVorti/stream_vorti.hpp>
 
@@ -32,15 +32,130 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "mfem.hpp"
+
+// modular main structure
+// 1. init parameters: mesh, FES, DCPSE derives
+// 2. CreateOrLoadMesh()
+// 3. Set up FES
+// 3. Initialise DCPSE
+// 4. Save derivative matrices
+// 5. save neighbours
+
+
+
+// Stream-Vorti simulation (vorticity, Gersc time step, boundary condition)
+// 1. Initialize vorticity and stream function
+// 2. define boundaries
+// 3. update vorticty (eq. 11)
+// 4. apply boundary condition
+// 5. compute Gershgorin time step (2.6)
+// 5. solve streamfunction (eq. 12)
+// 6. update velocity (eq. 13)
+// run simulation (main time steps for loop)
+// save solution
+
+
+// Simulation parameters structure
+struct SimulationParams {
+    double final_time = 60.0;
+    double dt = 1e-3;
+    double reynolds_number = 1000.0;
+
+    std::string output_prefix = "mfem_square10x10";
+    std::string output_extension = ".dat";
+
+};
+
+mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int nz,
+                            double sx, double sy, double sz, bool save_mesh)
+{
+    mfem::Mesh* mesh;
+
+    if (mesh_file[0] == '\0') {
+        std::cout << "CreateOrLoadMesh: Generating a new mesh... " << std::flush;
+
+        if (dim == 2) {
+            mesh = new mfem::Mesh(mfem::Mesh::MakeCartesian2D(nx, ny, mfem::Element::QUADRILATERAL, false, sx, sy, false));
+        } else if (dim == 3) {
+            mesh = new mfem::Mesh(mfem::Mesh::MakeCartesian3D(nx, ny, nz, mfem::Element::HEXAHEDRON, false, sx, sy, sz));
+        } else {
+                MFEM_ABORT("Unsupported mesh dimension: " << dim);
+        }
+
+        if (save_mesh) {
+            std::ofstream mesh_ofs("mfem_square10x10.mesh");
+            mesh_ofs.precision(8);
+            mesh->Print(mesh_ofs);
+        }
+    } else {
+        std::cout << "CreateOrLoadMesh: Read the mesh from the given mesh file... " << std::flush;
+        mesh = new mfem::Mesh(mesh_file, 1, 1);
+    }
+    std::cout << "done." << std::endl;
+
+    return mesh;
+}
+
+StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeighbors)
+{
+    std::cout << "InitialiseDCPSE: Initialising DC PSE derivatives." << std::endl;
+    mfem::StopWatch timer;
+    timer.Start();
+
+    StreamVorti::Dcpse* derivs;
+    if (dim == 2) {
+        derivs = new StreamVorti::Dcpse2d(gf, NumNeighbors);
+    } else if (dim == 3) {
+        derivs = new StreamVorti::Dcpse3d(gf, NumNeighbors);
+    } else {
+        MFEM_ABORT("Unsupported dimension: " << dim << ".");
+    }
+
+    std::cout << "InitialiseDCPSE: Execution time for DCPSE derivatives initialisation: "
+              << timer.RealTime() << " s" << std::endl;
+
+    timer.Clear();
+    derivs->Update();
+    std::cout << "InitialiseDCPSE: Execution time for DCPSE derivatives calculation: "
+              << timer.RealTime() << " s" << std::endl;
+
+    return derivs;
+}
+
+void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
+                           int dim, bool save_d, bool save_dd)
+{
+    if (!save_d && !save_dd) return;
+
+    std::cout << "SaveDerivativeMatrices: Save derivative operator matrices to file... " << std::flush;
+
+    if (save_d) {
+        if (dim > 1) derivs->SaveDerivToFile("dx", params.output_prefix + ".dx" + params.output_extension);
+        if (dim > 1) derivs->SaveDerivToFile("dy", params.output_prefix + ".dy" + params.output_extension);
+        if (dim > 2) derivs->SaveDerivToFile("dz", params.output_prefix + ".dz" + params.output_extension);
+    }
+
+    if (save_dd) {
+        if (dim > 1) derivs->SaveDerivToFile("dxx", params.output_prefix + ".dxx" + params.output_extension);
+        if (dim > 1) derivs->SaveDerivToFile("dxy", params.output_prefix + ".dxy" + params.output_extension);
+        if (dim > 2) derivs->SaveDerivToFile("dxz", params.output_prefix + ".dxz" + params.output_extension);
+        if (dim > 1) derivs->SaveDerivToFile("dyy", params.output_prefix + ".dyy" + params.output_extension);
+        if (dim > 2) derivs->SaveDerivToFile("dyz", params.output_prefix + ".dyz" + params.output_extension);
+        if (dim > 2) derivs->SaveDerivToFile("dzz", params.output_prefix + ".dzz" + params.output_extension);
+    }
+
+    std::cout << "done." << std::endl;
+}
+
 
 int main(int argc, char *argv[])
 {
     // Options
     const char *mesh_file = "";
     int order = 1;
-    bool static_cond = false;
     bool visualization = 1;
 
     // Output filename prefix and extension
@@ -48,7 +163,7 @@ int main(int argc, char *argv[])
     std::string fext = ".dat";
 
     // DC PSE parameters
-    int NumNeighbors = 35;
+    int NumNeighbors = 25;
 
     // Mesh generation
     int dim = 2;
@@ -64,15 +179,10 @@ int main(int argc, char *argv[])
     bool save_neighbors = false;
     bool save_d = false;        // all 1st derivatives (gradient)
     bool save_dd = false;       // all 2nd derivatives (Hessian)
-    bool save_dx = false;
-    bool save_dy = false;
-    bool save_dz = false;
-    bool save_dxx = false;
-    bool save_dxy = false;
-    bool save_dxz = false;
-    bool save_dyy = false;
-    bool save_dyz = false;
-    bool save_dzz = false;
+
+
+    // Simulation parameters
+    SimulationParams params;
 
     // Parse command-line options
     mfem::OptionsParser args(argc, argv);
@@ -117,108 +227,28 @@ int main(int argc, char *argv[])
     }
     args.PrintOptions(std::cout);
 
-    if (save_d)
-    {
-        save_dx = save_dy = save_dz = save_d;
-    }
-    if (save_dd)
-    {
-        save_dxx = save_dxy = save_dxz = save_dyy = save_dyz = save_dzz = save_dd;
-    }
+    // Create or load mesh
+    mfem::Mesh* mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
 
-    // mesh_file and save_mesh are mutually exclusive options
-    if (mesh_file[0] != '\0' && save_mesh)
-    {
-        MFEM_ABORT( "This would overwrite mesh already exists!");
-    }
-
-    // Timer
-    mfem::StopWatch timer;
-    timer.Start();
-
-    // Generate (if no file provided) or read mesh from file
-    mfem::Mesh *mesh;
-    if (mesh_file[0] == '\0')
-    {
-        std::cout << "main: Generating a new mesh... " << std::flush;
-        if (dim == 2)
-        {
-            mesh = new mfem::Mesh(nx, ny, mfem::Element::QUADRILATERAL,
-                                  false, sx, sy, false);
-        }
-        else if (dim == 3)
-        {
-            mesh = new mfem::Mesh(nx, ny, nz, mfem::Element::HEXAHEDRON,
-                                  false, sx, sy, sz, false);
-        }
-        else
-        {
-            MFEM_ABORT( "Unsupported mesh dimension: " << dim );
-        }
-        if (save_mesh)
-        {
-            std::ofstream mesh_ofs("mfem_square10x10.mesh");
-            mesh_ofs.precision(8);
-            mesh->Print(mesh_ofs);
-        }
-    }
-    else
-    {
-        std::cout << "main: Read the mesh from the given mesh file... " << std::flush;
-        mesh = new mfem::Mesh(mesh_file, 1, 1);
-    }
-    std::cout << "done." << std::endl;
-
-    dim = mesh->Dimension();    // The actual mesh dimension
-    std::cout << "main: Mesh dimension: " << dim << std::endl;
+    // Set up finite element space
+    dim = mesh->Dimension();
     mfem::H1_FECollection fec(order, dim);
     mfem::FiniteElementSpace fes(mesh, &fec, 1);
-
     mfem::GridFunction gf(&fes);
 
+    // Initialise DCPSE derivatives
+    StreamVorti::Dcpse* derivs = InitialiseDCPSE(gf, dim, NumNeighbors);
     std::cout << "main: DC PSE derivatives." << std::endl;
-    timer.Clear();
-    StreamVorti::Dcpse *derivs;
-    if (dim == 2)
-    {
-        derivs = new StreamVorti::Dcpse2d(
-            gf, NumNeighbors);
-    }
-    else if (dim == 3)
-    {
-        derivs = new StreamVorti::Dcpse3d(
-            gf, NumNeighbors);
-    }
-    else
-    {
-        MFEM_ABORT( "Unsupported dimension: " << dim << "." );
-    }
-    std::cout << "main: Execution time for DCPSE derivatives initialization: "
-              << timer.RealTime() << " s" << std::endl;
 
-    timer.Clear();
-    derivs->Update();
-    std::cout << "main: Execution time for DCPSE derivatives calculation: "
-              << timer.RealTime() << " s" << std::endl;
+    // save derivs matrices
+    SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd);
 
-    if (save_neighbors)
-    {
+    // Save neighbors if requested
+    if (save_neighbors) {
         std::cout << "main: Save neighbor indices to file... " << std::endl;
-        derivs->SaveNeighsToFile(derivs->NeighborIndices(), fname + ".neighbors" + fext);
+        derivs->SaveNeighsToFile(derivs->NeighborIndices(), params.output_prefix + ".neighbors" + params.output_extension);
         std::cout << "done." << std::endl;
     }
-
-    std::cout << "main: Save derivative operator matrices to file... " << std::flush;
-    if (dim > 1) {if (save_dx)  {derivs->SaveDerivToFile("dx",  fname + ".dx"  + fext);}}
-    if (dim > 1) {if (save_dy)  {derivs->SaveDerivToFile("dy",  fname + ".dy"  + fext);}}
-    if (dim > 2) {if (save_dz)  {derivs->SaveDerivToFile("dy",  fname + ".dy"  + fext);}}
-    if (dim > 1) {if (save_dxx) {derivs->SaveDerivToFile("dxx", fname + ".dxx" + fext);}}
-    if (dim > 1) {if (save_dxy) {derivs->SaveDerivToFile("dxy", fname + ".dxy" + fext);}}
-    if (dim > 2) {if (save_dxz) {derivs->SaveDerivToFile("dxz", fname + ".dxz" + fext);}}
-    if (dim > 1) {if (save_dyy) {derivs->SaveDerivToFile("dyy", fname + ".dyy" + fext);}}
-    if (dim > 2) {if (save_dyz) {derivs->SaveDerivToFile("dyz", fname + ".dyz" + fext);}}
-    if (dim > 2) {if (save_dzz) {derivs->SaveDerivToFile("dzz", fname + ".dzz" + fext);}}
-    std::cout << "done." << std::endl;
 
     // Free the used memory
     delete mesh;
