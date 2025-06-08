@@ -23,9 +23,10 @@
  */
 
 // Demo usage:
-//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -sm -sn -sd -sdd
+//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -sm -sn -sd -sdd
 
 #include <StreamVorti/stream_vorti.hpp>
+#include "mfem.hpp"
 
 #include <cstddef>
 #include <filesystem>
@@ -34,7 +35,6 @@
 #include <string>
 #include <vector>
 
-#include "mfem.hpp"
 
 // modular main structure
 // 1. init parameters: mesh, FES, DCPSE derives
@@ -48,7 +48,8 @@
 
 // Stream-Vorti simulation (vorticity, Gersc time step, boundary condition)
 // 1. Initialize vorticity and stream function
-// 2. define boundaries
+// get DCPSE derivative matrices
+// 2. define boundaries (LDC)
 // 3. update vorticty (eq. 11)
 // 4. apply boundary condition
 // 5. compute Gershgorin time step (2.6)
@@ -70,10 +71,17 @@ struct SimulationParams {
 };
 
 // Function declarations
-mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int nz, double sx, double sy, double sz, bool save_mesh);
+// Refactored functions
+mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int nz,
+                            double sx, double sy, double sz, bool save_mesh);
 StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeighbors);
-void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params, int dim, bool save_d, bool save_dd);
+void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
+                            int dim, bool save_d, bool save_dd);
 
+// New functions to match "Explicit_streamfunction_vorticity_meshless.m"
+void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
+                            std::vector<int>& right_nodes, std::vector<int>& top_nodes,
+                            std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
 
 int main(int argc, char *argv[])
 {
@@ -131,6 +139,8 @@ int main(int argc, char *argv[])
     args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
                    "--no-visualization",
                    "Enable or disable GLVis visualization.");
+    args.AddOption(&NumNeighbors, "-nn", "--num-neighbors",
+                    "Number of neighbors for DCPSE.");
     args.AddOption(&save_mesh,
                    "-sm", "--save-mesh", "-no-sm", "--no-save-mesh",
                    "Save mesh to file.");
@@ -144,6 +154,7 @@ int main(int argc, char *argv[])
                    "-sdd", "--save-2nd-derivative", "-no-sdd", "--no-save-2nd-derivative",
                    "Save 2nd derivatives to file.");
     args.Parse();
+
     if (!args.Good())
     {
         args.PrintUsage(std::cout);
@@ -153,6 +164,13 @@ int main(int argc, char *argv[])
 
     // Create or load mesh
     mfem::Mesh* mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
+
+    // Save mesh if requested
+    if (save_mesh) {
+        std::ofstream mesh_ofs(fname+fext);
+        mesh_ofs.precision(8);
+        mesh->Print(mesh_ofs);
+    }
 
     // Set up finite element space
     dim = mesh->Dimension();
@@ -174,6 +192,39 @@ int main(int argc, char *argv[])
         std::cout << "done." << std::endl;
     }
 
+    /*********************** Simulation *************************/
+
+    // Identify boundary and interior nodes
+    std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
+    IdentifyBoundaryNodesLDC(mesh, bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes);
+
+    // Combine all boundary nodes for streamfunction boundary conditions
+    std::vector<int> all_boundary_nodes;
+    all_boundary_nodes.insert(all_boundary_nodes.end(), bottom_nodes.begin(), bottom_nodes.end());
+    all_boundary_nodes.insert(all_boundary_nodes.end(), right_nodes.begin(), right_nodes.end());
+    all_boundary_nodes.insert(all_boundary_nodes.end(), top_nodes.begin(), top_nodes.end());
+    all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
+
+    // Ensure we have a 2D DCPSE object
+    StreamVorti::Dcpse2d* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(derivs);
+    if (!dcpse2d) {
+        MFEM_ABORT("RunSimulation: Only 2D simulations are currently supported.");
+    }
+
+    /* TODO: GLVis
+    // Send the above data by socket to a GLVis server.  Use the "n" and "b"
+    // keys in GLVis to visualize the displacements.
+    if (visualization) {
+      char vishost[] = "localhost";
+      int  visport   = 19916;
+      socketstream sol_sock(vishost, visport);
+      sol_sock << "parallel " << num_procs << " " << myid << "\n";
+      sol_sock.precision(8);
+      sol_sock << "solution\n" << *pmesh << x << flush;
+    }
+    */
+
+
     // Free the used memory
     delete mesh;
 
@@ -182,7 +233,20 @@ int main(int argc, char *argv[])
     return EXIT_SUCCESS;
 }
 
-
+/**
+ * @brief Create or load mesh object
+ *
+ * @param mesh_file
+ * @param dim
+ * @param nx
+ * @param ny
+ * @param nz
+ * @param sx
+ * @param sy
+ * @param sz
+ * @param save_mesh
+ * @return mfem::Mesh*
+ */
 mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int nz,
                             double sx, double sy, double sz, bool save_mesh)
 {
@@ -199,11 +263,6 @@ mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int
                 MFEM_ABORT("Unsupported mesh dimension: " << dim);
         }
 
-        if (save_mesh) {
-            std::ofstream mesh_ofs("mfem_square10x10.mesh");
-            mesh_ofs.precision(8);
-            mesh->Print(mesh_ofs);
-        }
     } else {
         std::cout << "CreateOrLoadMesh: Read the mesh from the given mesh file... " << std::flush;
         mesh = new mfem::Mesh(mesh_file, 1, 1);
@@ -213,6 +272,14 @@ mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int
     return mesh;
 }
 
+/**
+ * @brief Initialise DC PSE
+ *
+ * @param gf
+ * @param dim
+ * @param NumNeighbors
+ * @return StreamVorti::Dcpse*
+ */
 StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeighbors)
 {
     std::cout << "InitialiseDCPSE: Initialising DC PSE derivatives." << std::endl;
@@ -239,6 +306,15 @@ StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeig
     return derivs;
 }
 
+/**
+ * @brief Save derivative matrices
+ *
+ * @param derivs
+ * @param params
+ * @param dim
+ * @param save_d
+ * @param save_dd
+ */
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
                            int dim, bool save_d, bool save_dd)
 {
@@ -265,3 +341,52 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
 }
 
 
+/* Functions to match "Explicit_streamfunction_vorticity_meshless.m" */
+//TODO: try define boundaries for other benchmark problems: Backward-Facing Step, Unbounded Flow Past a Cylinder
+/**
+ * @brief Identify boundary ndoes for Lid-Driven Cavity problem
+ *
+ * @param mesh
+ * @param bottom_nodes
+ * @param right_nodes
+ * @param top_nodes
+ * @param left_nodes
+ * @param interior_nodes
+ */
+void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
+                          std::vector<int>& right_nodes, std::vector<int>& top_nodes,
+                          std::vector<int>& left_nodes, std::vector<int>& interior_nodes)
+{
+    const double tolerance = 1e-10;
+    const int num_vertices = mesh->GetNV();
+
+    // Clear all vectors
+    bottom_nodes.clear();
+    right_nodes.clear();
+    top_nodes.clear();
+    left_nodes.clear();
+    interior_nodes.clear();
+
+    for (int i = 0; i < num_vertices; ++i) {
+        const double* vertex = mesh->GetVertex(i);
+        double x = vertex[0];
+        double y = vertex[1];
+
+        if (std::abs(y) < tolerance) {
+            bottom_nodes.push_back(i);  // y = 0
+        } else if (std::abs(x - 1.0) < tolerance && y > tolerance && y < 1.0 - tolerance) {
+            right_nodes.push_back(i);   // x = 1, 0 < y < 1
+        } else if (std::abs(y - 1.0) < tolerance) {
+            top_nodes.push_back(i);     // y = 1
+        } else if (std::abs(x) < tolerance && y > tolerance && y < 1.0 - tolerance) {
+            left_nodes.push_back(i);    // x = 0, 0 < y < 1
+        } else {
+            interior_nodes.push_back(i);
+        }
+    }
+
+    std::cout << "IdentifyBoundaryNodesLDC: Found " << bottom_nodes.size() << " bottom, "
+              << right_nodes.size() << " right, " << top_nodes.size() << " top, "
+              << left_nodes.size() << " left, " << interior_nodes.size() << " interior nodes."
+              << std::endl;
+}
