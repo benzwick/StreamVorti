@@ -47,9 +47,9 @@
 
 
 // Stream-Vorti simulation (vorticity, Gersc time step, boundary condition)
-// 1. Initialize vorticity and stream function
-// get DCPSE derivative matrices
-// 2. define boundaries (LDC)
+// 1. get DCPSE derivative matrices
+// Define boundaries (LDC)
+// Initialize vorticity and stream function
 // 3. update vorticty (eq. 11)
 // 4. apply boundary condition
 // 5. compute Gershgorin time step (2.6)
@@ -82,6 +82,7 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
 void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                             std::vector<int>& right_nodes, std::vector<int>& top_nodes,
                             std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
+
 
 int main(int argc, char *argv[])
 {
@@ -194,6 +195,20 @@ int main(int argc, char *argv[])
 
     /*********************** Simulation *************************/
 
+    // Ensure we have a 2D DCPSE object first
+    StreamVorti::Dcpse2d* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(derivs);
+    if (!dcpse2d) {
+        MFEM_ABORT("RunSimulation: Only 2D simulations are currently supported.");
+    }
+
+    // Get derivative matrices dx,dy,dxx,dyy
+    const mfem::SparseMatrix& dx_matrix = dcpse2d->ShapeFunctionDx();
+    const mfem::SparseMatrix& dy_matrix = dcpse2d->ShapeFunctionDy();
+    const mfem::SparseMatrix& dxx_matrix = dcpse2d->ShapeFunctionDxx();
+    const mfem::SparseMatrix& dyy_matrix = dcpse2d->ShapeFunctionDxy();
+
+    std::cout << "RunSimulation: Retrieved DCPSE derivative matrices successfully." << std::endl;
+
     // Identify boundary and interior nodes
     std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
     IdentifyBoundaryNodesLDC(mesh, bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes);
@@ -205,11 +220,11 @@ int main(int argc, char *argv[])
     all_boundary_nodes.insert(all_boundary_nodes.end(), top_nodes.begin(), top_nodes.end());
     all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
 
-    // Ensure we have a 2D DCPSE object
-    StreamVorti::Dcpse2d* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(derivs);
-    if (!dcpse2d) {
-        MFEM_ABORT("RunSimulation: Only 2D simulations are currently supported.");
-    }
+    /****************** Streamfunction *******************/
+    // Initialise solution fields
+    mfem::Vector vorticity, streamfunction;
+    const int num_nodes = mesh->GetNV();
+    InitialiseFields(num_nodes, vorticity, streamfunction);
 
     /* TODO: GLVis
     // Send the above data by socket to a GLVis server.  Use the "n" and "b"
@@ -389,4 +404,16 @@ void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
               << right_nodes.size() << " right, " << top_nodes.size() << " top, "
               << left_nodes.size() << " left, " << interior_nodes.size() << " interior nodes."
               << std::endl;
+}
+
+
+void InitialiseFields(int num_nodes, mfem::Vector& vorticity, mfem::Vector& streamfunction)
+{
+    vorticity.SetSize(num_nodes);
+    streamfunction.SetSize(num_nodes);
+    vorticity = 0.0;
+    streamfunction = 0.0;
+
+    std::cout << "InitialiseFields: Initialised vorticity and streamfunction fields with "
+              << num_nodes << " nodes." << std::endl;
 }
