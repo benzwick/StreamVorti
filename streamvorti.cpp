@@ -47,12 +47,13 @@
 
 
 // Stream-Vorti simulation (vorticity, Gersc time step, boundary condition)
-// 1. get DCPSE derivative matrices
-// Define boundaries (LDC)
-// Initialize vorticity and stream function
+// 1. get DCPSE derivative matrices - DONE
+// 2. Define boundaries (use MFEM method) - DONE
+// Initialize vorticity and stream function -DONE
+// Linear solver (Mfem example)
 // 3. update vorticty (eq. 11)
-// 4. apply boundary condition
-// 5. compute Gershgorin time step (2.6)
+// apply boundary condition
+// 4. compute Gershgorin time step (2.6)
 // 5. solve streamfunction (eq. 12)
 // 6. update velocity (eq. 13)
 // run simulation (main time steps for loop)
@@ -82,6 +83,15 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
 void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                             std::vector<int>& right_nodes, std::vector<int>& top_nodes,
                             std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
+void InitialiseFields(int num_nodes, mfem::Vector& vorticity, mfem::Vector& streamfunction);
+// create Laplacian matrix
+mfem::SparseMatrix CreateLaplacianMatrix(const mfem::SparseMatrix dxx_matrix, const mfem::SparseMatrix dyy_matrix);
+static void ApplyDirichletBC(mfem::SparseMatrix& matrix, const std::vector<int>& boundary_nodes);
+mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
+                                        const mfem::SparseMatrix dxx_matrix,
+                                        const mfem::SparseMatrix dyy_matrix);
+
+//
 
 
 int main(int argc, char *argv[])
@@ -168,7 +178,7 @@ int main(int argc, char *argv[])
 
     // Save mesh if requested
     if (save_mesh) {
-        std::ofstream mesh_ofs(fname+fext);
+        std::ofstream mesh_ofs(fname+".mesh");
         mesh_ofs.precision(8);
         mesh->Print(mesh_ofs);
     }
@@ -177,7 +187,8 @@ int main(int argc, char *argv[])
     dim = mesh->Dimension();
     mfem::H1_FECollection fec(order, dim);
     mfem::FiniteElementSpace fes(mesh, &fec, 1);
-    mfem::GridFunction gf(&fes);
+    std::cout << "main: Number of finite element unknowns: " << fes.GetTrueVSize() << std::endl;
+    mfem::GridFunction gf(&fes); // as 'x' in ex1.cpp
 
     // Initialise DCPSE derivatives
     StreamVorti::Dcpse* derivs = InitialiseDCPSE(gf, dim, NumNeighbors);
@@ -209,9 +220,22 @@ int main(int argc, char *argv[])
 
     std::cout << "RunSimulation: Retrieved DCPSE derivative matrices successfully." << std::endl;
 
+
     // Identify boundary and interior nodes
     std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
     IdentifyBoundaryNodesLDC(mesh, bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes);
+
+
+
+
+    /****************** Streamfunction *******************/
+    // Initialise solution fields
+    mfem::Vector vorticity, streamfunction;
+    const int num_nodes = mesh->GetNV();
+    int num_timesteps = static_cast<int>(params.final_time / params.dt);
+    double current_dt = params.dt;
+
+    InitialiseFields(num_nodes, vorticity, streamfunction);
 
     // Combine all boundary nodes for streamfunction boundary conditions
     std::vector<int> all_boundary_nodes;
@@ -220,13 +244,31 @@ int main(int argc, char *argv[])
     all_boundary_nodes.insert(all_boundary_nodes.end(), top_nodes.begin(), top_nodes.end());
     all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
 
-    /****************** Streamfunction *******************/
-    // Initialise solution fields
-    mfem::Vector vorticity, streamfunction;
-    const int num_nodes = mesh->GetNV();
-    InitialiseFields(num_nodes, vorticity, streamfunction);
+    // Create Laplacian matrix with boundary conditions for streamfunction equation
+    mfem::SparseMatrix laplacian_matrix = CreateLaplacianWithBC(all_boundary_nodes, dxx_matrix, dyy_matrix);
+    std::cout << "RunSimulation: Created Laplacian matrix with boundary conditions." << std::endl;
+    //std::cout << "Size of linear system 'Laplacian matrix': " << A->Height() << std::endl;
+    // operator : laplacian_matrix
+    // solver : Gauss-Seidel smoother(M)
 
-    /* TODO: GLVis
+    // Set up linear solver for streamfunction (Poisson equation)
+    mfem::CGSolver cg_solver;
+    cg_solver.SetRelTol(1e-12);
+    cg_solver.SetMaxIter(1000);
+    cg_solver.SetPrintLevel(0);
+
+    mfem::DSmoother prec;  // Diagonal preconditioner
+    cg_solver.SetPreconditioner(prec);
+    cg_solver.SetOperator(laplacian_matrix);
+
+    std::cout << "RunSimulation: Running " << num_timesteps << " time steps..." << std::endl;
+    mfem::StopWatch sim_timer;
+    sim_timer.Start();
+
+
+
+    /*
+    TODO: visualization on GLVis or Paraview
     // Send the above data by socket to a GLVis server.  Use the "n" and "b"
     // keys in GLVis to visualize the displacements.
     if (visualization) {
@@ -357,7 +399,7 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
 
 
 /* Functions to match "Explicit_streamfunction_vorticity_meshless.m" */
-//TODO: try define boundaries for other benchmark problems: Backward-Facing Step, Unbounded Flow Past a Cylinder
+//TODO: try boundaries for other benchmark problems: Backward-Facing Step, Unbounded Flow Past a Cylinder
 /**
  * @brief Identify boundary ndoes for Lid-Driven Cavity problem
  *
@@ -406,7 +448,13 @@ void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
               << std::endl;
 }
 
-
+/**
+ * @brief
+ *
+ * @param num_nodes
+ * @param vorticity
+ * @param streamfunction
+ */
 void InitialiseFields(int num_nodes, mfem::Vector& vorticity, mfem::Vector& streamfunction)
 {
     vorticity.SetSize(num_nodes);
@@ -417,3 +465,42 @@ void InitialiseFields(int num_nodes, mfem::Vector& vorticity, mfem::Vector& stre
     std::cout << "InitialiseFields: Initialised vorticity and streamfunction fields with "
               << num_nodes << " nodes." << std::endl;
 }
+
+
+// Utility method to create Laplacian matrix
+mfem::SparseMatrix CreateLaplacianMatrix(const mfem::SparseMatrix dxx_matrix, const mfem::SparseMatrix dyy_matrix) {
+    const mfem::SparseMatrix& dxx = dxx_matrix;
+    const mfem::SparseMatrix& dyy = dyy_matrix;
+
+    mfem::SparseMatrix* laplacian = Add(1.0, dxx, 1.0, dyy);
+    laplacian->Finalize();
+    return *laplacian;
+}
+
+// Method to apply Dirichlet boundary conditions to any matrix
+static void ApplyDirichletBC(mfem::SparseMatrix& matrix, const std::vector<int>& boundary_nodes) {
+    for (int boundary_idx : boundary_nodes) {
+        // Zero out the row
+        for (int j = matrix.GetI()[boundary_idx]; j < matrix.GetI()[boundary_idx + 1]; ++j) {
+            matrix.GetData()[j] = 0.0;
+        }
+
+        // Set diagonal entry to 1
+        for (int j = matrix.GetI()[boundary_idx]; j < matrix.GetI()[boundary_idx + 1]; ++j) {
+            if (matrix.GetJ()[j] == boundary_idx) {
+                matrix.GetData()[j] = 1.0;
+                break;
+            }
+        }
+    }
+}
+
+// Method to create Laplacian with boundary conditions applied
+mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
+                                        const mfem::SparseMatrix dxx_matrix,
+                                        const mfem::SparseMatrix dyy_matrix) {
+    mfem::SparseMatrix laplacian = CreateLaplacianMatrix(dxx_matrix, dyy_matrix);
+    ApplyDirichletBC(laplacian, boundary_nodes);
+    return laplacian;
+}
+
