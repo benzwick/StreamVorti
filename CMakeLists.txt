@@ -5,7 +5,7 @@ IF(POLICY CMP0181)
   CMAKE_POLICY(SET CMP0181 NEW) # CMake 3.30
 ENDIF()
 
-PROJECT(StreamVorti VERSION 1.0.0)
+PROJECT(StreamVorti VERSION 2.0.0)
 
 
 # Set project's CMake modules path
@@ -45,14 +45,24 @@ SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/stream_vorti.hpp )
 
 # Find CGAL.
 FIND_PACKAGE(CGAL  REQUIRED COMPONENTS Core)
-#INCLUDE(${CGAL_USE_FILE})
-add_executable(MfemRun  mfem_main.cpp)  # Add your executable
-target_link_libraries(MfemRun CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targets
+# INCLUDE(${CGAL_USE_FILE})
+
 
 # Find Eigen
 FIND_PACKAGE(Eigen3  REQUIRED)
 INCLUDE_DIRECTORIES(~/include)
 INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIRS})
+
+# Find OpenMP
+if(APPLE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(OpenMP_CXX_FLAGS "-fopenmp=libomp")
+        set(OpenMP_CXX_LIB_NAMES "omp")
+        set(OpenMP_omp_LIBRARY omp)
+    endif()
+endif()
+
+FIND_PACKAGE(OpenMP COMPONENTS CXX REQUIRED)
 
 # From https://github.com/GLVis/glvis/blob/9f2df220342d13ef42c2985257ed96ba43f3bb70/CMakeLists.txt
 # Import MFEM. The following variables can be used to help CMake find MFEM:
@@ -67,6 +77,7 @@ else()
    find_package(mfem REQUIRED NAMES MFEM)
 endif()
 message(STATUS "Found mfem config in: ${mfem_DIR} (version ${MFEM_VERSION})")
+
 # Use the same C++ compiler as MFEM. This is needed when MFEM was built using
 # an MPI wrapper and we do not have explicitly the MPI compile and link flags.
 if (NOT CMAKE_CXX_COMPILER AND MFEM_CXX_COMPILER)
@@ -132,7 +143,15 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
 ENDIF()
 
 # MFEM simulation executable.
-#ADD_EXECUTABLE(MfemRun  mfem_main.cpp)
+ADD_EXECUTABLE(MfemRun  mfem_main.cpp)
+
+target_link_libraries(MfemRun CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targets
+
+IF(OpenMP_CXX_FOUND) # Link with OPENMP
+    message(STATUS "Found OpenMP")
+    TARGET_LINK_LIBRARIES(MfemRun OpenMP::OpenMP_CXX)
+ENDIF()
+
 IF(STREAMVORTI_BUILD_SHARED_LIBS)
     TARGET_LINK_LIBRARIES(MfemRun  ${PROJECT_NAME})
 ELSE()
