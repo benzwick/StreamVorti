@@ -97,6 +97,10 @@ mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
                                         const mfem::SparseMatrix dyy_matrix);
 
 // simulation
+void UpdateVorticity(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
+                    const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
+                    const mfem::Vector& streamfunction, mfem::Vector& vorticity,
+                    double dt, double reynolds_number);
 void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::vector<int>& right_nodes,
                            const std::vector<int>& top_nodes, const std::vector<int>& left_nodes,
                            const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
@@ -122,7 +126,7 @@ int main(int argc, char *argv[])
     std::string fext = ".dat";
 
     // DC PSE parameters
-    int NumNeighbors = 50;
+    int NumNeighbors = 10;
 
     // Mesh generation
     int dim = 2;
@@ -273,9 +277,6 @@ int main(int argc, char *argv[])
     std::cout << "RunSimulation: Created Laplacian matrix with boundary conditions." << std::endl;
     //std::cout << "Size of linear system 'Laplacian matrix': " << A->Height() << std::endl;
 
-    // Create RHS in streamfunction
-    mfem::Vector rhs = vorticity;
-
 
     std::cout << "RunSimulation: Running " << num_timesteps << " time steps..." << std::endl;
     mfem::StopWatch sim_timer;
@@ -291,141 +292,16 @@ int main(int argc, char *argv[])
         }
         /****************** Vorticity *******************/
         // Step 1: Update vorticity using explicit Euler scheme (Equation 11)
-        {
-        // Compute spatial derivatives
-        mfem::Vector dpsi_dy(streamfunction.Size());
-        mfem::Vector dpsi_dx(streamfunction.Size());
-        mfem::Vector domega_dx(vorticity.Size());
-        mfem::Vector domega_dy(vorticity.Size());
-        mfem::Vector d2omega_dx2(vorticity.Size());
-        mfem::Vector d2omega_dy2(vorticity.Size());
 
-        // Compute derivatives
-        dy_matrix.Mult(streamfunction, dpsi_dy);      // ∂ψ/∂y
-        dx_matrix.Mult(streamfunction, dpsi_dx);      // ∂ψ/∂x
-        dx_matrix.Mult(vorticity, domega_dx);         // ∂ω/∂x
-        dy_matrix.Mult(vorticity, domega_dy);         // ∂ω/∂y
-        dxx_matrix.Mult(vorticity, d2omega_dx2);      // ∂²ω/∂x²
-        dyy_matrix.Mult(vorticity, d2omega_dy2);      // ∂²ω/∂y²
-
-        // Update vorticity using explicit Euler scheme (Equation 11 from paper)
-        for (int i = 0; i < vorticity.Size(); ++i) {
-            double convection = dpsi_dy[i] * domega_dx[i] - dpsi_dx[i] * domega_dy[i];
-            double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[i] + d2omega_dy2[i]);
-            vorticity[i] += current_dt * (diffusion - convection);
-        }
-    }
+        UpdateVorticity(dx_matrix, dy_matrix, dxx_matrix, dyy_matrix, streamfunction, vorticity, current_dt, params.reynolds_number);
 
         // Step 2: Apply vorticity boundary conditions (Equation 33)
-        {
-        // Compute velocity components from streamfunction
-        mfem::Vector u(streamfunction.Size());  // u = ∂ψ/∂y
-        mfem::Vector v(streamfunction.Size());  // v = -∂ψ/∂x
 
-        dy_matrix.Mult(streamfunction, u);
-        dx_matrix.Mult(streamfunction, v);
-        v *= -1.0;
-
-        // Apply velocity boundary conditions for lid-driven cavity
-        for (int idx : bottom_nodes) u[idx] = 0.0;  // u = 0 on bottom wall
-        for (int idx : right_nodes)  u[idx] = 0.0;  // u = 0 on right wall
-        for (int idx : left_nodes)   u[idx] = 0.0;  // u = 0 on left wall
-        for (int idx : top_nodes)    u[idx] = 1.0;  // u = 1 on top wall (lid-driven)
-
-        for (int idx : bottom_nodes) v[idx] = 0.0;  // v = 0 on all walls
-        for (int idx : right_nodes)  v[idx] = 0.0;
-        for (int idx : top_nodes)    v[idx] = 0.0;
-        for (int idx : left_nodes)   v[idx] = 0.0;
-
-        // Compute boundary vorticity: ω = ∂v/∂x - ∂u/∂y (Equation 33 from paper)
-        mfem::Vector du_dy(u.Size());
-        mfem::Vector dv_dx(v.Size());
-
-        dy_matrix.Mult(u, du_dy);
-        dx_matrix.Mult(v, dv_dx);
-
-        // Apply vorticity boundary conditions on all boundary nodes
-        auto apply_bc_to_nodes = [&](const std::vector<int>& nodes) {
-            for (int idx : nodes) {
-                vorticity[idx] = dv_dx[idx] - du_dy[idx];
-            }
-        };
-
-        apply_bc_to_nodes(bottom_nodes);
-        apply_bc_to_nodes(right_nodes);
-        apply_bc_to_nodes(top_nodes);
-        apply_bc_to_nodes(left_nodes);
-    }
+        ApplyBoundaryConditions(bottom_nodes, right_nodes, top_nodes, left_nodes,dx_matrix, dy_matrix, streamfunction, vorticity);
 
         // Step 3: Solve Poisson equation for streamfunction (Equation 12)
-        // SolveStreamFunction(laplacian_matrix,vorticity, all_boundary_nodes, streamfunction);
-        std::cout << "=== SOLVING STREAM FUNCTION ===" << std::endl;
 
-        // Create RHS
-        rhs = vorticity;
-        rhs *= -1.0;
-
-
-        // Apply boundary conditions AFTER scaling
-        for (int idx : all_boundary_nodes) {
-            rhs[idx] = 0.0;
-
-            // Zero out row
-            for (int j = laplacian_matrix.GetI()[idx]; j < laplacian_matrix.GetI()[idx + 1]; ++j) {
-                laplacian_matrix.GetData()[j] = 0.0;
-            }
-
-            // Set diagonal to 1
-            for (int j = laplacian_matrix.GetI()[idx]; j < laplacian_matrix.GetI()[idx + 1]; ++j) {
-                if (laplacian_matrix.GetJ()[j] == idx) {
-                    laplacian_matrix.GetData()[j] = 1.0;
-                    break;
-                }
-            }
-        }
-
-        //laplacian_matrix.Finalize();
-
-
-        //TODO: find the right linera solver
-        // Initialize solution
-        STREAMFUNCTION.SetSize(rhs.Size());
-        STREAMFUNCTION = 0.0;
-
-        #ifndef MFEM_USE_SUITESPARSE
-        mfem::CGSolver cg_solver;
-        mfem::GSSmoother preconditioner;
-        // Setup preconditioner
-
-        // Setup CG solver
-        cg_solver.SetRelTol(1e-12);
-        cg_solver.SetMaxIter(1000);
-        cg_solver.SetPrintLevel(0);  // Set to 1 for debugging
-        cg_solver.SetPreconditioner(preconditioner);
-        cg_solver.SetOperator(laplacian_matrix);
-
-        cg_solver.Mult(rhs, STREAMFUNCTION);
-
-        // Use a simple symmetric Gauss-Seidel preconditioner with PCG.
-        //GSSmoother M((SparseMatrix&)(*A));
-        //PCG(*A, M, B, X, 1, 200, 1e-12, 0.0);
-        #else
-        // If MFEM was compiled with SuiteSparse, use UMFPACK to solve the system.
-        UMFPackSolver umf_solver;
-        umf_solver.Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
-        umf_solver.SetOperator(*A);
-        umf_solver.Mult(B, X);
-        #endif
-        // Update streamfunction
-        for (int i = 0; i < streamfunction.Size(); ++i) {
-            streamfunction[i] = STREAMFUNCTION[i];
-        }
-
-
-
-    //std::cout << "Stream function solve completed." << std::endl;
-    //std::cout << "Solution range: [" << streamfunction.Min() << ", " << streamfunction.Max() << "]" << std::endl;
-
+        SolveStreamFunction(laplacian_matrix,vorticity, all_boundary_nodes, streamfunction);
 
         // Step 4: Adaptive time stepping using Gershgorin circle theorem
         if (params.enable_adaptive_timestep && time_step % params.gershgorin_frequency == 0) {
@@ -683,108 +559,104 @@ mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
     return laplacian;
 }
 
-
-/*
-void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem::Vector& vorticity,
-                        const std::vector<int>& boundary_nodes, mfem::Vector& streamfunction)
+void UpdateVorticity(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
+                    const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
+                    const mfem::Vector& streamfunction, mfem::Vector& vorticity,
+                    double dt, double reynolds_number)
 {
-    mfem::Vector rhs = vorticity;
-    rhs *= -1.0;
+    // Compute spatial derivatives
+    mfem::Vector dpsi_dy(streamfunction.Size());
+    mfem::Vector dpsi_dx(streamfunction.Size());
+    mfem::Vector domega_dx(vorticity.Size());
+    mfem::Vector domega_dy(vorticity.Size());
+    mfem::Vector d2omega_dx2(vorticity.Size());
+    mfem::Vector d2omega_dy2(vorticity.Size());
 
-    for (int idx : boundary_nodes) {
-        rhs[idx] = 0.0;
-    }
+    // Compute derivatives
+    dy_matrix.Mult(streamfunction, dpsi_dy);      // ∂ψ/∂y
+    dx_matrix.Mult(streamfunction, dpsi_dx);      // ∂ψ/∂x
+    dx_matrix.Mult(vorticity, domega_dx);         // ∂ω/∂x
+    dy_matrix.Mult(vorticity, domega_dy);         // ∂ω/∂y
+    dxx_matrix.Mult(vorticity, d2omega_dx2);      // ∂²ω/∂x²
+    dyy_matrix.Mult(vorticity, d2omega_dy2);      // ∂²ω/∂y²
 
-    streamfunction.SetSize(rhs.Size());
-    streamfunction = 0.0;
-
-
-    // Fallback to iterative with preconditioning
-    mfem::BiCGSTABSolver bicgstab;
-    bicgstab.SetRelTol(1e-6);
-    bicgstab.SetMaxIter(2000);
-    bicgstab.SetPrintLevel(1);
-
-    mfem::GSSmoother prec;
-    bicgstab.SetPreconditioner(prec);
-
-    bicgstab.SetOperator(laplacian_matrix);
-    bicgstab.Mult(rhs, streamfunction);
-
-    if (bicgstab.GetConverged()) {
-        std::cout << "BiCGSTAB converged in " << bicgstab.GetNumIterations() << " iterations" << std::endl;
-    } else {
-        std::cout << "WARNING: BiCGSTAB did not converge, but continuing..." << std::endl;
+    // Update vorticity using explicit Euler scheme (Equation 11 from paper)
+    // ω^(n+1) = ω^n + dt*[(1/Re)*∇²ω - (∂ψ/∂y)(∂ω/∂x) + (∂ψ/∂x)(∂ω/∂y)]
+    for (int i = 0; i < vorticity.Size(); ++i) {
+        double convection = dpsi_dy[i] * domega_dx[i] - dpsi_dx[i] * domega_dy[i];
+        double diffusion = (1.0 / reynolds_number) * (d2omega_dx2[i] + d2omega_dy2[i]);
+        vorticity[i] += dt * (diffusion - convection);
     }
 }
-*/
+
+void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::vector<int>& right_nodes,
+                           const std::vector<int>& top_nodes, const std::vector<int>& left_nodes,
+                           const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
+                           const mfem::Vector& streamfunction, mfem::Vector& vorticity)
+{
+    // Compute velocity components from streamfunction
+    mfem::Vector u(streamfunction.Size());  // u = ∂ψ/∂y
+    mfem::Vector v(streamfunction.Size());  // v = -∂ψ/∂x
+
+    dy_matrix.Mult(streamfunction, u);
+    dx_matrix.Mult(streamfunction, v);
+    v *= -1.0;
+
+    // Apply velocity boundary conditions for lid-driven cavity
+    for (int idx : bottom_nodes) u[idx] = 0.0;  // u = 0 on bottom wall
+    for (int idx : right_nodes)  u[idx] = 0.0;  // u = 0 on right wall
+    for (int idx : left_nodes)   u[idx] = 0.0;  // u = 0 on left wall
+    for (int idx : top_nodes)    u[idx] = 1.0;  // u = 1 on top wall (lid-driven)
+
+    for (int idx : bottom_nodes) v[idx] = 0.0;  // v = 0 on all walls
+    for (int idx : right_nodes)  v[idx] = 0.0;
+    for (int idx : top_nodes)    v[idx] = 0.0;
+    for (int idx : left_nodes)   v[idx] = 0.0;
+
+    // Compute boundary vorticity: ω = ∂v/∂x - ∂u/∂y (Equation 33 from paper)
+    mfem::Vector du_dy(u.Size());
+    mfem::Vector dv_dx(v.Size());
+
+    dy_matrix.Mult(u, du_dy);
+    dx_matrix.Mult(v, dv_dx);
+
+    // Apply vorticity boundary conditions on all boundary nodes
+    auto apply_bc_to_nodes = [&](const std::vector<int>& nodes) {
+        for (int idx : nodes) {
+            vorticity[idx] = dv_dx[idx] - du_dy[idx];
+        }
+    };
+
+    apply_bc_to_nodes(bottom_nodes);
+    apply_bc_to_nodes(right_nodes);
+    apply_bc_to_nodes(top_nodes);
+    apply_bc_to_nodes(left_nodes);
+}
+
 
 void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem::Vector& vorticity,
                         const std::vector<int>& boundary_nodes, mfem::Vector& streamfunction)
 {
-    std::cout << "=== SOLVING STREAM FUNCTION ===" << std::endl;
-
-    // Create RHS
+    // Set up the Poisson equation: ∇²ψ = -ω (Equation 12 from paper)
     mfem::Vector rhs = vorticity;
     rhs *= -1.0;
 
-    // Create matrix copy
-    mfem::SparseMatrix A(laplacian_matrix);
-
-    // CRITICAL: Scale the matrix to reasonable range
-    double max_matrix_val = 0.0;
-    for (int i = 0; i < A.Height(); ++i) {
-        for (int j = A.GetI()[i]; j < A.GetI()[i + 1]; ++j) {
-            max_matrix_val = std::max(max_matrix_val, std::abs(A.GetData()[j]));
-        }
-    }
-
-    std::cout << "Original matrix max value: " << max_matrix_val << std::endl;
-
-    // Scale to have maximum entry around 1.0
-    double scale_factor = 1.0;
-    if (max_matrix_val > 1e3) {
-        scale_factor = 1.0 / max_matrix_val;
-        std::cout << "Scaling matrix by factor: " << scale_factor << std::endl;
-
-        // Scale matrix
-        for (int i = 0; i < A.Height(); ++i) {
-            for (int j = A.GetI()[i]; j < A.GetI()[i + 1]; ++j) {
-                A.GetData()[j] *= scale_factor;
-            }
-        }
-
-        // Scale RHS accordingly
-        rhs *= scale_factor;
-    }
-
-    // Apply boundary conditions AFTER scaling
+    // Apply homogeneous Dirichlet boundary conditions: ψ = 0 on all boundaries
+    mfem::SparseMatrix laplace_bc = laplacian_matrix;
     for (int idx : boundary_nodes) {
         rhs[idx] = 0.0;
-
-        // Zero out row
-        for (int j = A.GetI()[idx]; j < A.GetI()[idx + 1]; ++j) {
-            A.GetData()[j] = 0.0;
-        }
-
-        // Set diagonal to 1
-        for (int j = A.GetI()[idx]; j < A.GetI()[idx + 1]; ++j) {
-            if (A.GetJ()[j] == idx) {
-                A.GetData()[j] = 1.0;
-                break;
+        // Set diagonal entry to 1 and zero out the row
+        for (int j = laplace_bc.GetI()[idx]; j < laplace_bc.GetI()[idx + 1]; ++j) {
+            if (laplace_bc.GetJ()[j] == idx) {
+                laplace_bc.GetData()[j] = 1.0;
+            } else {
+                laplace_bc.GetData()[j] = 0.0;
             }
         }
     }
 
-    A.Finalize();
-
-
-    //TODO: find the right linera solver
-    // Initialize solution
-    streamfunction.SetSize(rhs.Size());
-    streamfunction = 0.0;
-
     #ifndef MFEM_USE_SUITESPARSE
+    //std::cout << "=== SOLVING STREAM FUNCTION - MFEM_USE_SUITESPARSE ===" << std::endl;
     mfem::CGSolver cg_solver;
     mfem::GSSmoother preconditioner;
     // Setup preconditioner
@@ -794,25 +666,17 @@ void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem:
     cg_solver.SetMaxIter(1000);
     cg_solver.SetPrintLevel(0);  // Set to 1 for debugging
     cg_solver.SetPreconditioner(preconditioner);
-    cg_solver.SetOperator(A);
+    cg_solver.SetOperator(laplacian_matrix);
 
     cg_solver.Mult(rhs, streamfunction);
 
-      // Use a simple symmetric Gauss-Seidel preconditioner with PCG.
-      //GSSmoother M((SparseMatrix&)(*A));
-      //PCG(*A, M, B, X, 1, 200, 1e-12, 0.0);
     #else
-      // If MFEM was compiled with SuiteSparse, use UMFPACK to solve the system.
-      UMFPackSolver umf_solver;
-      umf_solver.Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
-      umf_solver.SetOperator(*A);
-      umf_solver.Mult(B, X);
+    // If MFEM was compiled with SuiteSparse, use UMFPACK to solve the system.
+    mfem::UMFPackSolver umf_solver;
+    umf_solver.Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
+    umf_solver.SetOperator(laplacian_matrix);
+    umf_solver.Mult(rhs, streamfunction);
     #endif
-
-
-
-    //std::cout << "Stream function solve completed." << std::endl;
-    //std::cout << "Solution range: [" << streamfunction.Min() << ", " << streamfunction.Max() << "]" << std::endl;
 }
 
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
