@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
     const mfem::SparseMatrix& dx_matrix = dcpse2d->ShapeFunctionDx();
     const mfem::SparseMatrix& dy_matrix = dcpse2d->ShapeFunctionDy();
     const mfem::SparseMatrix& dxx_matrix = dcpse2d->ShapeFunctionDxx();
-    const mfem::SparseMatrix& dyy_matrix = dcpse2d->ShapeFunctionDxy();
+    const mfem::SparseMatrix& dyy_matrix = dcpse2d->ShapeFunctionDyy();
     std::cout << "RunSimulation: Retrieved DCPSE derivative matrices successfully." << std::endl;
 
 
@@ -656,7 +656,7 @@ void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem:
     }
 
     #ifndef MFEM_USE_SUITESPARSE
-    //std::cout << "=== SOLVING STREAM FUNCTION - MFEM_USE_SUITESPARSE ===" << std::endl;
+    // Iterative solver
     mfem::CGSolver cg_solver;
     mfem::GSSmoother preconditioner;
     // Setup preconditioner
@@ -672,6 +672,7 @@ void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem:
 
     #else
     // If MFEM was compiled with SuiteSparse, use UMFPACK to solve the system.
+    // Direct solver
     mfem::UMFPackSolver umf_solver;
     umf_solver.Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
     umf_solver.SetOperator(laplacian_matrix);
