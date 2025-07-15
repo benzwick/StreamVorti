@@ -23,7 +23,7 @@
  */
 
 // Demo usage:
-//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -sm -sn -sd -sdd
+//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -sm -sn -sd -sdd -ss -vtu
 
 #include <StreamVorti/stream_vorti.hpp>
 #include "mfem.hpp"
@@ -82,7 +82,7 @@ mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int
                             double sx, double sy, double sz, bool save_mesh);
 StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeighbors);
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
-                            int dim, bool save_d, bool save_dd);
+                            int dim, bool save_d, bool save_dd, std::string dat_dir);
 
 // Lid-driven cavity boundaries
 void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
@@ -110,9 +110,101 @@ void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem:
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                                 const mfem::Vector& streamfunction, double reynolds_number);
-void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& streamfunction, const std::string& filename, int timestep);
+void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& streamfunction, const std::string& filename, int timestep, std::string dat_dir);
 
+// visulisation
+#include <iomanip>
+#include <sstream>
 
+// Simple function to save VTU files using MFEM's ParaViewDataCollection
+void SaveVTUSimple(const mfem::Mesh* mesh, const mfem::Vector& vorticity,
+                   const mfem::Vector& streamfunction, const mfem::SparseMatrix& dx_matrix,
+                   const mfem::SparseMatrix& dy_matrix, const std::string& filename_base,
+                   double time_value, int cycle)
+{
+    // Calculate velocity from streamfunction
+    mfem::Vector u_velocity(streamfunction.Size());
+    mfem::Vector v_velocity(streamfunction.Size());
+
+    dy_matrix.Mult(streamfunction, u_velocity);   // u = ∂ψ/∂y
+    dx_matrix.Mult(streamfunction, v_velocity);   // v = -∂ψ/∂x
+    v_velocity *= -1.0;
+
+    // Create finite element spaces
+    mfem::H1_FECollection fec(1, mesh->Dimension());
+    mfem::FiniteElementSpace scalar_fes(const_cast<mfem::Mesh*>(mesh), &fec, 1);
+    mfem::FiniteElementSpace vector_fes(const_cast<mfem::Mesh*>(mesh), &fec, mesh->Dimension());
+
+    // Create grid functions
+    mfem::GridFunction vorticity_gf(&scalar_fes);
+    mfem::GridFunction streamfunction_gf(&scalar_fes);
+    mfem::GridFunction velocity_gf(&vector_fes);
+
+    // Copy data to grid functions
+    for (int i = 0; i < vorticity.Size(); ++i) {
+        vorticity_gf[i] = vorticity[i];
+        streamfunction_gf[i] = streamfunction[i];
+    }
+
+    // Set velocity components
+    for (int i = 0; i < u_velocity.Size(); ++i) {
+        velocity_gf[i] = u_velocity[i];                    // x-component
+        if (mesh->Dimension() > 1) {
+            velocity_gf[i + u_velocity.Size()] = v_velocity[i]; // y-component
+        }
+    }
+
+    // Create ParaView data collection
+    mfem::ParaViewDataCollection paraview_dc(filename_base, const_cast<mfem::Mesh*>(mesh));
+    paraview_dc.SetPrecision(8);
+    paraview_dc.SetDataFormat(mfem::VTKFormat::ASCII);
+
+    // Register fields
+    paraview_dc.RegisterField("Vorticity", &vorticity_gf);
+    paraview_dc.RegisterField("StreamFunction", &streamfunction_gf);
+    paraview_dc.RegisterField("Velocity", &velocity_gf);
+
+    // Set time and cycle, then save
+    paraview_dc.SetTime(time_value);
+    paraview_dc.SetCycle(cycle);
+    paraview_dc.Save();
+
+    std::cout << "Saved VTU: " << filename_base << "_" << cycle << ".pvtu" << std::endl;
+}
+
+// Simple function to create PVD file
+void CreatePVDSimple(const std::string& output_dir, const std::string& base_name,
+                     const std::vector<int>& cycles, const std::vector<double>& times)
+{
+    std::string pvd_filename = output_dir + "/" + base_name + "_series.pvd";
+    std::ofstream pvd_file(pvd_filename);
+
+    if (!pvd_file.is_open()) {
+        std::cerr << "Error: Cannot create PVD file: " << pvd_filename << std::endl;
+        return;
+    }
+
+    pvd_file << std::fixed << std::setprecision(6);
+
+    // Write PVD header
+    pvd_file << "<?xml version=\"1.0\"?>\n";
+    pvd_file << "<VTKFile type=\"Collection\" version=\"0.1\">\n";
+    pvd_file << "  <Collection>\n";
+
+    // Write dataset entries
+    for (size_t i = 0; i < cycles.size(); ++i) {
+        std::string vtu_filename = base_name + "_" + std::to_string(cycles[i]) + ".pvtu";
+        pvd_file << "    <DataSet timestep=\"" << times[i]
+                 << "\" file=\"" << vtu_filename << "\"/>\n";
+    }
+
+    pvd_file << "  </Collection>\n";
+    pvd_file << "</VTKFile>\n";
+
+    pvd_file.close();
+
+    std::cout << "Created PVD series: " << pvd_filename << std::endl;
+}
 
 int main(int argc, char *argv[])
 {
@@ -142,6 +234,10 @@ int main(int argc, char *argv[])
     bool save_neighbors = false;
     bool save_d = false;        // all 1st derivatives (gradient)
     bool save_dd = false;       // all 2nd derivatives (Hessian)
+    bool save_solutions = false;
+
+    int vtu_frequency = 1000;
+    bool save_vtu = false;
 
 
     // Simulation parameters
@@ -184,6 +280,13 @@ int main(int argc, char *argv[])
     args.AddOption(&save_dd,
                    "-sdd", "--save-2nd-derivative", "-no-sdd", "--no-save-2nd-derivative",
                    "Save 2nd derivatives to file.");
+    args.AddOption(&save_solutions,
+                   "-ss", "--save-solutions", "-no-ss", "--no-save-solutions",
+                   "Save simuation solutions to file.");
+    args.AddOption(&vtu_frequency, "-vf", "--vtu-frequency",
+                   "Frequency for VTU output (every N timesteps).");
+    args.AddOption(&save_vtu, "-vtu", "--save-vtu", "-no-vtu", "--no-save-vtu",
+                   "Enable VTU output for ParaView.");
     args.Parse();
 
     if (!args.Good())
@@ -196,6 +299,13 @@ int main(int argc, char *argv[])
     // Create or load mesh
     mfem::Mesh* mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
 
+    // dat files for Matlab
+    std::string dat_dir;
+    // dat_dir = params.output_prefix + "_dat";
+    dat_dir = "output_dat";
+    std::filesystem::create_directories(dat_dir);
+    std::cout << "Created DAT output directory: " << dat_dir << std::endl;
+
     // Save mesh if requested
     if (save_mesh) {
         // Save mesh as MFEM format
@@ -203,8 +313,8 @@ int main(int argc, char *argv[])
         mesh_ofs.precision(8);
         mesh->Print(mesh_ofs);
         // Save mesh as VTU format for ParaView
-        mesh->PrintVTU(fname+".elem");
-        mesh->PrintBdrVTU(fname+".bdr");
+        //mesh->PrintVTU(fname+".elem");
+        //mesh->PrintBdrVTU(fname+".bdr");
     }
 
     // Set up finite element space
@@ -219,13 +329,25 @@ int main(int argc, char *argv[])
     std::cout << "main: DC PSE derivatives." << std::endl;
 
     // save derivs matrices
-    SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd);
+    SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
 
     // Save neighbors if requested
     if (save_neighbors) {
         std::cout << "main: Save neighbor indices to file... " << std::endl;
-        derivs->SaveNeighsToFile(derivs->NeighborIndices(), params.output_prefix + ".neighbors" + params.output_extension);
+        derivs->SaveNeighsToFile(derivs->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
         std::cout << "done." << std::endl;
+    }
+
+    // VTU output file
+    std::string vtu_dir;
+    std::vector<int> output_cycles;
+    std::vector<double> output_times;
+
+    if (save_vtu) {
+        //vtu_dir = params.output_prefix + "_vtu";
+        vtu_dir = "output_vtu";
+        std::filesystem::create_directories(vtu_dir);
+        std::cout << "Created VTU output directory: " << vtu_dir << std::endl;
     }
 
     /*********************** Simulation *************************/
@@ -286,9 +408,9 @@ int main(int argc, char *argv[])
     for (int time_step = 1; time_step <= num_timesteps; ++time_step) {
 
         if (time_step % params.output_frequency == 0) {
-            std::cout << "Time step: " << time_step << " / " << num_timesteps
-                      << ", t = " << time_step * current_dt
-                      << ", dt = " << current_dt << std::endl;
+            // std::cout << "Time step: " << time_step << " / " << num_timesteps
+            //           << ", t = " << time_step * current_dt
+            //           << ", dt = " << current_dt << std::endl;
         }
         /****************** Vorticity *******************/
         // Step 1: Update vorticity using explicit Euler scheme (Equation 11)
@@ -303,6 +425,19 @@ int main(int argc, char *argv[])
 
         SolveStreamFunction(laplacian_matrix,vorticity, all_boundary_nodes, streamfunction);
 
+        // Simple VTU output
+        if (save_vtu && (time_step % vtu_frequency == 0 || time_step == num_timesteps)) {
+            double current_time = time_step * current_dt;
+            std::string vtu_base = vtu_dir + "/" + params.output_prefix;
+
+            SaveVTUSimple(mesh, vorticity, streamfunction, dx_matrix, dy_matrix,
+                         vtu_base, current_time, time_step);
+
+            // Store for PVD file
+            output_cycles.push_back(time_step);
+            output_times.push_back(current_time);
+        }
+
         // Step 4: Adaptive time stepping using Gershgorin circle theorem
         if (params.enable_adaptive_timestep && time_step % params.gershgorin_frequency == 0) {
             double dt_critical = ComputeGershgorinTimeStep(dx_matrix, dy_matrix, dxx_matrix, dyy_matrix,
@@ -316,10 +451,16 @@ int main(int argc, char *argv[])
             }
         }
 
+        // Create PVD series file
+        if (save_vtu && !output_cycles.empty()) {
+            CreatePVDSimple(vtu_dir, params.output_prefix, output_cycles, output_times);
+            std::cout << "Generated " << output_cycles.size() << " VTU files." << std::endl;
+        }
+
         // Step 5: Output solution periodically
-        if (time_step % (params.output_frequency * 10) == 0) {
+        if (save_solutions && (time_step % (params.output_frequency * 10) == 0)) {
             SaveSolutionToFile(vorticity, streamfunction,
-                             params.output_prefix + "_solution", time_step);
+                             params.output_prefix + "_solution", time_step, dat_dir);
         }
 
         // Step 6: Check for convergence (steady state)
@@ -345,7 +486,10 @@ int main(int argc, char *argv[])
               << sim_timer.RealTime() << " seconds." << std::endl;
 
     // Save final solution
-    SaveSolutionToFile(vorticity, streamfunction, params.output_prefix + "_final", num_timesteps);
+    if (save_solutions) {
+            SaveSolutionToFile(vorticity, streamfunction, params.output_prefix + "_final", num_timesteps, dat_dir);
+    }
+
 
     // Output simulation statistics
     std::cout << "Final simulation statistics:" << std::endl;
@@ -434,25 +578,25 @@ StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeig
 
 
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
-                           int dim, bool save_d, bool save_dd)
+                           int dim, bool save_d, bool save_dd, std::string dat_dir)
 {
     if (!save_d && !save_dd) return;
 
     std::cout << "SaveDerivativeMatrices: Save derivative operator matrices to file... " << std::flush;
 
     if (save_d) {
-        if (dim > 1) derivs->SaveDerivToFile("dx", params.output_prefix + ".dx" + params.output_extension);
-        if (dim > 1) derivs->SaveDerivToFile("dy", params.output_prefix + ".dy" + params.output_extension);
-        if (dim > 2) derivs->SaveDerivToFile("dz", params.output_prefix + ".dz" + params.output_extension);
+        if (dim > 1) derivs->SaveDerivToFile("dx", dat_dir + "/" + params.output_prefix + ".dx" + params.output_extension);
+        if (dim > 1) derivs->SaveDerivToFile("dy", dat_dir + "/" + params.output_prefix + ".dy" + params.output_extension);
+        if (dim > 2) derivs->SaveDerivToFile("dz", dat_dir + "/" + params.output_prefix + ".dz" + params.output_extension);
     }
 
     if (save_dd) {
-        if (dim > 1) derivs->SaveDerivToFile("dxx", params.output_prefix + ".dxx" + params.output_extension);
-        if (dim > 1) derivs->SaveDerivToFile("dxy", params.output_prefix + ".dxy" + params.output_extension);
-        if (dim > 2) derivs->SaveDerivToFile("dxz", params.output_prefix + ".dxz" + params.output_extension);
-        if (dim > 1) derivs->SaveDerivToFile("dyy", params.output_prefix + ".dyy" + params.output_extension);
-        if (dim > 2) derivs->SaveDerivToFile("dyz", params.output_prefix + ".dyz" + params.output_extension);
-        if (dim > 2) derivs->SaveDerivToFile("dzz", params.output_prefix + ".dzz" + params.output_extension);
+        if (dim > 1) derivs->SaveDerivToFile("dxx", dat_dir + "/" + params.output_prefix + ".dxx" + params.output_extension);
+        if (dim > 1) derivs->SaveDerivToFile("dxy", dat_dir + "/" + params.output_prefix + ".dxy" + params.output_extension);
+        if (dim > 2) derivs->SaveDerivToFile("dxz", dat_dir + "/" + params.output_prefix + ".dxz" + params.output_extension);
+        if (dim > 1) derivs->SaveDerivToFile("dyy", dat_dir + "/" + params.output_prefix + ".dyy" + params.output_extension);
+        if (dim > 2) derivs->SaveDerivToFile("dyz", dat_dir + "/" + params.output_prefix + ".dyz" + params.output_extension);
+        if (dim > 2) derivs->SaveDerivToFile("dzz", dat_dir + "/" + params.output_prefix + ".dzz" + params.output_extension);
     }
 
     std::cout << "done." << std::endl;
@@ -721,11 +865,11 @@ double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem
 }
 
 void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& streamfunction,
-                       const std::string& filename, int timestep) {
+                       const std::string& filename, int timestep, std::string dat_dir) {
     //std::string vort_filename = filename + "_vorticity_" + std::to_string(timestep) + ".dat";
     //std::string stream_filename = filename + "_streamfunction_" + std::to_string(timestep) + ".dat";
-    std::string vort_filename = filename + "_vorticity_" + ".dat";
-    std::string stream_filename = filename + "_streamfunction_" +  ".dat";
+    std::string vort_filename = dat_dir + "/" + filename + "_vorticity_" + ".dat";
+    std::string stream_filename = dat_dir + "/" + filename + "_streamfunction_" +  ".dat";
 
     // Save vorticity field
     std::ofstream vort_file(vort_filename);
