@@ -34,6 +34,7 @@ Make a note of where MFEM is installed.
 
 
 ## Install StreamVorti
+
 ```
 mkdir build
 cd build
@@ -46,6 +47,7 @@ cd /usr/include
 sudo ln -sf eigen3/Eigen Eigen
 sudo ln -sf eigen3/unsupported unsupported
 ```
+
 # Usage
 
 ```
@@ -63,6 +65,7 @@ fx=spconvert(mfem_square10x10_dx)
 same for y, xx, yy
 
 ## OpenMP
+
 For macOS, first do:
 ```
 brew install libomp
@@ -71,3 +74,52 @@ and set in ~/.zshrc
 ```
 export OpenMP_ROOT=$(brew --prefix)/opt/libomp
 ```
+
+
+# Kaya HPC System
+
+## Step 1 Load environment modules using module
+
+https://hpc-wiki.info/hpc/Modules
+
+module avail - show available modules
+
+module list - show modules currently loaded in your environment
+
+module load app/ver - load environment modules for version ver of app
+
+module unload app/ver - unload an application module
+
+Available modules on Kaya:
+```
+module load cmake/3.25.3 gcc/13.3.0 boost/1.84.0 eigen/3.4.0 metis/5.1.0 openmpi/4.1.6
+```
+
+## Install Spack and packages:
+Use Spack to install and manage modules/packages that are not available on Kaya
+Search for package on https://packages.spack.io/
+
+```
+git clone --depth=2 https://github.com/spack/spack.git
+
+# For bash/zsh/sh
+. spack/share/spack/setup-env.sh
+
+Create and activate Spack environment:
+```
+spack env create myenv
+spack env list
+spack env activate -p myenv
+```
+
+Install packages
+```
+spack install <package_name>
+```
+
+cgal 6.0.1
+hypre 2.33.0 +amdgpu_target +mpi +gpu-aware-mpi +openmp +superlu-dist
+(suite-sparse)
+
+mfem 4.7.0 +metis +suite-sparse
+
