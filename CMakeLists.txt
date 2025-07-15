@@ -25,11 +25,11 @@ IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 ELSEIF (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
     #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -msse2 -ffast-math -fPIC -Wall")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -msse2 -fPIC -Wall")
 ELSEIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
     #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -msse2 -O3 -ffast-math -fPIC -Wall")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -msse2 -O3 -fPIC -Wall")
 ENDIF ()
 
 # Include path to the headers of StreamVorti.
@@ -149,7 +149,7 @@ target_link_libraries(MfemRun CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targ
 
 IF(OpenMP_CXX_FOUND) # Link with OPENMP
     message(STATUS "Found OpenMP")
-    TARGET_LINK_LIBRARIES(MfemRun OpenMP::OpenMP_CXX)
+    #TARGET_LINK_LIBRARIES(MfemRun OpenMP::OpenMP_CXX)
 ENDIF()
 
 IF(STREAMVORTI_BUILD_SHARED_LIBS)
