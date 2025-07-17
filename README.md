@@ -90,20 +90,23 @@ module load app/ver - load environment modules for version ver of app
 
 module unload app/ver - unload an application module
 
-Available modules on Kaya:
+Pre-installed modules on Kaya:
 ```
-module load cmake/3.25.3 gcc/13.3.0 boost/1.84.0 eigen/3.4.0 metis/5.1.0 openmpi/4.1.6
+module load gcc/13.3.0 cmake/3.25.3  boost/1.84.0 eigen/3.4.0 metis/5.1.0 openmpi/4.1.6
 ```
 
 ## Install Spack and packages:
 Use Spack to install and manage modules/packages that are not available on Kaya
-Search for package on https://packages.spack.io/
-
+(Search for package on https://packages.spack.io/)
+In HOME directory:
 ```
 git clone --depth=2 https://github.com/spack/spack.git
+```
 
-# For bash/zsh/sh
+Sourcing Spack setup script file (for bash/zsh/sh)
+```
 . spack/share/spack/setup-env.sh
+```
 
 Create and activate Spack environment:
 ```
@@ -111,15 +114,18 @@ spack env create myenv
 spack env list
 spack env activate -p myenv
 ```
+(Note: Env activation only works on Login node, activating on Compute node will cause detachment from it)
 
-Install packages
+Add and Install packages to the active env
 ```
-spack install <package_name>
+spack add <package_name> <names...>
+spack install
 ```
+Note: If error occurs when intalling "diffutils-3.10", try installing on a Compute node in interactive mode(salloc)
 
 cgal 6.0.1
 hypre 2.33.0 +amdgpu_target +mpi +gpu-aware-mpi +openmp +superlu-dist
 (suite-sparse)
 
-mfem 4.7.0 +metis +suite-sparse
+mfem@4.7.0+metis+suite-sparse+openmp
 
