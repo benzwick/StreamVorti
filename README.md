@@ -18,7 +18,7 @@ cd <mfem-root-dir>
 ```
 mkdir build
 cd build
-cmake -DCMAKE_INSTALL_PREFIX=/opt/mfem/mfem-4.8 -DMFEM_USE_MPI=YES  -DCMAKE_BUILD_TYPE=Debug ..
+cmake -DMFEM_DIR=/home/wli/spack/opt/spack/linux-cascadelake/mfem-4.7.0-undz3pa6cop3pvvmmbczaebgsbo4rqxp -DCMAKE_BUILD_TYPE=Debug ..
 make -j 8                  # Build MFEM
 ```
 
@@ -38,7 +38,7 @@ Make a note of where MFEM is installed.
 ```
 mkdir build
 cd build
-cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug ..
+cmake -DMFEM_DIR=/home/wli/spack/opt/spack/linux-cascadelake/mfem-4.7.0-undz3pa6cop3pvvmmbczaebgsbo4rqxp -DCMAKE_BUILD_TYPE=Debug ..
 make -j6
 ```
 Note: On Debian Linux, if you encounter `fatal error: Eigen/Dense: No such file or directory`, create symlinks:
@@ -92,8 +92,10 @@ module unload app/ver - unload an application module
 
 Available modules on Kaya:
 ```
-module load cmake/3.25.3 gcc/13.3.0 boost/1.84.0 eigen/3.4.0 metis/5.1.0 openmpi/4.1.6
+module load gcc/13.3.0 cmake/3.21.3  metis/5.1.0
 ```
+boost/1.84.0 eigen/3.4.0
+
 
 ## Install Spack and packages:
 Use Spack to install and manage modules/packages that are not available on Kaya
@@ -101,6 +103,7 @@ Search for package on https://packages.spack.io/
 
 ```
 git clone --depth=2 https://github.com/spack/spack.git
+```
 
 # For bash/zsh/sh
 . spack/share/spack/setup-env.sh
@@ -117,9 +120,32 @@ Install packages
 spack install <package_name>
 ```
 
+Note:
+
+- If spack install job gets killed on login node, try running on a compute node.
+
+- If error occurs when intalling "diffutils-3.10", try installing on a Compute node in interactive mode(salloc).
+
+- "Error: cmake-3.31.8-b3tbbwlqmj4z5gioxpb24reernudaun6: AttributeError: 'super' object has no attribute 'dag_hash'"
+
 cgal 6.0.1
 hypre 2.33.0 +amdgpu_target +mpi +gpu-aware-mpi +openmp +superlu-dist
 (suite-sparse)
 
-mfem 4.7.0 +metis +suite-sparse
+Add MFEM
+```
+spack add mfem+metis+suite-sparse+openmp
+```
 
+/home/wli/spack/opt/spack/linux-cascadelake/mfem-4.7.0-undz3pa6cop3pvvmmbczaebgsbo4rqxp
+
+## Using SLURM
+Mostly used commands:
+```
+sinfo
+sbatch <batch script>
+squeue -u <your username>
+srun <resource-parameters>
+scancel <jobid>
+sacct -j <job id>
+```
