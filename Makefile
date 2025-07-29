@@ -55,12 +55,23 @@ else
     MFEM_LD_FLAGS = $(MFEM_LIB)
 endif
 
-# CGAL configuration (assuming system installation)
-CGAL_INC = -I/usr/include
-CGAL_LIB = -lCGAL -lCGAL_Core -lgmp -lmpfr
+# CGAL configuration (try spack first, fallback to system)
+CGAL_PREFIX := $(shell spack location -i cgal 2>/dev/null || echo "")
+ifneq ($(CGAL_PREFIX),)
+    CGAL_INC = -I$(CGAL_PREFIX)/include
+    CGAL_LIB = -L$(CGAL_PREFIX)/lib -lCGAL -lCGAL_Core -lgmp -lmpfr
+else
+    CGAL_INC = -I/usr/include
+    CGAL_LIB = -lCGAL -lCGAL_Core -lgmp -lmpfr
+endif
 
-# Eigen3 configuration (assuming system installation)
-EIGEN_INC = -I/usr/include/eigen3
+# Eigen3 configuration (try spack first, fallback to system)
+EIGEN_PREFIX := $(shell spack location -i eigen 2>/dev/null || echo "")
+ifneq ($(EIGEN_PREFIX),)
+    EIGEN_INC = -I$(EIGEN_PREFIX)/include/eigen3
+else
+    EIGEN_INC = -I/usr/include/eigen3
+endif
 
 # StreamVorti include paths
 STREAMVORTI_INC = -I$(INCLUDE_DIR)
