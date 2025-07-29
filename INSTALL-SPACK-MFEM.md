@@ -14,7 +14,7 @@ Change to a compute node
 
 Install MFEM and other dependencies
 
-    spack install mfem@4.7 cgal@5.6
+    spack install mfem@4.7 cgal@5.6 eigen@3.4.0
 
 Clone StreamVorti into the correct directory
 
@@ -30,7 +30,7 @@ Change to a compute node and compile StreamVorti
       -DMFEM_DIR=/group/ems018/spack/spack/opt/spack/linux-haswell/mfem-4.7.0-htmjktlx5osy6mkbq2gesy4xizfgdjru/share/mfem/cmake \
       -DCMAKE_BUILD_TYPE=Debug ../StreamVorti
 
-    spack load mfem@4.7 cgal@5.6
+    spack load mfem@4.7 cgal@5.6 eigen@3.4.0
     cmake -DCMAKE_BUILD_TYPE=Debug ../StreamVorti
 
     make -j6
