@@ -83,49 +83,67 @@ export OpenMP_ROOT=$(brew --prefix)/opt/libomp
 
 # Kaya HPC System
 
-## Step 1 Load environment modules using module
+### Step 0 (Optional): Access a Compute node
+Allocate a Compute node and access it interactively to avoid later installation process getting killed on a Login node due to its limits. For example of parallel compilation jobs:
+```
+salloc -p work --ntasks=1 --cpus-per-task=8 --ntasks-per-core=1  --mem=8G --time=2:00:00
+# Then can use: make -j8
+```
+
+### Step 1: Load environment modules using module
 
 https://hpc-wiki.info/hpc/Modules
 
+```
 module avail - show available modules
-
 module list - show modules currently loaded in your environment
-
 module load app/ver - load environment modules for version ver of app
-
 module unload app/ver - unload an application module
 
-Pre-installed modules on Kaya:
 ```
-module load gcc/13.3.0 cmake/3.21.3  metis/5.1.0
+Available modules on Kaya:
 ```
-boost/1.84.0 eigen/3.4.0
+module load gcc/13.3.0 cmake/3.25.2 metis/5.1.0 boost/1.84.0 eigen/3.4.0
+```
 
 
-## Install Spack and packages:
-Use Spack to install and manage modules/packages that are not available on Kaya
-(Search for package on https://packages.spack.io/)
-In HOME directory:
+### Step2: Install Spack and packages
+- Use Spack to install and manage modules/packages that are not available on Kaya system.
+- Search for package on https://packages.spack.io/
+
 ```
 git clone --depth=2 https://github.com/spack/spack.git
 ```
 
-Sourcing Spack setup script file (for bash/zsh/sh)
+- For bash/zsh/sh
 ```
 . spack/share/spack/setup-env.sh
 ```
-
-Create and activate Spack environment:
+- Create and activate Spack environment:
 ```
 spack env create myenv
 spack env list
 spack env activate -p myenv
+spack env status
+spack env deactivate
+spack env remove myenv
 ```
 (Note: Env activation only works on Login node, activating on Compute node will cause detachment from it)
 
-Add and Install packages to the active env
+- Find compiler (gcc) for new env
 ```
-spack add <package_name> <names...>
+spack compiler find
+```
+will find and add compilar to the current env.
+
+- Add MFEM package to spec
+```
+spack add mfem@4.7
+
+```
+
+- Install all added packages (listed in the packages.yaml)
+```
 spack install
 ```
 Note: If error occurs when intalling "diffutils-3.10", try installing on a Compute node in interactive mode(salloc)
@@ -138,19 +156,31 @@ Note:
 
 - "Error: cmake-3.31.8-b3tbbwlqmj4z5gioxpb24reernudaun6: AttributeError: 'super' object has no attribute 'dag_hash'"
 
+```
 cgal 6.0.1
+```
+- Note: requires Cmake version 3.22 or later. https://doc.cgal.org/latest/Manual/thirdparty.html
+-  Module cmake/3.30.2 is the only available version on Kaya. (PS. cmake/3.30.2 is currently broken, use /3.25.2 instead)
+
+```
+cgal 5.6 is the next available version on Spack
+```
+
+
+
+
+
+```
 hypre 2.33.0 +amdgpu_target +mpi +gpu-aware-mpi +openmp +superlu-dist
 (suite-sparse)
+```
 
-Add MFEM
-```
-spack add mfem+metis+suite-sparse+openmp
-```
+
 
 /home/wli/spack/opt/spack/linux-cascadelake/mfem-4.7.0-undz3pa6cop3pvvmmbczaebgsbo4rqxp
 
-## Using SLURM
-Mostly used commands:
+### Using SLURM
+Commonly used commands:
 ```
 sinfo
 sbatch <batch script>
