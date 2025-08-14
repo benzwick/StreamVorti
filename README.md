@@ -86,8 +86,8 @@ export OpenMP_ROOT=$(brew --prefix)/opt/libomp
 ### Step 0 (Optional): Access a Compute node
 Allocate a Compute node and access it interactively to avoid later installation process getting killed on a Login node due to its limits. For example of parallel compilation jobs:
 ```
-salloc -p work --ntasks=1 --cpus-per-task=8 --ntasks-per-core=1  --mem=8G --time=2:00:00
-# Then can use: make -j8
+salloc -p work --ntasks=1 --cpus-per-task=16 --ntasks-per-core=1  --mem=16G --time=8:00:00
+# Then can use: make -j16
 ```
 
 ### Step 1: Load environment modules using module
