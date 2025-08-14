@@ -23,7 +23,7 @@
  */
 
 // Demo usage:
-//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -sm -sn -sd -sdd -ss -vtu
+//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -sm -sn -sd -sdd -ss -pv
 
 #include <StreamVorti/stream_vorti.hpp>
 #include "mfem.hpp"
@@ -116,95 +116,6 @@ void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& strea
 #include <iomanip>
 #include <sstream>
 
-// Simple function to save VTU files using MFEM's ParaViewDataCollection
-void SaveVTUSimple(const mfem::Mesh* mesh, const mfem::Vector& vorticity,
-                   const mfem::Vector& streamfunction, const mfem::SparseMatrix& dx_matrix,
-                   const mfem::SparseMatrix& dy_matrix, const std::string& filename_base,
-                   double time_value, int cycle)
-{
-    // Calculate velocity from streamfunction
-    mfem::Vector u_velocity(streamfunction.Size());
-    mfem::Vector v_velocity(streamfunction.Size());
-
-    dy_matrix.Mult(streamfunction, u_velocity);   // u = ∂ψ/∂y
-    dx_matrix.Mult(streamfunction, v_velocity);   // v = -∂ψ/∂x
-    v_velocity *= -1.0;
-
-    // Create finite element spaces
-    mfem::H1_FECollection fec(1, mesh->Dimension());
-    mfem::FiniteElementSpace scalar_fes(const_cast<mfem::Mesh*>(mesh), &fec, 1);
-    mfem::FiniteElementSpace vector_fes(const_cast<mfem::Mesh*>(mesh), &fec, mesh->Dimension());
-
-    // Create grid functions
-    mfem::GridFunction vorticity_gf(&scalar_fes);
-    mfem::GridFunction streamfunction_gf(&scalar_fes);
-    mfem::GridFunction velocity_gf(&vector_fes);
-
-    // Copy data to grid functions
-    for (int i = 0; i < vorticity.Size(); ++i) {
-        vorticity_gf[i] = vorticity[i];
-        streamfunction_gf[i] = streamfunction[i];
-    }
-
-    // Set velocity components
-    for (int i = 0; i < u_velocity.Size(); ++i) {
-        velocity_gf[i] = u_velocity[i];                    // x-component
-        if (mesh->Dimension() > 1) {
-            velocity_gf[i + u_velocity.Size()] = v_velocity[i]; // y-component
-        }
-    }
-
-    // Create ParaView data collection
-    mfem::ParaViewDataCollection paraview_dc(filename_base, const_cast<mfem::Mesh*>(mesh));
-    paraview_dc.SetPrecision(8);
-    paraview_dc.SetDataFormat(mfem::VTKFormat::ASCII);
-
-    // Register fields
-    paraview_dc.RegisterField("Vorticity", &vorticity_gf);
-    paraview_dc.RegisterField("StreamFunction", &streamfunction_gf);
-    paraview_dc.RegisterField("Velocity", &velocity_gf);
-
-    // Set time and cycle, then save
-    paraview_dc.SetTime(time_value);
-    paraview_dc.SetCycle(cycle);
-    paraview_dc.Save();
-
-    std::cout << "Saved VTU: " << filename_base << "_" << cycle << ".pvtu" << std::endl;
-}
-
-// Simple function to create PVD file
-void CreatePVDSimple(const std::string& output_dir, const std::string& base_name,
-                     const std::vector<int>& cycles, const std::vector<double>& times)
-{
-    std::string pvd_filename = output_dir + "/" + base_name + "_series.pvd";
-    std::ofstream pvd_file(pvd_filename);
-
-    if (!pvd_file.is_open()) {
-        std::cerr << "Error: Cannot create PVD file: " << pvd_filename << std::endl;
-        return;
-    }
-
-    pvd_file << std::fixed << std::setprecision(6);
-
-    // Write PVD header
-    pvd_file << "<?xml version=\"1.0\"?>\n";
-    pvd_file << "<VTKFile type=\"Collection\" version=\"0.1\">\n";
-    pvd_file << "  <Collection>\n";
-
-    // Write dataset entries
-    for (size_t i = 0; i < cycles.size(); ++i) {
-        std::string vtu_filename = base_name + "_" + std::to_string(cycles[i]) + ".pvtu";
-        pvd_file << "    <DataSet timestep=\"" << times[i]
-                 << "\" file=\"" << vtu_filename << "\"/>\n";
-    }
-
-    pvd_file << "  </Collection>\n";
-    pvd_file << "</VTKFile>\n";
-
-    pvd_file.close();
-
-    std::cout << "Created PVD series: " << pvd_filename << std::endl;
-}
 
 int main(int argc, char *argv[])
 {
@@ -238,6 +149,9 @@ int main(int argc, char *argv[])
 
     int vtu_frequency = 1000;
     bool save_vtu = false;
+
+    bool paraview_output = false;
+    std::string paraview_filename = fname;
 
 
     // Simulation parameters
@@ -287,6 +201,9 @@ int main(int argc, char *argv[])
                    "Frequency for VTU output (every N timesteps).");
     args.AddOption(&save_vtu, "-vtu", "--save-vtu", "-no-vtu", "--no-save-vtu",
                    "Enable VTU output for ParaView.");
+    args.AddOption(&paraview_output, "-pv", "--paraview", "-no-pv",
+                  "--no-paraview",
+                  "Enable or disable ParaView output.");
     args.Parse();
 
     if (!args.Good())
@@ -338,17 +255,6 @@ int main(int argc, char *argv[])
         std::cout << "done." << std::endl;
     }
 
-    // VTU output file
-    std::string vtu_dir;
-    std::vector<int> output_cycles;
-    std::vector<double> output_times;
-
-    if (save_vtu) {
-        //vtu_dir = params.output_prefix + "_vtu";
-        vtu_dir = "output_vtu";
-        std::filesystem::create_directories(vtu_dir);
-        std::cout << "Created VTU output directory: " << vtu_dir << std::endl;
-    }
 
     /*********************** Simulation *************************/
 
@@ -404,8 +310,53 @@ int main(int argc, char *argv[])
     mfem::StopWatch sim_timer;
     sim_timer.Start();
 
+     // Paraview output file
+
+    // Calculate velocity from streamfunction
+    mfem::Vector u_velocity(streamfunction.Size());
+    mfem::Vector v_velocity(streamfunction.Size());
+
+    dy_matrix.Mult(streamfunction, u_velocity);   // u = ∂ψ/∂y
+    dx_matrix.Mult(streamfunction, v_velocity);   // v = -∂ψ/∂x
+    v_velocity *= -1.0;
+
+    // Create finite element spaces
+    //mfem::H1_FECollection fec(1, mesh->Dimension());
+    mfem::FiniteElementSpace scalar_fes(const_cast<mfem::Mesh*>(mesh), &fec, 1);
+    mfem::FiniteElementSpace vector_fes(const_cast<mfem::Mesh*>(mesh), &fec, mesh->Dimension());
+
+    // Create grid functions
+    mfem::GridFunction vorticity_gf(&scalar_fes);
+    mfem::GridFunction streamfunction_gf(&scalar_fes);
+    mfem::GridFunction velocity_gf(&vector_fes);
+
+    // Create ParaView data collection
+    // mfem::ParaViewDataCollection paraview_dc(filename_base, const_cast<mfem::Mesh*>(mesh));
+    mfem::ParaViewDataCollection paraview_dc(paraview_filename, mesh);
+
+    if (paraview_output) {
+        // paraview_dc.SetPrecision(8);
+        paraview_dc.SetPrefixPath("ParaView");
+        paraview_dc.SetLevelsOfDetail(order);
+        // paraview_dc.SetDataFormat(mfem::VTKFormat::ASCII);
+        paraview_dc.SetDataFormat(mfem::VTKFormat::BINARY);
+        // paraview_dc.SetHighOrderOutput(true);
+        // Register fields
+        paraview_dc.RegisterField("Vorticity", &vorticity_gf);
+        paraview_dc.RegisterField("StreamFunction", &streamfunction_gf);
+        paraview_dc.RegisterField("Velocity", &velocity_gf);
+        // Set time and cycle, then save
+        paraview_dc.SetCycle(0);
+        paraview_dc.SetTime(0.0);
+        paraview_dc.Save();
+
+        std::cout << "Created ParaView output directory: " << "ParaView" << std::endl;
+    }
+
+
     // Main simulation loop (implementing Algorithm from Bourantas et al. 2019)
     for (int time_step = 1; time_step <= num_timesteps; ++time_step) {
+        double current_time = time_step * current_dt;
 
         if (time_step % params.output_frequency == 0) {
             // std::cout << "Time step: " << time_step << " / " << num_timesteps
@@ -425,19 +376,6 @@ int main(int argc, char *argv[])
 
         SolveStreamFunction(laplacian_matrix,vorticity, all_boundary_nodes, streamfunction);
 
-        // Simple VTU output
-        if (save_vtu && (time_step % vtu_frequency == 0 || time_step == num_timesteps)) {
-            double current_time = time_step * current_dt;
-            std::string vtu_base = vtu_dir + "/" + params.output_prefix;
-
-            SaveVTUSimple(mesh, vorticity, streamfunction, dx_matrix, dy_matrix,
-                         vtu_base, current_time, time_step);
-
-            // Store for PVD file
-            output_cycles.push_back(time_step);
-            output_times.push_back(current_time);
-        }
-
         // Step 4: Adaptive time stepping using Gershgorin circle theorem
         if (params.enable_adaptive_timestep && time_step % params.gershgorin_frequency == 0) {
             double dt_critical = ComputeGershgorinTimeStep(dx_matrix, dy_matrix, dxx_matrix, dyy_matrix,
@@ -451,19 +389,36 @@ int main(int argc, char *argv[])
             }
         }
 
-        // Create PVD series file
-        if (save_vtu && !output_cycles.empty()) {
-            CreatePVDSimple(vtu_dir, params.output_prefix, output_cycles, output_times);
-            std::cout << "Generated " << output_cycles.size() << " VTU files." << std::endl;
-        }
-
         // Step 5: Output solution periodically
         if (save_solutions && (time_step % (params.output_frequency * 10) == 0)) {
             SaveSolutionToFile(vorticity, streamfunction,
                              params.output_prefix + "_solution", time_step, dat_dir);
         }
 
-        // Step 6: Check for convergence (steady state)
+        // Step 6 Save Paraview output
+        if (paraview_output && (time_step % 100 == 0)) {
+
+            // Copy data to grid functions
+            for (int i = 0; i < vorticity.Size(); ++i) {
+                vorticity_gf[i] = vorticity[i];
+                streamfunction_gf[i] = streamfunction[i];
+            }
+
+            // Set velocity components
+            for (int i = 0; i < u_velocity.Size(); ++i) {
+                velocity_gf[i] = u_velocity[i];                    // x-component
+                if (mesh->Dimension() > 1) {
+                    velocity_gf[i + u_velocity.Size()] = v_velocity[i]; // y-component
+                }
+            }
+
+            // save paraview data
+            paraview_dc.SetTime(current_time);
+            paraview_dc.SetCycle(time_step);
+            paraview_dc.Save();
+        }
+
+        // Step 7: Check for convergence (steady state)
         if (time_step > 1000 && time_step % 1000 == 0) {
             // Compute L2 norm of vorticity change
             static mfem::Vector prev_vorticity;
