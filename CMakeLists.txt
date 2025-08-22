@@ -158,6 +158,23 @@ ELSE()
 ENDIF()
 INSTALL(TARGETS MfemRun RUNTIME DESTINATION bin/StreamVorti)
 
+# StreamVorti executable.
+ADD_EXECUTABLE(StreamVorti  streamvorti.cpp)
+
+target_link_libraries(StreamVorti CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targets
+
+IF(OpenMP_CXX_FOUND) # Link with OPENMP
+    message(STATUS "Found OpenMP")
+    #TARGET_LINK_LIBRARIES(StreamVorti OpenMP::OpenMP_CXX)
+ENDIF()
+
+IF(STREAMVORTI_BUILD_SHARED_LIBS)
+    TARGET_LINK_LIBRARIES(StreamVorti  ${PROJECT_NAME})
+ELSE()
+    TARGET_LINK_LIBRARIES(StreamVorti  ${PROJECT_NAME}_static)
+ENDIF()
+INSTALL(TARGETS StreamVorti RUNTIME DESTINATION bin/StreamVorti)
+
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
 INSTALL(FILES ${HEADERS} DESTINATION include/StreamVorti)
 
