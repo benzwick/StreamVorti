@@ -48,6 +48,11 @@ sudo ln -sf eigen3/Eigen Eigen
 sudo ln -sf eigen3/unsupported unsupported
 ```
 
+Note: On MacOS, you might need to add this option above to find the Eigen headers in the home directory:
+```
+-DEIGEN3_INCLUDE_DIRS=~/include
+```
+
 # Usage
 
 ```
