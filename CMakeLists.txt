@@ -14,12 +14,20 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules")
 # Library compilation options.
 OPTION(STREAMVORTI_BUILD_SHARED_LIBS "Build as shared library" OFF )
 OPTION(STREAMVORTI_BUILD_STATIC_LIBS "Build as static library" ON )
+OPTION(ENABLE_PROFILING "Enable gprof profiling" OFF )
 
 # Set the version of C++.
 SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_CXX_EXTENSIONS OFF)
 
+# Add profiling flags if enabled
+IF(ENABLE_PROFILING AND "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg -g")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg -g")
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+    MESSAGE(STATUS "Profiling enabled with gprof")
+ENDIF()
 
 # Set additional C++ flags for supported compilers.
 IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")

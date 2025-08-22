@@ -55,9 +55,38 @@ Note: On MacOS, you might need to add this option above to find the Eigen header
 
 # Usage
 
+Two executables are built:
+- `MfemRun` - MFEM simulation executable  
+- `StreamVorti` - StreamVorti simulation executable
+
+Example usage:
 ```
 ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -sm -sn -sd -sdd
 ```
+
+## Profiling with gprof
+
+To enable profiling for performance analysis:
+
+1. **Build with profiling enabled:**
+   ```bash
+   mkdir build_profile
+   cd build_profile
+   cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DENABLE_PROFILING=ON -DCMAKE_BUILD_TYPE=Debug ..
+   make -j6
+   ```
+
+2. **Run the program to generate profiling data:**
+   ```bash
+   ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -sm -sn -sd -sdd
+   ```
+   This creates a `gmon.out` file.
+
+3. **Generate profiling report:**
+   ```bash
+   gprof ./StreamVorti gmon.out > profile_report.txt
+   less profile_report.txt
+   ```
 
 Read derivatives saved by streamvorti mfem into matlab
 check this first:
