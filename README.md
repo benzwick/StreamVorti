@@ -56,7 +56,7 @@ Note: On MacOS, you might need to add this option above to find the Eigen header
 # Usage
 
 ```
-MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -sm -sn -sd -sdd
+./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -sm -sn -sd -sdd
 ```
 
 Read derivatives saved by streamvorti mfem into matlab
