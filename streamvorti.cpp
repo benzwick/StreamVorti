@@ -105,8 +105,6 @@ void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::ve
                            const std::vector<int>& top_nodes, const std::vector<int>& left_nodes,
                            const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                            const mfem::Vector& streamfunction, mfem::Vector& vorticity);
-void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem::Vector& vorticity,
-                        const std::vector<int>& boundary_nodes, mfem::Vector& streamfunction);
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                                 const mfem::Vector& streamfunction, double reynolds_number);
@@ -353,6 +351,30 @@ int main(int argc, char *argv[])
         std::cout << "Created ParaView output directory: " << "ParaView" << std::endl;
     }
 
+#ifndef MFEM_USE_SUITESPARSE
+    std::cout << "Linear Solver: CGSolver with GSSmoother" << std::endl;
+    // Iterative solver
+    mfem::CGSolver solver;
+    mfem::GSSmoother preconditioner;
+    // Setup preconditioner
+
+    // Setup CG solver
+    solver.SetRelTol(1e-12);
+    solver.SetMaxIter(1000);
+    solver.SetPrintLevel(0);  // Set to 1 for debugging
+    solver.SetPreconditioner(preconditioner);
+    solver.SetOperator(laplacian_matrix);
+#else
+    std::cout << "Linear Solver: UMFPackSolver" << std::endl;
+    std::cout << "Using UMFPackSolver linear solver" << std::endl;
+    // If MFEM was compiled with SuiteSparse, use UMFPACK to solve the system.
+    // Direct solver
+    mfem::UMFPackSolver solver;
+    solver.Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
+    solver.SetOperator(laplacian_matrix);
+#endif
+
+    mfem::Vector rhs;
 
     // Main simulation loop (implementing Algorithm from Bourantas et al. 2019)
     for (int time_step = 1; time_step <= num_timesteps; ++time_step) {
@@ -374,7 +396,17 @@ int main(int argc, char *argv[])
 
         // Step 3: Solve Poisson equation for streamfunction (Equation 12)
 
-        SolveStreamFunction(laplacian_matrix,vorticity, all_boundary_nodes, streamfunction);
+        // SolveStreamFunction(laplacian_matrix,vorticity, all_boundary_nodes, streamfunction);
+	// Set up the Poisson equation: ∇²ψ = -ω (Equation 12 from paper)
+	rhs = vorticity;
+	rhs *= -1.0;
+
+	// Apply homogeneous Dirichlet boundary conditions: ψ = 0 on all boundaries
+	for (int idx : all_boundary_nodes) {
+	  rhs[idx] = 0.0;
+	}
+
+	solver.Mult(rhs, streamfunction);
 
         // Step 4: Adaptive time stepping using Gershgorin circle theorem
         if (params.enable_adaptive_timestep && time_step % params.gershgorin_frequency == 0) {
@@ -732,52 +764,6 @@ void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::ve
     apply_bc_to_nodes(left_nodes);
 }
 
-
-void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem::Vector& vorticity,
-                        const std::vector<int>& boundary_nodes, mfem::Vector& streamfunction)
-{
-    // Set up the Poisson equation: ∇²ψ = -ω (Equation 12 from paper)
-    mfem::Vector rhs = vorticity;
-    rhs *= -1.0;
-
-    // Apply homogeneous Dirichlet boundary conditions: ψ = 0 on all boundaries
-    mfem::SparseMatrix laplace_bc = laplacian_matrix;
-    for (int idx : boundary_nodes) {
-        rhs[idx] = 0.0;
-        // Set diagonal entry to 1 and zero out the row
-        for (int j = laplace_bc.GetI()[idx]; j < laplace_bc.GetI()[idx + 1]; ++j) {
-            if (laplace_bc.GetJ()[j] == idx) {
-                laplace_bc.GetData()[j] = 1.0;
-            } else {
-                laplace_bc.GetData()[j] = 0.0;
-            }
-        }
-    }
-
-    #ifndef MFEM_USE_SUITESPARSE
-    // Iterative solver
-    mfem::CGSolver cg_solver;
-    mfem::GSSmoother preconditioner;
-    // Setup preconditioner
-
-    // Setup CG solver
-    cg_solver.SetRelTol(1e-12);
-    cg_solver.SetMaxIter(1000);
-    cg_solver.SetPrintLevel(0);  // Set to 1 for debugging
-    cg_solver.SetPreconditioner(preconditioner);
-    cg_solver.SetOperator(laplacian_matrix);
-
-    cg_solver.Mult(rhs, streamfunction);
-
-    #else
-    // If MFEM was compiled with SuiteSparse, use UMFPACK to solve the system.
-    // Direct solver
-    mfem::UMFPackSolver umf_solver;
-    umf_solver.Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
-    umf_solver.SetOperator(laplacian_matrix);
-    umf_solver.Mult(rhs, streamfunction);
-    #endif
-}
 
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
