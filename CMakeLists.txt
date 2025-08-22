@@ -1,5 +1,5 @@
 #--------------------------------------------------------------
-CMAKE_MINIMUM_REQUIRED(VERSION 4.0)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.30)
 
 IF(POLICY CMP0181)
   CMAKE_POLICY(SET CMP0181 NEW) # CMake 3.30
