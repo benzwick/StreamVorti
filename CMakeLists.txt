@@ -95,7 +95,7 @@ IF( STREAMVORTI_BUILD_SHARED_LIBS )
                                           ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
                                           LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
                                           RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/StreamVorti")
-                              
+
     # Install the executable to 'bin' directory under CMAKE_INSTALL_PREFIX.
     INSTALL(TARGETS ${PROJECT_NAME} ARCHIVE DESTINATION lib/StreamVorti
                                     LIBRARY DESTINATION lib/StreamVorti
@@ -108,22 +108,22 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
     ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
         $<TARGET_OBJECTS:Approximants>
         $<TARGET_OBJECTS:SupportDomain>)
-    
+
     # Link with dependencies
     TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static ${CGAL_LIBRARIES} ${MFEM_LIBRARIES})
-    
-    # Set build folders   
+
+    # Set build folders
     SET_TARGET_PROPERTIES(${PROJECT_NAME}_static PROPERTIES
                                                  LINKER_LANGUAGE CXX
                                                  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
                                                  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/StreamVorti"
                                                  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/StreamVorti" )
-                                     
+
     # Install the executable to 'bin' directory under CMAKE_INSTALL_PREFIX
     INSTALL(TARGETS ${PROJECT_NAME}_static ARCHIVE DESTINATION lib/StreamVorti
                                            LIBRARY DESTINATION lib/StreamVorti
                                            RUNTIME DESTINATION bin/StreamVorti)
-                        
+
 ENDIF()
 
 # MFEM simulation executable.
