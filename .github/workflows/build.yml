@@ -57,7 +57,7 @@ jobs:
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ runner.os }}-ccache
+        key: ${{ runner.os }}-streamvorti-ccache
         max-size: "2G"
         verbose: 2
 
@@ -74,7 +74,8 @@ jobs:
       id: cache-hypre
       uses: actions/cache@v3
       with:
-        path: ${{ env.HYPRE_TOP_DIR }}
+        path: |
+          ${{ env.HYPRE_TOP_DIR }}/install
         key: ${{ env.HYPRE_TOP_DIR }}-${{ runner.os }}
 
     - name: Build HYPRE
@@ -95,7 +96,9 @@ jobs:
       id: cache-metis
       uses: actions/cache@v3
       with:
-        path: ${{ env.METIS_TOP_DIR }}
+        path: |
+          ${{ env.METIS_TOP_DIR }}/libmetis.a
+          ${{ env.METIS_TOP_DIR }}/Lib
         key: ${{ env.METIS_TOP_DIR }}-${{ runner.os }}
 
     - name: Build METIS
