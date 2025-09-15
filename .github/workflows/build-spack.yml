@@ -145,7 +145,6 @@ jobs:
         cmake \
           -DMFEM_DIR=$MFEM_DIR \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
           -DCMAKE_CXX_COMPILER_LAUNCHER=$CCACHE_PATH \
           -DCMAKE_C_COMPILER_LAUNCHER=$CCACHE_PATH \
           ..
