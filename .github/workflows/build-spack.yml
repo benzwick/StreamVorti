@@ -120,8 +120,21 @@ jobs:
         MFEM_DIR=$(spack location -i mfem)
         echo "MFEM_DIR=$MFEM_DIR"
 
-        # Find MFEM cmake config
-        MFEM_CMAKE_DIR=$(find $MFEM_DIR -name "MFEMConfig.cmake" -o -name "mfem-config.cmake" | head -n1 | xargs dirname)
+        # Find MFEM cmake config directory
+        MFEM_CMAKE_DIR=$(find $MFEM_DIR -name "MFEMConfig.cmake" -o -name "mfem-config.cmake" 2>/dev/null | head -n1 | xargs -r dirname)
+        if [ -z "$MFEM_CMAKE_DIR" ]; then
+          # Try common locations
+          if [ -d "$MFEM_DIR/lib/cmake/mfem" ]; then
+            MFEM_CMAKE_DIR="$MFEM_DIR/lib/cmake/mfem"
+          elif [ -d "$MFEM_DIR/share/mfem" ]; then
+            MFEM_CMAKE_DIR="$MFEM_DIR/share/mfem"
+          else
+            echo "ERROR: Could not find MFEM cmake config directory"
+            echo "Contents of MFEM_DIR:"
+            ls -la $MFEM_DIR
+            exit 1
+          fi
+        fi
         echo "MFEM_CMAKE_DIR=$MFEM_CMAKE_DIR"
 
         # Create build directory
@@ -131,6 +144,7 @@ jobs:
         # Configure with CMake from Spack
         cmake \
           -Dmfem_DIR=$MFEM_CMAKE_DIR \
+          -DMFEM_DIR=$MFEM_DIR \
           -DCMAKE_BUILD_TYPE=Release \
           ..
 
