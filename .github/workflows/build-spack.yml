@@ -95,14 +95,6 @@ jobs:
         # Install additional dependencies for StreamVorti
         spack install cgal@6.0
         spack install eigen@3.4
-
-        # Install fmt first (doxygen dependency)
-        spack install fmt
-
-        # Install doxygen with fmt dependency
-        spack install doxygen ^fmt
-
-        spack install graphviz
         spack install cmake
 
         # Load all the modules
@@ -112,8 +104,6 @@ jobs:
         spack load eigen
         spack load openmpi
         spack load suite-sparse
-        spack load doxygen
-        spack load graphviz
         spack load cmake
 
     - name: Cache ccache
