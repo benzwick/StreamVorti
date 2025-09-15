@@ -64,17 +64,9 @@ jobs:
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ runner.os }}-notspack-ccache
+        key: ${{ runner.os }}-build-ccache
         max-size: "2G"
         verbose: 2
-
-    - name: Configure ccache
-      run: |
-        echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
-        ccache --set-config=compiler_check=content
-        ccache --set-config=sloppiness=include_file_ctime,include_file_mtime,time_macros
-        ccache --show-config
-        ccache -z
 
     # Build HYPRE (required for parallel MFEM)
     - name: Cache HYPRE build
