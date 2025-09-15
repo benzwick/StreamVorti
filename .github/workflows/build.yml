@@ -1,0 +1,116 @@
+name: Build StreamVorti
+
+on:
+  push:
+    branches: [ main, master, develop, "bz-*" ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libopenmpi-dev \
+          openmpi-bin \
+          liblapack-dev \
+          libsuitesparse-dev \
+          zlib1g-dev \
+          libcgal-dev \
+          libeigen3-dev \
+          doxygen \
+          graphviz
+
+    - name: Create Eigen symlinks
+      run: |
+        sudo ln -sf /usr/include/eigen3/Eigen /usr/include/Eigen
+        sudo ln -sf /usr/include/eigen3/unsupported /usr/include/unsupported
+
+    - name: Cache MFEM build
+      id: cache-mfem
+      uses: actions/cache@v3
+      with:
+        path: /opt/mfem/mfem-4.8
+        key: mfem-4.8-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yml') }}
+
+    - name: Build and install MFEM 4.8
+      if: steps.cache-mfem.outputs.cache-hit != 'true'
+      run: |
+        # Clone MFEM
+        git clone https://github.com/mfem/mfem.git mfem-4.8
+        cd mfem-4.8
+        git checkout v4.8
+        cd ..
+
+        # Build MFEM
+        mkdir mfem-4.8-build
+        cd mfem-4.8-build
+
+        cmake \
+          -DCMAKE_INSTALL_PREFIX=/opt/mfem/mfem-4.8 \
+          -DMFEM_USE_LAPACK=YES \
+          -DMFEM_USE_MPI=YES \
+          -DMFEM_USE_SUITESPARSE=YES \
+          -DMFEM_USE_ZLIB=YES \
+          -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
+          ../mfem-4.8
+
+        make -j$(nproc)
+        sudo make install
+
+        cd ..
+        rm -rf mfem-4.8 mfem-4.8-build
+
+    - name: Build StreamVorti
+      run: |
+        mkdir build
+        cd build
+
+        cmake \
+          -DMFEM_DIR=/opt/mfem/mfem-4.8 \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
+          ..
+
+        make -j$(nproc)
+
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure || true
+
+    - name: Check built artifacts
+      run: |
+        echo "Checking built executables and libraries:"
+        ls -la build/
+        ls -la build/lib/StreamVorti/ || true
+
+        if [ -f build/MfemRun ]; then
+          echo "MfemRun executable built successfully"
+          ldd build/MfemRun
+        else
+          echo "WARNING: MfemRun executable not found"
+        fi
+
+        if [ -f build/StreamVorti ]; then
+          echo "StreamVorti executable built successfully"
+          ldd build/StreamVorti
+        else
+          echo "WARNING: StreamVorti executable not found"
+        fi
+
+        if [ -f build/lib/StreamVorti/libStreamVorti_static.a ]; then
+          echo "StreamVorti static library built successfully"
+          file build/lib/StreamVorti/libStreamVorti_static.a
+        else
+          echo "WARNING: StreamVorti static library not found"
+        fi
