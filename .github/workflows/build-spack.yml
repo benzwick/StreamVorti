@@ -80,9 +80,6 @@ jobs:
       run: |
         source ~/spack/share/spack/setup-env.sh
 
-        # Install ccache through Spack
-        spack install ccache
-
         # Install MFEM 4.8 with all required features
         spack install mfem@4.8 \
           +mpi \
@@ -100,7 +97,6 @@ jobs:
         spack install cmake@3.31
 
         # Load all the modules
-        spack load ccache
         spack load mfem
         spack load cgal
         spack load eigen
@@ -108,33 +104,11 @@ jobs:
         spack load suite-sparse
         spack load cmake@3.31
 
-    - name: Cache ccache
-      uses: actions/cache@v3
-      with:
-        path: ~/.ccache
-        key: ccache-spack-${{ runner.os }}
-        restore-keys: |
-          ccache-spack-${{ runner.os }}
-
-    - name: Setup build environment
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-
-        # Load ccache and configure it
-        spack load ccache
-        export PATH=$(spack location -i ccache)/bin:$PATH
-        ccache --set-config=cache_dir=$HOME/.ccache
-        ccache --set-config=max_size=4G
-        ccache --set-config=compiler_check=content
-        ccache --set-config=sloppiness=include_file_ctime,include_file_mtime,time_macros
-        ccache -z
-
     - name: Build StreamVorti
       run: |
         source ~/spack/share/spack/setup-env.sh
 
         # Load all required modules
-        spack load ccache
         spack load cmake@3.31
         spack load mfem
         spack load cgal
@@ -144,9 +118,7 @@ jobs:
 
         # Get installation paths
         MFEM_DIR=$(spack location -i mfem)
-        CCACHE_PATH=$(spack location -i ccache)/bin/ccache
         echo "MFEM_DIR=$MFEM_DIR"
-        echo "CCACHE_PATH=$CCACHE_PATH"
 
         # Create build directory
         mkdir build
@@ -156,20 +128,10 @@ jobs:
         cmake \
           -DMFEM_DIR=$MFEM_DIR \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=$CCACHE_PATH \
-          -DCMAKE_C_COMPILER_LAUNCHER=$CCACHE_PATH \
           ..
 
         # Build
         make -j$(nproc) VERBOSE=1
-
-    - name: Display ccache statistics
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-        spack load ccache
-        ccache -s
-        echo "Cache hit rate information:"
-        ccache --show-stats
 
     - name: Run tests
       run: |
