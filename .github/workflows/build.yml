@@ -10,10 +10,11 @@
 name: Build StreamVorti
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ main, master, develop, "bz-*" ]
+    branches: [ main]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ main ]
 
 env:
   HYPRE_URL: 'https://github.com/hypre-space/hypre/archive'
