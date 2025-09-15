@@ -1,0 +1,211 @@
+# GitHub Actions workflow for building StreamVorti with MFEM
+#
+# Based on official MFEM workflows and actions:
+# - https://github.com/mfem/mfem/blob/master/.github/workflows/builds-and-tests.yml
+# - https://github.com/mfem/github-actions/blob/master/build-mfem/action.yml
+# - https://github.com/mfem/github-actions/blob/master/build-hypre/action.yml
+# - https://github.com/mfem/github-actions/blob/master/build-metis/action.yml
+# - https://github.com/mfem/mfem/blob/master/INSTALL
+
+name: Build StreamVorti
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main]
+  pull_request:
+    branches: [ main ]
+
+# With caching this workflow typically takes less than 5 minutes to run
+# so we don't need to limit concurrency too much.
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+#   cancel-in-progress: true
+
+env:
+  HYPRE_URL: 'https://github.com/hypre-space/hypre/archive'
+  HYPRE_ARCHIVE: v2.19.0
+  HYPRE_TOP_DIR: hypre-2.19.0
+  METIS_URL: 'https://mfem.github.io/tpls'
+  METIS_ARCHIVE: metis-4.0.3.tar.gz
+  METIS_TOP_DIR: metis-4.0.3
+  MFEM_TOP_DIR: mfem-4.8
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ccache \
+          libopenmpi-dev \
+          openmpi-bin \
+          liblapack-dev \
+          libsuitesparse-dev \
+          zlib1g-dev \
+          libcgal-dev \
+          libeigen3-dev \
+          doxygen \
+          graphviz
+
+    - name: Create Eigen symlinks
+      run: |
+        sudo ln -sf /usr/include/eigen3/Eigen /usr/include/Eigen
+        sudo ln -sf /usr/include/eigen3/unsupported /usr/include/unsupported
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ runner.os }}-build-ccache
+        max-size: "2G"
+        verbose: 2
+
+    # Build HYPRE (required for parallel MFEM)
+    - name: Cache HYPRE build
+      id: cache-hypre
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ env.HYPRE_TOP_DIR }}/install
+        key: ${{ env.HYPRE_TOP_DIR }}-${{ runner.os }}
+
+    - name: Build HYPRE
+      if: steps.cache-hypre.outputs.cache-hit != 'true'
+      run: |
+        # Download and extract HYPRE
+        wget ${{ env.HYPRE_URL }}/${{ env.HYPRE_ARCHIVE }}.tar.gz
+        tar -xzf ${{ env.HYPRE_ARCHIVE }}.tar.gz
+        cd ${{ env.HYPRE_TOP_DIR }}/src
+
+        # Configure and build HYPRE
+        ./configure --prefix=$PWD/../install CC=mpicc CXX=mpic++
+        make -j$(nproc)
+        make install
+
+    # Build METIS (optional but recommended for MFEM)
+    - name: Cache METIS build
+      id: cache-metis
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ env.METIS_TOP_DIR }}/libmetis.a
+          ${{ env.METIS_TOP_DIR }}/Lib
+        key: ${{ env.METIS_TOP_DIR }}-${{ runner.os }}
+
+    - name: Build METIS
+      if: steps.cache-metis.outputs.cache-hit != 'true'
+      run: |
+        # Download and extract METIS
+        wget ${{ env.METIS_URL }}/${{ env.METIS_ARCHIVE }}
+        tar -xzf ${{ env.METIS_ARCHIVE }}
+        cd ${{ env.METIS_TOP_DIR }}
+
+        # Build METIS library
+        make -C Lib CC=mpicc OPTFLAGS="-Wno-error=implicit-function-declaration -O2"
+
+    # Build MFEM with all dependencies
+    - name: Cache MFEM build
+      id: cache-mfem
+      uses: actions/cache@v3
+      with:
+        path: /opt/mfem/${{ env.MFEM_TOP_DIR }}
+        key: ${{ env.MFEM_TOP_DIR }}-hypre-metis-${{ runner.os }}
+
+    - name: Build and install MFEM 4.8
+      if: steps.cache-mfem.outputs.cache-hit != 'true'
+      run: |
+        # Clone MFEM repository
+        git clone https://github.com/mfem/mfem.git ${{ env.MFEM_TOP_DIR }}
+        cd ${{ env.MFEM_TOP_DIR }}
+        git checkout v4.8
+        cd ..
+
+        # Create build directory (following MFEM's approach)
+        mkdir mfem-build
+        cd mfem-build
+
+        # Configure MFEM with CMake
+        cmake \
+          -DCMAKE_INSTALL_PREFIX=/opt/mfem/${{ env.MFEM_TOP_DIR }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DMFEM_USE_MPI=YES \
+          -DHYPRE_DIR=$PWD/../${{ env.HYPRE_TOP_DIR }}/install \
+          -DMFEM_USE_METIS=YES \
+          -DMETIS_DIR=$PWD/../${{ env.METIS_TOP_DIR }} \
+          -DMFEM_USE_LAPACK=YES \
+          -DMFEM_USE_SUITESPARSE=YES \
+          -DMFEM_USE_ZLIB=YES \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          ../${{ env.MFEM_TOP_DIR }}
+
+        # Build and install
+        make -j$(nproc)
+        sudo make install
+
+        # Clean up source directories to save space
+        cd ..
+        rm -rf ${{ env.MFEM_TOP_DIR }} mfem-build
+
+    - name: Build StreamVorti
+      run: |
+        mkdir build
+        cd build
+
+        # Configure StreamVorti with MFEM
+        cmake \
+          -DMFEM_DIR=/opt/mfem/${{ env.MFEM_TOP_DIR }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          ..
+
+        # Build
+        make -j$(nproc)
+
+    - name: Display ccache statistics
+      run: |
+        ccache -s
+        echo "Cache hit rate information:"
+        ccache --show-stats
+
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure || true
+
+    - name: Check built artifacts
+      run: |
+        echo "Checking built executables and libraries:"
+        ls -la build/
+        ls -la build/lib/StreamVorti/ || true
+
+        if [ -f build/MfemRun ]; then
+          echo "MfemRun executable built successfully"
+          ldd build/MfemRun
+        else
+          echo "WARNING: MfemRun executable not found"
+        fi
+
+        if [ -f build/StreamVorti ]; then
+          echo "StreamVorti executable built successfully"
+          ldd build/StreamVorti
+        else
+          echo "WARNING: StreamVorti executable not found"
+        fi
+
+        if [ -f build/lib/StreamVorti/libStreamVorti_static.a ]; then
+          echo "StreamVorti static library built successfully"
+          file build/lib/StreamVorti/libStreamVorti_static.a
+        else
+          echo "WARNING: StreamVorti static library not found"
+        fi

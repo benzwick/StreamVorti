@@ -8,7 +8,7 @@ Build the project using CMake:
 ```bash
 mkdir build
 cd build
-cmake -DMFEM_DIR=/opt/mfem/mfem-4.5 -DCMAKE_BUILD_TYPE=Debug ..
+cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug ..
 make -j6
 ```
 

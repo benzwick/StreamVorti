@@ -13,3 +13,11 @@
 - replace config manager with MFEM ArgParser (no more config files)
 
 - rename library and replace headers
+
+
+
+2025-06-12
+- Use attributes for boundary conditons (Cartesian2D creates the automatically)
+- save solution to paraview format
+  - https://docs.mfem.org/html/classmfem_1_1ParaViewDataCollection.html
+- Debug linear solver for streamfunction

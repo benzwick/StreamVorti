@@ -1,11 +1,11 @@
 #--------------------------------------------------------------
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0 FATAL_ERROR)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.30)
 
-IF(POLICY CMP0053)
-  CMAKE_POLICY(SET CMP0053 NEW) # CMake 3.1
+IF(POLICY CMP0181)
+  CMAKE_POLICY(SET CMP0181 NEW) # CMake 3.30
 ENDIF()
 
-PROJECT(StreamVorti VERSION 1.0.0)
+PROJECT(StreamVorti VERSION 2.0.0)
 
 
 # Set project's CMake modules path
@@ -14,20 +14,32 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules")
 # Library compilation options.
 OPTION(STREAMVORTI_BUILD_SHARED_LIBS "Build as shared library" OFF )
 OPTION(STREAMVORTI_BUILD_STATIC_LIBS "Build as static library" ON )
+OPTION(ENABLE_PROFILING "Enable gprof profiling" OFF )
 
 # Set the version of C++.
 SET(CMAKE_CXX_STANDARD 17)
+SET(CMAKE_CXX_STANDARD_REQUIRED ON)
+SET(CMAKE_CXX_EXTENSIONS OFF)
 
+# Add profiling flags if enabled
+IF(ENABLE_PROFILING AND "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg -g")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg -g")
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+    MESSAGE(STATUS "Profiling enabled with gprof")
+ENDIF()
 
 # Set additional C++ flags for supported compilers.
 IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Ob2")
 ELSEIF (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
+    #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -march=native -msse2 -ffast-math -fPIC -Wall")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse -O3 -msse2 -fPIC -Wall")
 ELSEIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ansi -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
+    #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -frounding-math -fsignaling-nans -mfpmath=sse -march=native -msse2 -O3 -ffast-math -fPIC -Wall")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -frounding-math -fsignaling-nans -mfpmath=sse -msse2 -O3 -fPIC -Wall")
 ENDIF ()
 
 # Include path to the headers of StreamVorti.
@@ -41,13 +53,28 @@ SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/stream_vorti.hpp )
 # Find dependencies of StreamVorti.
 # -------------------------
 
-# Find CGAL.
+# Find CGAL
+# See https://doc.cgal.org/latest/Manual/devman_create_and_use_a_cmakelist.html
 FIND_PACKAGE(CGAL  REQUIRED COMPONENTS Core)
-INCLUDE(${CGAL_USE_FILE})
+MESSAGE(STATUS "Found CGAL version ${CGAL_VERSION}")
+IF (CGAL_VERSION VERSION_LESS "5.0")
+    MESSAGE(FATAL_ERROR "CGAL version 5.0 or higher is required")
+ENDIF()
 
 # Find Eigen
 FIND_PACKAGE(Eigen3  REQUIRED)
 INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIRS})
+
+# Find OpenMP
+if(APPLE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(OpenMP_CXX_FLAGS "-fopenmp=libomp")
+        set(OpenMP_CXX_LIB_NAMES "omp")
+        set(OpenMP_omp_LIBRARY omp)
+    endif()
+endif()
+
+FIND_PACKAGE(OpenMP COMPONENTS CXX REQUIRED)
 
 # From https://github.com/GLVis/glvis/blob/9f2df220342d13ef42c2985257ed96ba43f3bb70/CMakeLists.txt
 # Import MFEM. The following variables can be used to help CMake find MFEM:
@@ -62,6 +89,7 @@ else()
    find_package(mfem REQUIRED NAMES MFEM)
 endif()
 message(STATUS "Found mfem config in: ${mfem_DIR} (version ${MFEM_VERSION})")
+
 # Use the same C++ compiler as MFEM. This is needed when MFEM was built using
 # an MPI wrapper and we do not have explicitly the MPI compile and link flags.
 if (NOT CMAKE_CXX_COMPILER AND MFEM_CXX_COMPILER)
@@ -128,12 +156,37 @@ ENDIF()
 
 # MFEM simulation executable.
 ADD_EXECUTABLE(MfemRun  mfem_main.cpp)
+
+target_link_libraries(MfemRun CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targets
+
+IF(OpenMP_CXX_FOUND) # Link with OPENMP
+    message(STATUS "Found OpenMP")
+    #TARGET_LINK_LIBRARIES(MfemRun OpenMP::OpenMP_CXX)
+ENDIF()
+
 IF(STREAMVORTI_BUILD_SHARED_LIBS)
     TARGET_LINK_LIBRARIES(MfemRun  ${PROJECT_NAME})
 ELSE()
     TARGET_LINK_LIBRARIES(MfemRun  ${PROJECT_NAME}_static)
 ENDIF()
 INSTALL(TARGETS MfemRun RUNTIME DESTINATION bin/StreamVorti)
+
+# StreamVorti executable.
+ADD_EXECUTABLE(StreamVorti  streamvorti.cpp)
+
+target_link_libraries(StreamVorti CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targets
+
+IF(OpenMP_CXX_FOUND) # Link with OPENMP
+    message(STATUS "Found OpenMP")
+    #TARGET_LINK_LIBRARIES(StreamVorti OpenMP::OpenMP_CXX)
+ENDIF()
+
+IF(STREAMVORTI_BUILD_SHARED_LIBS)
+    TARGET_LINK_LIBRARIES(StreamVorti  ${PROJECT_NAME})
+ELSE()
+    TARGET_LINK_LIBRARIES(StreamVorti  ${PROJECT_NAME}_static)
+ENDIF()
+INSTALL(TARGETS StreamVorti RUNTIME DESTINATION bin/StreamVorti)
 
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
 INSTALL(FILES ${HEADERS} DESTINATION include/StreamVorti)
