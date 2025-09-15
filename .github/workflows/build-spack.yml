@@ -65,7 +65,7 @@ jobs:
         path: |
           ~/spack/var/spack/cache
           ~/spack/opt/spack
-        key: spack-packages-${{ runner.os }}-${{ hashFiles('.github/workflows/build-spack.yml') }}-v2
+        key: spack-packages-${{ runner.os }}-${{ hashFiles('.github/workflows/build-spack.yml') }}
         restore-keys: |
           spack-packages-${{ runner.os }}-
 
@@ -110,6 +110,14 @@ jobs:
         spack load doxygen
         spack load graphviz
         spack load cmake
+
+    - name: Cache ccache
+      uses: actions/cache@v3
+      with:
+        path: ~/.ccache
+        key: ccache-spack-${{ runner.os }}
+        restore-keys: |
+          ccache-spack-${{ runner.os }}
 
     - name: Setup build environment
       run: |

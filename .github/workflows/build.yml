@@ -57,7 +57,7 @@ jobs:
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ runner.os }}-streamvorti-ccache
+        key: ${{ runner.os }}-notspack-ccache
         max-size: "2G"
         verbose: 2
 
@@ -118,7 +118,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: /opt/mfem/${{ env.MFEM_TOP_DIR }}
-        key: ${{ env.MFEM_TOP_DIR }}-hypre-metis-${{ runner.os }}-v4
+        key: ${{ env.MFEM_TOP_DIR }}-hypre-metis-${{ runner.os }}
 
     - name: Build and install MFEM 4.8
       if: steps.cache-mfem.outputs.cache-hit != 'true'
