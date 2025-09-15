@@ -120,13 +120,17 @@ jobs:
         MFEM_DIR=$(spack location -i mfem)
         echo "MFEM_DIR=$MFEM_DIR"
 
+        # Find MFEM cmake config
+        MFEM_CMAKE_DIR=$(find $MFEM_DIR -name "MFEMConfig.cmake" -o -name "mfem-config.cmake" | head -n1 | xargs dirname)
+        echo "MFEM_CMAKE_DIR=$MFEM_CMAKE_DIR"
+
         # Create build directory
         mkdir build
         cd build
 
         # Configure with CMake from Spack
         cmake \
-          -DMFEM_DIR=$MFEM_DIR \
+          -Dmfem_DIR=$MFEM_CMAKE_DIR \
           -DCMAKE_BUILD_TYPE=Release \
           ..
 
