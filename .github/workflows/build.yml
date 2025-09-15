@@ -16,9 +16,11 @@ on:
   pull_request:
     branches: [ main ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+# With caching this workflow typically takes less than 5 minutes to run
+# so we don't need to limit concurrency too much.
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+#   cancel-in-progress: true
 
 env:
   HYPRE_URL: 'https://github.com/hypre-space/hypre/archive'
