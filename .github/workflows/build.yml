@@ -20,6 +20,7 @@ jobs:
         sudo apt-get install -y \
           build-essential \
           cmake \
+          ccache \
           libopenmpi-dev \
           openmpi-bin \
           liblapack-dev \
@@ -34,6 +35,21 @@ jobs:
       run: |
         sudo ln -sf /usr/include/eigen3/Eigen /usr/include/Eigen
         sudo ln -sf /usr/include/eigen3/unsupported /usr/include/unsupported
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ runner.os }}-ccache
+        max-size: "2G"
+        verbose: 2
+
+    - name: Configure ccache
+      run: |
+        echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=include_file_ctime,include_file_mtime,time_macros
+        ccache --show-config
+        ccache -z
 
     - name: Cache MFEM build
       id: cache-mfem
@@ -62,6 +78,8 @@ jobs:
           -DMFEM_USE_SUITESPARSE=YES \
           -DMFEM_USE_ZLIB=YES \
           -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           ../mfem-4.8
 
         make -j$(nproc)
@@ -79,9 +97,17 @@ jobs:
           -DMFEM_DIR=/opt/mfem/mfem-4.8 \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           ..
 
         make -j$(nproc)
+
+    - name: Display ccache statistics
+      run: |
+        ccache -s
+        echo "Cache hit rate information:"
+        ccache --show-stats
 
     - name: Run tests
       run: |
