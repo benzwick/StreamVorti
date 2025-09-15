@@ -1,3 +1,12 @@
+# GitHub Actions workflow for building StreamVorti with MFEM
+#
+# Based on official MFEM workflows and actions:
+# - https://github.com/mfem/mfem/blob/master/.github/workflows/builds-and-tests.yml
+# - https://github.com/mfem/github-actions/blob/master/build-mfem/action.yml
+# - https://github.com/mfem/github-actions/blob/master/build-hypre/action.yml
+# - https://github.com/mfem/github-actions/blob/master/build-metis/action.yml
+# - https://github.com/mfem/mfem/blob/master/INSTALL
+
 name: Build StreamVorti
 
 on:
@@ -5,6 +14,13 @@ on:
     branches: [ main, master, develop, "bz-*" ]
   pull_request:
     branches: [ main, master, develop ]
+
+env:
+  HYPRE_ARCHIVE: v2.19.0
+  HYPRE_TOP_DIR: hypre-2.19.0
+  METIS_ARCHIVE: metis-4.0.3.tar.gz
+  METIS_TOP_DIR: metis-4.0.3
+  MFEM_TOP_DIR: mfem-4.8
 
 jobs:
   build:
@@ -28,8 +44,6 @@ jobs:
           zlib1g-dev \
           libcgal-dev \
           libeigen3-dev \
-          libhypre-dev \
-          libmetis-dev \
           doxygen \
           graphviz
 
@@ -53,55 +67,105 @@ jobs:
         ccache --show-config
         ccache -z
 
+    # Build HYPRE (required for parallel MFEM)
+    - name: Cache HYPRE build
+      id: cache-hypre
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.HYPRE_TOP_DIR }}
+        key: ${{ env.HYPRE_TOP_DIR }}-${{ runner.os }}
+
+    - name: Build HYPRE
+      if: steps.cache-hypre.outputs.cache-hit != 'true'
+      run: |
+        # Download and extract HYPRE
+        wget https://github.com/hypre-space/hypre/archive/${{ env.HYPRE_ARCHIVE }}.tar.gz
+        tar -xzf ${{ env.HYPRE_ARCHIVE }}.tar.gz
+        cd ${{ env.HYPRE_TOP_DIR }}/src
+
+        # Configure and build HYPRE
+        ./configure --prefix=$PWD/../install CC=mpicc CXX=mpic++
+        make -j$(nproc)
+        make install
+
+    # Build METIS (optional but recommended for MFEM)
+    - name: Cache METIS build
+      id: cache-metis
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.METIS_TOP_DIR }}
+        key: ${{ env.METIS_TOP_DIR }}-${{ runner.os }}
+
+    - name: Build METIS
+      if: steps.cache-metis.outputs.cache-hit != 'true'
+      run: |
+        # Download and extract METIS
+        wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/OLD/${{ env.METIS_ARCHIVE }}
+        tar -xzf ${{ env.METIS_ARCHIVE }}
+        cd ${{ env.METIS_TOP_DIR }}
+
+        # Build METIS library
+        make -C Lib CC=mpicc OPTFLAGS="-Wno-error=implicit-function-declaration -O2"
+
+    # Build MFEM with all dependencies
     - name: Cache MFEM build
       id: cache-mfem
       uses: actions/cache@v3
       with:
-        path: /opt/mfem/mfem-4.8
-        key: mfem-4.8-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yml') }}
+        path: /opt/mfem/${{ env.MFEM_TOP_DIR }}
+        key: ${{ env.MFEM_TOP_DIR }}-hypre-metis-${{ runner.os }}-v4
 
     - name: Build and install MFEM 4.8
       if: steps.cache-mfem.outputs.cache-hit != 'true'
       run: |
-        # Clone MFEM
-        git clone https://github.com/mfem/mfem.git mfem-4.8
-        cd mfem-4.8
+        # Clone MFEM repository
+        git clone https://github.com/mfem/mfem.git ${{ env.MFEM_TOP_DIR }}
+        cd ${{ env.MFEM_TOP_DIR }}
         git checkout v4.8
         cd ..
 
-        # Build MFEM
-        mkdir mfem-4.8-build
-        cd mfem-4.8-build
+        # Create build directory (following MFEM's approach)
+        mkdir mfem-build
+        cd mfem-build
 
+        # Configure MFEM with CMake
         cmake \
-          -DCMAKE_INSTALL_PREFIX=/opt/mfem/mfem-4.8 \
-          -DMFEM_USE_LAPACK=YES \
+          -DCMAKE_INSTALL_PREFIX=/opt/mfem/${{ env.MFEM_TOP_DIR }} \
+          -DCMAKE_BUILD_TYPE=Release \
           -DMFEM_USE_MPI=YES \
+          -DHYPRE_DIR=$PWD/../${{ env.HYPRE_TOP_DIR }}/install \
+          -DMFEM_USE_METIS=YES \
+          -DMETIS_DIR=$PWD/../${{ env.METIS_TOP_DIR }} \
+          -DMFEM_USE_LAPACK=YES \
           -DMFEM_USE_SUITESPARSE=YES \
           -DMFEM_USE_ZLIB=YES \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          ../mfem-4.8
+          ../${{ env.MFEM_TOP_DIR }}
 
+        # Build and install
         make -j$(nproc)
         sudo make install
 
+        # Clean up source directories to save space
         cd ..
-        rm -rf mfem-4.8 mfem-4.8-build
+        rm -rf ${{ env.MFEM_TOP_DIR }} mfem-build
 
     - name: Build StreamVorti
       run: |
         mkdir build
         cd build
 
+        # Configure StreamVorti with MFEM
         cmake \
-          -DMFEM_DIR=/opt/mfem/mfem-4.8 \
+          -DMFEM_DIR=/opt/mfem/${{ env.MFEM_TOP_DIR }} \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           ..
 
+        # Build
         make -j$(nproc)
 
     - name: Display ccache statistics
