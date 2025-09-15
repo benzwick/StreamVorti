@@ -1,5 +1,22 @@
 # GitHub Actions workflow for building StreamVorti with MFEM
 #
+# This workflow builds StreamVorti with MFEM and dependencies from source.
+#
+# WHAT IS CACHED:
+# - HYPRE: Built library in install directory
+# - METIS: Built library files
+# - MFEM: Complete installation in /opt/mfem/
+# - ccache: Compiler cache (via hendrikmuhs/ccache-action)
+#
+# WHAT IS NOT CACHED:
+# - StreamVorti executables (rebuilt each run to test the build)
+# - System packages from apt-get
+#
+# TRIGGERS:
+# - Manual workflow_dispatch
+# - Push to main branch
+# - Pull requests to main branch
+#
 # Based on official MFEM workflows and actions:
 # - https://github.com/mfem/mfem/blob/master/.github/workflows/builds-and-tests.yml
 # - https://github.com/mfem/github-actions/blob/master/build-mfem/action.yml
