@@ -1,0 +1,203 @@
+name: Build StreamVorti with Spack
+
+on:
+  push:
+    branches: [ main, master, develop, "bz-*" ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build-with-spack:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install system prerequisites for Spack
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          ca-certificates \
+          coreutils \
+          curl \
+          environment-modules \
+          gfortran \
+          git \
+          gpg \
+          lsb-release \
+          python3 \
+          python3-distutils \
+          python3-venv \
+          unzip \
+          zip \
+          ccache
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ runner.os }}-spack-ccache
+        max-size: "4G"
+        verbose: 2
+
+    - name: Cache Spack installation
+      id: cache-spack
+      uses: actions/cache@v3
+      with:
+        path: ~/spack
+        key: spack-${{ runner.os }}-${{ hashFiles('.github/workflows/build-spack.yml') }}
+        restore-keys: |
+          spack-${{ runner.os }}-
+
+    - name: Install Spack
+      if: steps.cache-spack.outputs.cache-hit != 'true'
+      run: |
+        git clone -c feature.manyFiles=true https://github.com/spack/spack.git ~/spack
+        echo "source ~/spack/share/spack/setup-env.sh" >> ~/.bashrc
+
+    - name: Configure Spack
+      run: |
+        source ~/spack/share/spack/setup-env.sh
+
+        # Configure Spack to use system compilers
+        spack compiler find
+
+        # Configure ccache
+        spack config add "config:ccache: true"
+
+        # Add binary mirror for faster installs
+        spack mirror add binary_mirror https://binaries.spack.io/releases/v0.21
+        spack buildcache keys --install --trust
+
+    - name: Cache Spack packages
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/spack/var/spack/cache
+          ~/spack/opt/spack
+        key: spack-packages-${{ runner.os }}-${{ hashFiles('.github/workflows/build-spack.yml') }}-v2
+        restore-keys: |
+          spack-packages-${{ runner.os }}-
+
+    - name: Install MFEM and dependencies with Spack
+      run: |
+        source ~/spack/share/spack/setup-env.sh
+
+        # Install MFEM 4.8 with all required features
+        # Note: @4.8 might not be available, using @4.7 as fallback
+        spack install mfem@4.7 \
+          +mpi \
+          +hypre \
+          +metis \
+          +lapack \
+          +suite-sparse \
+          +zlib \
+          ^openmpi \
+          ^hypre+mpi \
+          ^metis+int64 \
+          ^suite-sparse
+
+        # Install additional dependencies for StreamVorti
+        spack install cgal
+        spack install eigen
+
+        # Load the modules
+        spack load mfem
+        spack load cgal
+        spack load eigen
+        spack load openmpi
+
+    - name: Create Eigen symlinks
+      run: |
+        source ~/spack/share/spack/setup-env.sh
+        spack load eigen
+        EIGEN_ROOT=$(spack location -i eigen)
+        sudo ln -sf $EIGEN_ROOT/include/eigen3/Eigen /usr/include/Eigen
+        sudo ln -sf $EIGEN_ROOT/include/eigen3/unsupported /usr/include/unsupported
+
+    - name: Build StreamVorti
+      run: |
+        source ~/spack/share/spack/setup-env.sh
+
+        # Load all required modules
+        spack load mfem
+        spack load cgal
+        spack load eigen
+        spack load openmpi
+        spack load suite-sparse
+
+        # Get installation paths
+        MFEM_DIR=$(spack location -i mfem)
+        echo "MFEM_DIR=$MFEM_DIR"
+
+        # Create build directory
+        mkdir build
+        cd build
+
+        # Configure with CMake
+        cmake \
+          -DMFEM_DIR=$MFEM_DIR \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          ..
+
+        # Build
+        make -j$(nproc) VERBOSE=1
+
+    - name: Display ccache statistics
+      run: |
+        ccache -s
+        echo "Cache hit rate information:"
+        ccache --show-stats
+
+    - name: Run tests
+      run: |
+        source ~/spack/share/spack/setup-env.sh
+        spack load mfem
+        spack load cgal
+        spack load eigen
+        spack load openmpi
+
+        cd build
+        ctest --output-on-failure || true
+
+    - name: Check built artifacts
+      run: |
+        echo "Checking built executables and libraries:"
+        ls -la build/
+        ls -la build/lib/StreamVorti/ || true
+
+        if [ -f build/MfemRun ]; then
+          echo "MfemRun executable built successfully"
+          ldd build/MfemRun
+        else
+          echo "WARNING: MfemRun executable not found"
+        fi
+
+        if [ -f build/StreamVorti ]; then
+          echo "StreamVorti executable built successfully"
+          ldd build/StreamVorti
+        else
+          echo "WARNING: StreamVorti executable not found"
+        fi
+
+        if [ -f build/lib/StreamVorti/libStreamVorti_static.a ]; then
+          echo "StreamVorti static library built successfully"
+          file build/lib/StreamVorti/libStreamVorti_static.a
+        else
+          echo "WARNING: StreamVorti static library not found"
+        fi
+
+    - name: Show Spack environment info
+      if: always()
+      run: |
+        source ~/spack/share/spack/setup-env.sh
+        echo "=== Spack Specs ==="
+        spack find
+        echo "=== Loaded Modules ==="
+        spack find --loaded
+        echo "=== MFEM Configuration ==="
+        spack spec mfem || true
