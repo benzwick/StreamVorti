@@ -95,7 +95,7 @@ jobs:
         # Install additional dependencies for StreamVorti
         spack install cgal@6.0
         spack install eigen@3.4
-        spack install cmake
+        spack install cmake@3.31
 
         # Load all the modules
         spack load ccache
