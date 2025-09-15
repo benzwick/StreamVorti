@@ -106,7 +106,7 @@ jobs:
         spack load eigen
         spack load openmpi
         spack load suite-sparse
-        spack load cmake
+        spack load cmake@3.31
 
     - name: Cache ccache
       uses: actions/cache@v3
@@ -135,7 +135,7 @@ jobs:
 
         # Load all required modules
         spack load ccache
-        spack load cmake
+        spack load cmake@3.31
         spack load mfem
         spack load cgal
         spack load eigen
