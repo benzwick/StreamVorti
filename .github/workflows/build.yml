@@ -16,8 +16,10 @@ on:
     branches: [ main, master, develop ]
 
 env:
+  HYPRE_URL: 'https://github.com/hypre-space/hypre/archive'
   HYPRE_ARCHIVE: v2.19.0
   HYPRE_TOP_DIR: hypre-2.19.0
+  METIS_URL: 'https://mfem.github.io/tpls'
   METIS_ARCHIVE: metis-4.0.3.tar.gz
   METIS_TOP_DIR: metis-4.0.3
   MFEM_TOP_DIR: mfem-4.8
@@ -79,7 +81,7 @@ jobs:
       if: steps.cache-hypre.outputs.cache-hit != 'true'
       run: |
         # Download and extract HYPRE
-        wget https://github.com/hypre-space/hypre/archive/${{ env.HYPRE_ARCHIVE }}.tar.gz
+        wget ${{ env.HYPRE_URL }}/${{ env.HYPRE_ARCHIVE }}.tar.gz
         tar -xzf ${{ env.HYPRE_ARCHIVE }}.tar.gz
         cd ${{ env.HYPRE_TOP_DIR }}/src
 
@@ -100,7 +102,7 @@ jobs:
       if: steps.cache-metis.outputs.cache-hit != 'true'
       run: |
         # Download and extract METIS
-        wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/OLD/${{ env.METIS_ARCHIVE }}
+        wget ${{ env.METIS_URL }}/${{ env.METIS_ARCHIVE }}
         tar -xzf ${{ env.METIS_ARCHIVE }}
         cd ${{ env.METIS_TOP_DIR }}
 
