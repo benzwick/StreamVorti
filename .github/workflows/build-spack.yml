@@ -90,7 +90,13 @@ jobs:
         # Install additional dependencies for StreamVorti
         spack install cgal
         spack install eigen
-        spack install doxygen
+
+        # Install fmt first (doxygen dependency)
+        spack install fmt
+
+        # Install doxygen with fmt dependency
+        spack install doxygen ^fmt
+
         spack install graphviz
         spack install cmake
 
