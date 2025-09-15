@@ -14,7 +14,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install system prerequisites for Spack
+    - name: Install minimal system prerequisites for Spack
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -30,15 +30,8 @@ jobs:
           python3 \
           python3-venv \
           unzip \
-          zip \
-          ccache
+          zip
 
-    - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: ${{ runner.os }}-spack-ccache
-        max-size: "4G"
-        verbose: 2
 
     - name: Cache Spack installation
       id: cache-spack
@@ -62,9 +55,6 @@ jobs:
         # Configure Spack to use system compilers
         spack compiler find
 
-        # Configure ccache
-        spack config add "config:ccache: true"
-
         # Add binary mirror for faster installs
         spack mirror add binary_mirror https://binaries.spack.io/releases/v0.21
         spack buildcache keys --install --trust
@@ -79,17 +69,18 @@ jobs:
         restore-keys: |
           spack-packages-${{ runner.os }}-
 
-    - name: Install MFEM and dependencies with Spack
+    - name: Install all dependencies with Spack
       run: |
         source ~/spack/share/spack/setup-env.sh
+
+        # Install ccache through Spack
+        spack install ccache
 
         # Install MFEM 4.8 with all required features
         spack install mfem@4.8 \
           +mpi \
-          +hypre \
           +metis \
           +lapack \
-          +suite-sparse \
           +zlib \
           ^openmpi \
           ^hypre+mpi \
@@ -99,26 +90,41 @@ jobs:
         # Install additional dependencies for StreamVorti
         spack install cgal
         spack install eigen
+        spack install doxygen
+        spack install graphviz
+        spack install cmake
 
-        # Load the modules
+        # Load all the modules
+        spack load ccache
         spack load mfem
         spack load cgal
         spack load eigen
         spack load openmpi
+        spack load suite-sparse
+        spack load doxygen
+        spack load graphviz
+        spack load cmake
 
-    - name: Create Eigen symlinks
+    - name: Setup build environment
       run: |
         source ~/spack/share/spack/setup-env.sh
-        spack load eigen
-        EIGEN_ROOT=$(spack location -i eigen)
-        sudo ln -sf $EIGEN_ROOT/include/eigen3/Eigen /usr/include/Eigen
-        sudo ln -sf $EIGEN_ROOT/include/eigen3/unsupported /usr/include/unsupported
+
+        # Load ccache and configure it
+        spack load ccache
+        export PATH=$(spack location -i ccache)/bin:$PATH
+        ccache --set-config=cache_dir=$HOME/.ccache
+        ccache --set-config=max_size=4G
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=include_file_ctime,include_file_mtime,time_macros
+        ccache -z
 
     - name: Build StreamVorti
       run: |
         source ~/spack/share/spack/setup-env.sh
 
         # Load all required modules
+        spack load ccache
+        spack load cmake
         spack load mfem
         spack load cgal
         spack load eigen
@@ -127,19 +133,21 @@ jobs:
 
         # Get installation paths
         MFEM_DIR=$(spack location -i mfem)
+        CCACHE_PATH=$(spack location -i ccache)/bin/ccache
         echo "MFEM_DIR=$MFEM_DIR"
+        echo "CCACHE_PATH=$CCACHE_PATH"
 
         # Create build directory
         mkdir build
         cd build
 
-        # Configure with CMake
+        # Configure with CMake from Spack
         cmake \
           -DMFEM_DIR=$MFEM_DIR \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=$CCACHE_PATH \
+          -DCMAKE_C_COMPILER_LAUNCHER=$CCACHE_PATH \
           ..
 
         # Build
@@ -147,6 +155,8 @@ jobs:
 
     - name: Display ccache statistics
       run: |
+        source ~/spack/share/spack/setup-env.sh
+        spack load ccache
         ccache -s
         echo "Cache hit rate information:"
         ccache --show-stats
