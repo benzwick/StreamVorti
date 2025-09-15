@@ -89,8 +89,8 @@ jobs:
           ^suite-sparse
 
         # Install additional dependencies for StreamVorti
-        spack install cgal
-        spack install eigen
+        spack install cgal@6.0
+        spack install eigen@3.4
 
         # Install fmt first (doxygen dependency)
         spack install fmt
