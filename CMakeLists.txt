@@ -53,10 +53,13 @@ SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/stream_vorti.hpp )
 # Find dependencies of StreamVorti.
 # -------------------------
 
-# Find CGAL.
+# Find CGAL
+# See https://doc.cgal.org/latest/Manual/devman_create_and_use_a_cmakelist.html
 FIND_PACKAGE(CGAL  REQUIRED COMPONENTS Core)
-INCLUDE(${CGAL_USE_FILE})
-
+MESSAGE(STATUS "Found CGAL version ${CGAL_VERSION}")
+IF (CGAL_VERSION VERSION_LESS "5.0")
+    MESSAGE(FATAL_ERROR "CGAL version 5.0 or higher is required")
+ENDIF()
 
 # Find Eigen
 FIND_PACKAGE(Eigen3  REQUIRED)
