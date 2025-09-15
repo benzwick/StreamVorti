@@ -77,11 +77,8 @@ jobs:
           -DCMAKE_INSTALL_PREFIX=/opt/mfem/mfem-4.8 \
           -DMFEM_USE_LAPACK=YES \
           -DMFEM_USE_MPI=YES \
-          -DMFEM_USE_HYPRE=YES \
-          -DMFEM_USE_METIS=YES \
           -DMFEM_USE_SUITESPARSE=YES \
           -DMFEM_USE_ZLIB=YES \
-          -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           ../mfem-4.8
