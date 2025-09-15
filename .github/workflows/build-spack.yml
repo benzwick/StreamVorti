@@ -85,8 +85,7 @@ jobs:
         source ~/spack/share/spack/setup-env.sh
 
         # Install MFEM 4.8 with all required features
-        # Note: @4.8 might not be available, using @4.7 as fallback
-        spack install mfem@4.7 \
+        spack install mfem@4.8 \
           +mpi \
           +hypre \
           +metis \
