@@ -69,9 +69,10 @@ jobs:
           libsuitesparse-dev \
           zlib1g-dev \
           libcgal-dev \
-          libeigen3-dev \
-          doxygen \
-          graphviz
+          libeigen3-dev
+          # These are used for building documentation only
+          # doxygen \
+          # graphviz
 
     - name: Create Eigen symlinks
       run: |
