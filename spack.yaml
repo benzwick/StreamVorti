@@ -5,8 +5,19 @@
 spack:
   # add package specs to the `specs` list
   specs:
-  - hypre
-  - metis
+  - mfem+suite-sparse+superlu-dist+openmp+mpi%gcc@14.3.0
+  - cgal%gcc@14.3.0
+  - eigen%gcc@14.3.0
   view: true
   concretizer:
     unify: true
+  packages:
+    gcc:
+      externals:
+      - spec: gcc@14.3.0 languages:='c,c++,fortran'
+        prefix: /uwahpc/rocky9/devel/compiler/gcc/14.3.0
+        extra_attributes:
+          compilers:
+            c: /uwahpc/rocky9/devel/compiler/gcc/14.3.0/bin/gcc
+            cxx: /uwahpc/rocky9/devel/compiler/gcc/14.3.0/bin/g++
+            fortran: /uwahpc/rocky9/devel/compiler/gcc/14.3.0/bin/gfortran
