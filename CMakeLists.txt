@@ -1,15 +1,10 @@
-#--------------------------------------------------------------
-CMAKE_MINIMUM_REQUIRED(VERSION 4.0)
+cmake_minimum_required(VERSION 3.18)
+project(StreamVorti VERSION 2.0.0 LANGUAGES CXX)
 
-IF(POLICY CMP0181)
-  CMAKE_POLICY(SET CMP0181 NEW) # CMake 3.30
-ENDIF()
-
-PROJECT(StreamVorti VERSION 2.0.0)
-
-
-# Set project's CMake modules path
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules")
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Library compilation options.
 OPTION(STREAMVORTI_BUILD_SHARED_LIBS "Build as shared library" OFF )
