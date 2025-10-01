@@ -23,34 +23,29 @@
  */
 
 // Demo usage:
-//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -sm -sn -sd -sdd -ss -pv
+//     ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -Re 1000 -solver umfpack -sm -sn -sd -sdd -ss -pv
 
 #include <StreamVorti/stream_vorti.hpp>
 #include "mfem.hpp"
-
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+#include <iomanip>
+#include <sstream>
 
-
-// modular main structure
-// 1. init parameters: mesh, FES, DCPSE derives
-// 2. CreateOrLoadMesh()
-// 3. Set up FES
-// 3. Initialise DCPSE
-// 4. Save derivative matrices
-// 5. save neighbours
-
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 
 // Stream-Vorti simulation (vorticity, Gersc time step, boundary condition)
 // 1. get DCPSE derivative matrices - DONE
 // 2. Define boundaries (use MFEM method) - DONE
 // Initialize vorticity and stream function -DONE
-// Linear solver (Mfem example)
+// set up Linear solver (Mfem example)
 // 3. update vorticty (eq. 11)
 // apply boundary condition
 // 4. compute Gershgorin time step (2.6)
@@ -59,21 +54,33 @@
 // run simulation (main time steps for loop)
 // save solution
 
-
 // Simulation parameters structure
 struct SimulationParams {
-    double final_time = 60.0;
-    double dt = 1e-3;
+    double final_time = 60000.0;
+    double dt = 1e-2;
     double reynolds_number = 1000.0;
 
     std::string output_prefix = "mfem_square10x10";
     std::string output_extension = ".dat";
 
+    // Solution output
     int output_frequency = 100;
+
+    // Adaptive timestep options
     int gershgorin_frequency = 1000;
     bool enable_adaptive_timestep = true;
     double gershgorin_safety_factor = 5.0;
 
+    // Linear solver options
+    std::string linear_solver = "umfpack";
+    int solver_max_iter = 500;
+    double solver_rel_tol = 1e-12;
+    int solver_print_level = 0;
+
+    // Convergence parameters
+    double steady_state_tol = 1e-6;
+    int steady_state_freq = 1000;
+    int steady_state_checks = 3;
 };
 
 // Function declarations
@@ -89,12 +96,6 @@ void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                             std::vector<int>& right_nodes, std::vector<int>& top_nodes,
                             std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
 
-// create Laplacian matrix
-mfem::SparseMatrix CreateLaplacianMatrix(const mfem::SparseMatrix dxx_matrix, const mfem::SparseMatrix dyy_matrix);
-static void ApplyDirichletBC(mfem::SparseMatrix& matrix, const std::vector<int>& boundary_nodes);
-mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
-                                        const mfem::SparseMatrix dxx_matrix,
-                                        const mfem::SparseMatrix dyy_matrix);
 
 // simulation
 void UpdateVorticity(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
@@ -105,16 +106,14 @@ void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::ve
                            const std::vector<int>& top_nodes, const std::vector<int>& left_nodes,
                            const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                            const mfem::Vector& streamfunction, mfem::Vector& vorticity);
-void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem::Vector& vorticity,
-                        const std::vector<int>& boundary_nodes, mfem::Vector& streamfunction);
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                                 const mfem::Vector& streamfunction, double reynolds_number);
 void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& streamfunction, const std::string& filename, int timestep, std::string dat_dir);
-
-// visulisation
-#include <iomanip>
-#include <sstream>
+mfem::Solver* CreateLinearSolver(const std::string& solver_type, const mfem::SparseMatrix& A, const SimulationParams& params);
+bool CheckSteadyState(const mfem::Vector& vorticity, const mfem::Vector& streamfunction,
+                      int timestep, double dt,
+                      double tolerance, int check_freq, int required_checks);
 
 
 int main(int argc, char *argv[])
@@ -122,20 +121,21 @@ int main(int argc, char *argv[])
     // Options
     const char *mesh_file = "";
     int order = 1;
-    bool visualization = 1;
+    // bool visualization = 1;
 
     // Output filename prefix and extension
     std::string fname = "mfem_square10x10";
     std::string fext = ".dat";
 
     // DC PSE parameters
-    int NumNeighbors = 10;
+    double reynolds_number = 1000.0;
+    int NumNeighbors = 25;
 
     // Mesh generation
     int dim = 2;
-    int nx = 10;
-    int ny = 10;
-    int nz = 10;
+    int nx = 20;
+    int ny = 20;
+    int nz = 0;
     double sx = 1.0;
     double sy = 1.0;
     double sz = 1.0;
@@ -147,12 +147,14 @@ int main(int argc, char *argv[])
     bool save_dd = false;       // all 2nd derivatives (Hessian)
     bool save_solutions = false;
 
-    int vtu_frequency = 1000;
-    bool save_vtu = false;
+    // Solver options
+    std::string solver_type = "umfpack";
+    int solver_max_iter = 500;
+    double solver_rel_tol = 1e-10;
+    int solver_print_level = 1;
 
     bool paraview_output = false;
     std::string paraview_filename = fname;
-
 
     // Simulation parameters
     SimulationParams params;
@@ -177,9 +179,9 @@ int main(int argc, char *argv[])
                    "Mesh size in y direction.");
     args.AddOption(&sz, "-sz", "--size-z",
                    "Mesh size in z direction.");
-    args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
-                   "--no-visualization",
-                   "Enable or disable GLVis visualization.");
+    // args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
+    //                "--no-visualization",
+    //                "Enable or disable GLVis visualization.");
     args.AddOption(&NumNeighbors, "-nn", "--num-neighbors",
                     "Number of neighbors for DCPSE.");
     args.AddOption(&save_mesh,
@@ -197,13 +199,19 @@ int main(int argc, char *argv[])
     args.AddOption(&save_solutions,
                    "-ss", "--save-solutions", "-no-ss", "--no-save-solutions",
                    "Save simuation solutions to file.");
-    args.AddOption(&vtu_frequency, "-vf", "--vtu-frequency",
-                   "Frequency for VTU output (every N timesteps).");
-    args.AddOption(&save_vtu, "-vtu", "--save-vtu", "-no-vtu", "--no-save-vtu",
-                   "Enable VTU output for ParaView.");
     args.AddOption(&paraview_output, "-pv", "--paraview", "-no-pv",
                   "--no-paraview",
                   "Enable or disable ParaView output.");
+    args.AddOption(&reynolds_number, "-Re", "--reynolds-number",
+                    "Reynolds number of simulating fluid.");
+    args.AddOption(&solver_type, "-solver", "--linear-solver",
+                   "Linear solver: umfpack, cg, gmres, minres, bicgstab, hypre (if available)");
+    args.AddOption(&solver_max_iter, "-maxit", "--max-iterations",
+                   "Maximum iterations for iterative solvers");
+    args.AddOption(&solver_rel_tol, "-tol", "--solver-tolerance",
+                   "Relative tolerance for iterative solvers");
+    args.AddOption(&solver_print_level, "-spl", "--solver-print-level",
+                   "Solver print level (0=quiet, 1=summary, 2=detailed)");
     args.Parse();
 
     if (!args.Good())
@@ -229,9 +237,6 @@ int main(int argc, char *argv[])
         std::ofstream mesh_ofs(fname+".mesh");
         mesh_ofs.precision(8);
         mesh->Print(mesh_ofs);
-        // Save mesh as VTU format for ParaView
-        //mesh->PrintVTU(fname+".elem");
-        //mesh->PrintBdrVTU(fname+".bdr");
     }
 
     // Set up finite element space
@@ -256,7 +261,7 @@ int main(int argc, char *argv[])
     }
 
 
-    /*********************** Simulation *************************/
+    /*********************** Simulation  Setup  *************************/
 
     // Ensure we have a 2D DCPSE object first
     StreamVorti::Dcpse2d* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(derivs);
@@ -278,7 +283,7 @@ int main(int argc, char *argv[])
     IdentifyBoundaryNodesLDC(mesh, bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes);
 
 
-    /****************** Streamfunction *******************/
+    /*********************  Streamfunction Initialization   ***************************/
     // Initialise solution fields
     mfem::Vector vorticity, streamfunction, STREAMFUNCTION;
     const int num_nodes = mesh->GetNV();
@@ -301,16 +306,36 @@ int main(int argc, char *argv[])
     all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
 
     // Create Laplacian matrix with boundary conditions for streamfunction equation
-    mfem::SparseMatrix laplacian_matrix = CreateLaplacianWithBC(all_boundary_nodes, dxx_matrix, dyy_matrix);
+    // Create Laplacian and flip sign
+    mfem::SparseMatrix* laplacian_matrix = new mfem::SparseMatrix(dxx_matrix);
+    laplacian_matrix->Add(1.0, dyy_matrix);
+    *laplacian_matrix *= -1.0;
+
+    // Pre-sort boundary nodes for cache efficiency
+    std::vector<int> boundary_sorted = all_boundary_nodes;
+    std::sort(boundary_sorted.begin(), boundary_sorted.end());
+
+    // Apply BC
+    for (int idx : all_boundary_nodes) {
+        laplacian_matrix->EliminateRow(idx);  // Zeros the row except diagonal
+        laplacian_matrix->Set(idx, idx, 1.0); // Set diagonal
+    }
+    laplacian_matrix->Finalize();
     std::cout << "RunSimulation: Created Laplacian matrix with boundary conditions." << std::endl;
-    //std::cout << "Size of linear system 'Laplacian matrix': " << A->Height() << std::endl;
 
+    // Set up linear solver
+    params.linear_solver = solver_type;
+    params.solver_max_iter = solver_max_iter;
+    params.solver_rel_tol = solver_rel_tol;
 
-    std::cout << "RunSimulation: Running " << num_timesteps << " time steps..." << std::endl;
-    mfem::StopWatch sim_timer;
-    sim_timer.Start();
+    mfem::Solver* linear_solver = CreateLinearSolver(params.linear_solver, *laplacian_matrix, params);
+    if (!linear_solver) {
+        MFEM_ABORT("Failed to create linear solver");
+    }
 
-     // Paraview output file
+    mfem::Vector rhs;
+
+    /*********************** Paraview Output Setup *************************/
 
     // Calculate velocity from streamfunction
     mfem::Vector u_velocity(streamfunction.Size());
@@ -321,7 +346,6 @@ int main(int argc, char *argv[])
     v_velocity *= -1.0;
 
     // Create finite element spaces
-    //mfem::H1_FECollection fec(1, mesh->Dimension());
     mfem::FiniteElementSpace scalar_fes(const_cast<mfem::Mesh*>(mesh), &fec, 1);
     mfem::FiniteElementSpace vector_fes(const_cast<mfem::Mesh*>(mesh), &fec, mesh->Dimension());
 
@@ -353,28 +377,58 @@ int main(int argc, char *argv[])
         std::cout << "Created ParaView output directory: " << "ParaView" << std::endl;
     }
 
+    /*********************** Simulation Timestepping Loop *************************/
 
+    std::cout << "RunSimulation: Running " << num_timesteps << " time steps..." << std::endl;
+    mfem::StopWatch sim_timer;
+    sim_timer.Start();
+
+    // #ifdef _OPENMP
+    // int max_threads = omp_get_max_threads();
+    // std::cout << "Using OpenMP with " << max_threads << " threads" << std::endl;
+    // #else
+    // std::cout << "OpenMP NOT enabled (serial execution)" << std::endl;
+    // #endif
+
+    // volatile bool flag=false;
+
+    // #pragma omp parallel for schedule(dynamic, 64)
     // Main simulation loop (implementing Algorithm from Bourantas et al. 2019)
     for (int time_step = 1; time_step <= num_timesteps; ++time_step) {
+        // if(flag) continue;
         double current_time = time_step * current_dt;
 
-        if (time_step % params.output_frequency == 0) {
-            // std::cout << "Time step: " << time_step << " / " << num_timesteps
-            //           << ", t = " << time_step * current_dt
-            //           << ", dt = " << current_dt << std::endl;
-        }
-        /****************** Vorticity *******************/
         // Step 1: Update vorticity using explicit Euler scheme (Equation 11)
-
         UpdateVorticity(dx_matrix, dy_matrix, dxx_matrix, dyy_matrix, streamfunction, vorticity, current_dt, params.reynolds_number);
 
-        // Step 2: Apply vorticity boundary conditions (Equation 33)
+        // Step 2: Solve Poisson equation for streamfunction (Equation 12)
+        // // Set up the Poisson equation: ∇²ψ = -ω (Equation 12 from paper)
+        // Solve Poisson equation: -∇²ψ = ω
+        rhs = vorticity;
+        //rhs *= -1.0;
 
+        // Apply homogeneous Dirichlet boundary conditions: ψ = 0 on all boundaries
+        for (int idx : all_boundary_nodes) {
+            rhs[idx] = 0.0;
+        }
+        // Time the solve
+        // mfem::StopWatch solve_timer;
+        // solve_timer.Start();
+
+        linear_solver->Mult(rhs, streamfunction);
+        // Check if solver converged
+        if (auto* iterative_solver = dynamic_cast<mfem::IterativeSolver*>(linear_solver)) {
+            if (!iterative_solver->GetConverged()) {
+                std::cerr << "Warning: Iterative Solver did not converge at timestep " << time_step
+                        << " (iterations: " << iterative_solver->GetNumIterations() << ")" << std::endl;
+            }
+        }
+
+        // solve_timer.Stop();
+        // std::cout << "Solve time: " << solve_timer.RealTime() << " seconds" << std::endl;
+
+        // Step 3: Apply vorticity boundary conditions (Equation 33)
         ApplyBoundaryConditions(bottom_nodes, right_nodes, top_nodes, left_nodes,dx_matrix, dy_matrix, streamfunction, vorticity);
-
-        // Step 3: Solve Poisson equation for streamfunction (Equation 12)
-
-        SolveStreamFunction(laplacian_matrix,vorticity, all_boundary_nodes, streamfunction);
 
         // Step 4: Adaptive time stepping using Gershgorin circle theorem
         if (params.enable_adaptive_timestep && time_step % params.gershgorin_frequency == 0) {
@@ -395,15 +449,13 @@ int main(int argc, char *argv[])
                              params.output_prefix + "_solution", time_step, dat_dir);
         }
 
-        // Step 6 Save Paraview output
+        // Step 6: Save Paraview output (optional)
         if (paraview_output && (time_step % 100 == 0)) {
-
             // Copy data to grid functions
             for (int i = 0; i < vorticity.Size(); ++i) {
                 vorticity_gf[i] = vorticity[i];
                 streamfunction_gf[i] = streamfunction[i];
             }
-
             // Set velocity components
             for (int i = 0; i < u_velocity.Size(); ++i) {
                 velocity_gf[i] = u_velocity[i];                    // x-component
@@ -411,7 +463,6 @@ int main(int argc, char *argv[])
                     velocity_gf[i + u_velocity.Size()] = v_velocity[i]; // y-component
                 }
             }
-
             // save paraview data
             paraview_dc.SetTime(current_time);
             paraview_dc.SetCycle(time_step);
@@ -419,21 +470,13 @@ int main(int argc, char *argv[])
         }
 
         // Step 7: Check for convergence (steady state)
-        if (time_step > 1000 && time_step % 1000 == 0) {
-            // Compute L2 norm of vorticity change
-            static mfem::Vector prev_vorticity;
-            if (prev_vorticity.Size() == vorticity.Size()) {
-                mfem::Vector diff = vorticity;
-                diff -= prev_vorticity;
-                double change_norm = diff.Norml2() / vorticity.Norml2();
-
-                if (change_norm < 1e-8) {
-                    std::cout << "Converged to steady state at timestep " << time_step
-                              << " (relative change = " << change_norm << ")" << std::endl;
-                    break;
-                }
-            }
-            prev_vorticity = vorticity;
+        if (CheckSteadyState(vorticity, streamfunction, time_step, current_dt,
+                            params.steady_state_tol,
+                            params.steady_state_freq,
+                            params.steady_state_checks)) {
+            std::cout << "Early termination - steady state reached" << std::endl;
+            break;
+            // flag=true;
         }
     }
 
@@ -445,7 +488,6 @@ int main(int argc, char *argv[])
             SaveSolutionToFile(vorticity, streamfunction, params.output_prefix + "_final", num_timesteps, dat_dir);
     }
 
-
     // Output simulation statistics
     std::cout << "Final simulation statistics:" << std::endl;
     std::cout << "  - Final time step size: " << current_dt << std::endl;
@@ -455,24 +497,11 @@ int main(int argc, char *argv[])
     std::cout << "  - Maximum streamfunction: " << streamfunction.Max() << std::endl;
     std::cout << "  - Minimum streamfunction: " << streamfunction.Min() << std::endl;
 
-    /*
-    TODO: visualization on GLVis or Paraview
-    // Send the above data by socket to a GLVis server.  Use the "n" and "b"
-    // keys in GLVis to visualize the displacements.
-    if (visualization) {
-      char vishost[] = "localhost";
-      int  visport   = 19916;
-      socketstream sol_sock(vishost, visport);
-      sol_sock << "parallel " << num_procs << " " << myid << "\n";
-      sol_sock.precision(8);
-      sol_sock << "solution\n" << *pmesh << x << flush;
-    }
-    */
-
-
     // Free the used memory
     delete derivs;
     delete mesh;
+    delete linear_solver;
+    delete laplacian_matrix;
 
     std::cout << "main: success!" << std::endl;
     return EXIT_SUCCESS;
@@ -599,65 +628,6 @@ void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
               << std::endl;
 }
 
-
-
-// Utility method to create Laplacian matrix
-mfem::SparseMatrix CreateLaplacianMatrix(const mfem::SparseMatrix dxx_matrix, const mfem::SparseMatrix dyy_matrix) {
-    const mfem::SparseMatrix& dxx = dxx_matrix;
-    const mfem::SparseMatrix& dyy = dyy_matrix;
-
-    // Proper MFEM matrix addition
-    mfem::SparseMatrix laplacian(dxx.Height(), dxx.Width());
-
-    // Manual addition since MFEM Add() might not work as expected
-    for (int i = 0; i < dxx.Height(); ++i) {
-        for (int j = dxx.GetI()[i]; j < dxx.GetI()[i + 1]; ++j) {
-            int col = dxx.GetJ()[j];
-            double val = dxx.GetData()[j];
-            laplacian.Add(i, col, val);
-        }
-    }
-
-    for (int i = 0; i < dyy.Height(); ++i) {
-        for (int j = dyy.GetI()[i]; j < dyy.GetI()[i + 1]; ++j) {
-            int col = dyy.GetJ()[j];
-            double val = dyy.GetData()[j];
-            laplacian.Add(i, col, val);
-        }
-    }
-
-    laplacian.Finalize();
-    return laplacian;
-}
-
-
-// Method to apply Dirichlet boundary conditions to any matrix
-static void ApplyDirichletBC(mfem::SparseMatrix& matrix, const std::vector<int>& boundary_nodes) {
-    for (int boundary_idx : boundary_nodes) {
-        // Zero out the row
-        for (int j = matrix.GetI()[boundary_idx]; j < matrix.GetI()[boundary_idx + 1]; ++j) {
-            matrix.GetData()[j] = 0.0;
-        }
-
-        // Set diagonal entry to 1
-        for (int j = matrix.GetI()[boundary_idx]; j < matrix.GetI()[boundary_idx + 1]; ++j) {
-            if (matrix.GetJ()[j] == boundary_idx) {
-                matrix.GetData()[j] = 1.0;
-                break;
-            }
-        }
-    }
-}
-
-// Method to create Laplacian with boundary conditions applied
-mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
-                                        const mfem::SparseMatrix dxx_matrix,
-                                        const mfem::SparseMatrix dyy_matrix) {
-    mfem::SparseMatrix laplacian = CreateLaplacianMatrix(dxx_matrix, dyy_matrix);
-    ApplyDirichletBC(laplacian, boundary_nodes);
-    return laplacian;
-}
-
 void UpdateVorticity(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                     const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                     const mfem::Vector& streamfunction, mfem::Vector& vorticity,
@@ -733,52 +703,6 @@ void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::ve
 }
 
 
-void SolveStreamFunction(const mfem::SparseMatrix& laplacian_matrix, const mfem::Vector& vorticity,
-                        const std::vector<int>& boundary_nodes, mfem::Vector& streamfunction)
-{
-    // Set up the Poisson equation: ∇²ψ = -ω (Equation 12 from paper)
-    mfem::Vector rhs = vorticity;
-    rhs *= -1.0;
-
-    // Apply homogeneous Dirichlet boundary conditions: ψ = 0 on all boundaries
-    mfem::SparseMatrix laplace_bc = laplacian_matrix;
-    for (int idx : boundary_nodes) {
-        rhs[idx] = 0.0;
-        // Set diagonal entry to 1 and zero out the row
-        for (int j = laplace_bc.GetI()[idx]; j < laplace_bc.GetI()[idx + 1]; ++j) {
-            if (laplace_bc.GetJ()[j] == idx) {
-                laplace_bc.GetData()[j] = 1.0;
-            } else {
-                laplace_bc.GetData()[j] = 0.0;
-            }
-        }
-    }
-
-    #ifndef MFEM_USE_SUITESPARSE
-    // Iterative solver
-    mfem::CGSolver cg_solver;
-    mfem::GSSmoother preconditioner;
-    // Setup preconditioner
-
-    // Setup CG solver
-    cg_solver.SetRelTol(1e-12);
-    cg_solver.SetMaxIter(1000);
-    cg_solver.SetPrintLevel(0);  // Set to 1 for debugging
-    cg_solver.SetPreconditioner(preconditioner);
-    cg_solver.SetOperator(laplacian_matrix);
-
-    cg_solver.Mult(rhs, streamfunction);
-
-    #else
-    // If MFEM was compiled with SuiteSparse, use UMFPACK to solve the system.
-    // Direct solver
-    mfem::UMFPackSolver umf_solver;
-    umf_solver.Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
-    umf_solver.SetOperator(laplacian_matrix);
-    umf_solver.Mult(rhs, streamfunction);
-    #endif
-}
-
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                                 const mfem::Vector& streamfunction, double reynolds_number) {
@@ -846,5 +770,210 @@ void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& strea
         stream_file.close();
     }
 
-    std::cout << "SaveSolutionToFile: Saved solution at timestep " << timestep << std::endl;
+    // std::cout << "SaveSolutionToFile: Saved solution at timestep " << timestep << std::endl;
+}
+
+
+// Create appropriate linear solver based on user selection
+// Options: umfpack, klu, cg, minres, gmres, bicgstab, hypre
+mfem::Solver* CreateLinearSolver(const std::string& solver_type,
+                                  const mfem::SparseMatrix& A,
+                                  const SimulationParams& params)
+{
+    mfem::Solver* solver = nullptr;
+
+    std::cout << "Creating linear solver: " << solver_type << std::endl;
+
+    if (solver_type == "umfpack") {
+#ifdef MFEM_USE_SUITESPARSE
+        std::cout << "Using UMFPackSolver (direct solver)" << std::endl;
+        mfem::UMFPackSolver* umf_solver = new mfem::UMFPackSolver();
+        umf_solver->Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
+        umf_solver->SetOperator(A);
+        solver = umf_solver;
+#else
+        std::cerr << "ERROR: UMFPACK not available. Rebuild MFEM with SuiteSparse." << std::endl;
+        return nullptr;
+#endif
+    }
+    else if (solver_type == "klu") {
+#ifdef MFEM_USE_SUITESPARSE
+        std::cout << "Using KLUSolver (direct solver)" << std::endl;
+        mfem::KLUSolver* klu_solver = new mfem::KLUSolver();
+        klu_solver->SetOperator(A);
+        solver = klu_solver;
+#else
+        std::cerr << "ERROR: KLU not available. Rebuild MFEM with SuiteSparse." << std::endl;
+        return nullptr;
+#endif
+    }
+    else if (solver_type == "cg") {
+        std::cout << "Using CGSolver (iterative, symmetric positive definite)" << std::endl;
+        mfem::CGSolver* cg_solver = new mfem::CGSolver();
+        cg_solver->SetRelTol(params.solver_rel_tol);
+        cg_solver->SetMaxIter(params.solver_max_iter);
+        cg_solver->SetPrintLevel(params.solver_print_level);
+
+        // Optional: Add preconditioner
+        mfem::GSSmoother* precond = new mfem::GSSmoother();
+        cg_solver->SetPreconditioner(*precond);
+        cg_solver->SetOperator(A);
+        solver = cg_solver;
+    }
+    else if (solver_type == "gmres") {
+        std::cout << "Using GMRESSolver (iterative, general matrices)" << std::endl;
+        mfem::GMRESSolver* gmres_solver = new mfem::GMRESSolver();
+        gmres_solver->SetRelTol(params.solver_rel_tol);
+        gmres_solver->SetMaxIter(params.solver_max_iter);
+        gmres_solver->SetPrintLevel(params.solver_print_level);
+        gmres_solver->SetKDim(200); // Restart parameter
+
+        // Optional: Add preconditioner
+        // Option 3: Incomplete LU (better than op1 & 2)
+#ifdef MFEM_USE_SUITESPARSE
+        mfem::UMFPackSolver* ilu_precond = new mfem::UMFPackSolver();
+        ilu_precond->SetOperator(A);
+        gmres_solver->SetPreconditioner(*ilu_precond);
+#else
+        // Option 1: Gauss-Seidel (simple, effective)
+        mfem::GSSmoother* gs_precond = new mfem::GSSmoother();
+        gmres_solver->SetPreconditioner(*gs_precond);
+
+        // Option 2: Jacobi (parallel-friendly)
+        // mfem::DSmoother* jacobi_precond = new mfem::DSmoother();
+#endif
+        gmres_solver->SetOperator(A);
+        solver = gmres_solver;
+    }
+    else if (solver_type == "minres") {
+        std::cout << "Using MINRESSolver (iterative, symmetric indefinite)" << std::endl;
+        mfem::MINRESSolver* minres_solver = new mfem::MINRESSolver();
+        minres_solver->SetRelTol(params.solver_rel_tol);
+        minres_solver->SetMaxIter(params.solver_max_iter);
+        minres_solver->SetPrintLevel(params.solver_print_level);
+        minres_solver->SetOperator(A);
+        solver = minres_solver;
+    }
+    else if (solver_type == "bicgstab") {
+        std::cout << "Using BiCGSTABSolver (iterative, nonsymmetric)" << std::endl;
+        mfem::BiCGSTABSolver* bicg_solver = new mfem::BiCGSTABSolver();
+        bicg_solver->SetRelTol(params.solver_rel_tol);
+        bicg_solver->SetAbsTol(1e-14);
+        bicg_solver->SetMaxIter(params.solver_max_iter);
+        bicg_solver->SetPrintLevel(params.solver_print_level);
+
+        // Optional: Add preconditioner
+        mfem::GSSmoother* precond = new mfem::GSSmoother();
+        bicg_solver->SetPreconditioner(*precond);
+        bicg_solver->SetOperator(A);
+        solver = bicg_solver;
+    }
+    else if (solver_type == "hypre") { // Todo: HypreBoomerAMG does not work (need HypreParMatrix)
+#ifdef MFEM_USE_HYPRE
+        std::cout << "Using HypreBoomerAMG (parallel algebraic multigrid)" << std::endl;
+        mfem::HypreBoomerAMG* amg = new mfem::HypreBoomerAMG();
+        amg->SetPrintLevel(params.solver_print_level);
+        amg->SetOperator(A);
+        solver = amg;
+#else
+        std::cerr << "ERROR: HYPRE not available. Rebuild MFEM with HYPRE support." << std::endl;
+        return nullptr;
+#endif
+    }
+    else if (solver_type == "amg") {
+        std::cout << "Using serial geometric multigrid" << std::endl;
+
+        // Use MFEM's serial multigrid preconditioner with CG
+        mfem::CGSolver* cg = new mfem::CGSolver();
+
+        // Simple Jacobi preconditioner (serial alternative to AMG)
+        mfem::DSmoother* jacobi = new mfem::DSmoother(A);
+
+        cg->SetPreconditioner(*jacobi);
+        cg->SetRelTol(params.solver_rel_tol);
+        cg->SetMaxIter(params.solver_max_iter);
+        cg->SetPrintLevel(params.solver_print_level);
+        cg->SetOperator(A);
+
+        solver = cg;
+    }
+    else {
+        std::cerr << "ERROR: Unknown solver type: " << solver_type << std::endl;
+        std::cerr << "Available solvers: umfpack, klu, cg, gmres, minres, bicgstab, hypre, amg" << std::endl;
+        return nullptr;
+    }
+
+    return solver;
+}
+
+// Simple convergence check function
+bool CheckSteadyState(const mfem::Vector& vorticity, const mfem::Vector& streamfunction,
+                      int timestep, double dt,
+                      double tolerance, int check_freq, int required_checks) {
+
+    // Static variables to maintain state between calls
+    static mfem::Vector prev_vorticity;
+    static mfem::Vector prev_streamfunction;
+    static int consecutive_passes = 0;
+    static bool initialized = false;
+
+    // Only check at specified intervals and after initial period
+    if (timestep < 100 || timestep % check_freq != 0) {
+        return false;
+    }
+
+    // Initialize on first check
+    if (!initialized) {
+        prev_vorticity = vorticity;
+        prev_streamfunction = streamfunction;
+        initialized = true;
+        std::cout << "Steady state monitoring started at timestep " << timestep << std::endl;
+        return false;
+    }
+
+    // Compute relative changes
+    mfem::Vector diff_vort(vorticity.Size());
+    mfem::Vector diff_stream(streamfunction.Size());
+
+    diff_vort = vorticity;
+    diff_vort -= prev_vorticity;
+
+    diff_stream = streamfunction;
+    diff_stream -= prev_streamfunction;
+
+    double vort_change = diff_vort.Norml2() / std::max(vorticity.Norml2(), 1e-12);
+    double stream_change = diff_stream.Norml2() / std::max(streamfunction.Norml2(), 1e-12);
+    double max_change = std::max(vort_change, stream_change);
+
+    // // Report progress
+    // std::cout << "Step " << timestep << " (t=" << std::fixed << std::setprecision(6)
+    //           << timestep * dt << "): ‖Δ‖/‖·‖ = " << std::scientific
+    //           << max_change;
+
+    // Check convergence
+    if (max_change < tolerance) {
+        consecutive_passes++;
+        //std::cout << " ✓ [" << consecutive_passes << "/" << required_checks << "]" << std::endl;
+
+        if (consecutive_passes >= required_checks) {
+            std::cout << "\n" << std::string(50, '=') << std::endl;
+            std::cout << "CONVERGED TO STEADY STATE" << std::endl;
+            std::cout << std::string(50, '=') << std::endl;
+            std::cout << "Final relative change: " << max_change << std::endl;
+            std::cout << "Convergence tolerance: " << tolerance << std::endl;
+            std::cout << "Total timesteps: " << timestep << std::endl;
+            std::cout << "Physical time: " << timestep * dt << std::endl;
+            std::cout << std::string(50, '=') << "\n" << std::endl;
+            return true;
+        }
+    } else {
+        //std::cout << " ✗" << std::endl;
+        consecutive_passes = 0;  // Reset counter
+    }
+
+    // Update previous values
+    prev_vorticity = vorticity;
+    prev_streamfunction = streamfunction;
+
+    return false;
 }
