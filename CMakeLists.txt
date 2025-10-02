@@ -76,19 +76,12 @@ endif()
 
 FIND_PACKAGE(OpenMP COMPONENTS CXX REQUIRED)
 
-# From https://github.com/GLVis/glvis/blob/9f2df220342d13ef42c2985257ed96ba43f3bb70/CMakeLists.txt
 # Import MFEM. The following variables can be used to help CMake find MFEM:
 #  * MFEM_DIR - absolute path to the MFEM build or install prefix.
-#  * mfem_DIR - absolute path to where MFEMConfig.cmake is.
+# FindMFEM.cmake will automatically detect whether MFEM was built with CMake or Make
 message(STATUS "Looking for mfem ...")
 set(MFEM_DIR "" CACHE PATH "Path to the MFEM build or install prefix.")
-if (MFEM_DIR)
-   find_package(mfem REQUIRED NAMES MFEM HINTS "${MFEM_DIR}"
-                "${MFEM_DIR}/lib/cmake/mfem" NO_DEFAULT_PATH)
-else()
-   find_package(mfem REQUIRED NAMES MFEM)
-endif()
-message(STATUS "Found mfem config in: ${mfem_DIR} (version ${MFEM_VERSION})")
+find_package(MFEM REQUIRED)
 
 # Use the same C++ compiler as MFEM. This is needed when MFEM was built using
 # an MPI wrapper and we do not have explicitly the MPI compile and link flags.
