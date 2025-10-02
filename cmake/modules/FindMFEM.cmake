@@ -19,7 +19,8 @@
 #   mfem - The MFEM library
 
 # First, try to find MFEM using CMake config files
-find_package(mfem CONFIG QUIET)
+# Pass MFEM_DIR as a hint to help CMake find the config files
+find_package(mfem CONFIG QUIET HINTS ${MFEM_DIR} PATHS ${MFEM_DIR})
 
 if(mfem_FOUND)
     # CMake-based MFEM found
