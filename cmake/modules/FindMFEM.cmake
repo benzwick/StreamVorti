@@ -135,14 +135,16 @@ endif()
 # Handle standard find_package arguments
 include(FindPackageHandleStandardArgs)
 
-# For CMake-based MFEM, check MFEM_LIBRARY_DIR (set by MFEMConfig.cmake)
+# For CMake-based MFEM, check MFEM_INCLUDE_DIRS (set by MFEMConfig.cmake)
 # For Makefile-based MFEM, check MFEM_CONFIG (path to mfem-config script)
 if(mfem_FOUND)
+    # CMake config was found - check for MFEM_INCLUDE_DIRS which is set by the config
     find_package_handle_standard_args(MFEM
-        REQUIRED_VARS MFEM_LIBRARY_DIR
+        REQUIRED_VARS MFEM_INCLUDE_DIRS
         VERSION_VAR MFEM_VERSION
     )
 else()
+    # Makefile build - check for mfem-config script
     find_package_handle_standard_args(MFEM
         REQUIRED_VARS MFEM_CONFIG
         VERSION_VAR MFEM_VERSION
