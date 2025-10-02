@@ -19,12 +19,11 @@
 #   mfem - The MFEM library
 
 # First, try to find MFEM using CMake config files
-find_package(mfem CONFIG QUIET NAMES MFEM)
+find_package(mfem CONFIG QUIET)
 
 if(mfem_FOUND)
     # CMake-based MFEM found
     message(STATUS "Found MFEM via CMake config: ${mfem_DIR}")
-    set(MFEM_FOUND TRUE)
 
     # The config file should set these, but ensure they're available
     if(NOT MFEM_VERSION AND DEFINED mfem_VERSION)
@@ -130,33 +129,25 @@ else()
                 )
             endif()
         endif()
-
-        set(MFEM_FOUND TRUE)
-
-    else()
-        set(MFEM_FOUND FALSE)
     endif()
 endif()
 
 # Handle standard find_package arguments
 include(FindPackageHandleStandardArgs)
 
-# For CMake-based MFEM, check if target exists
-# For Makefile-based MFEM, check if mfem-config was found
-if(TARGET mfem)
-    set(_MFEM_REQUIRED_VAR "mfem")
-    set(MFEM_FOUND TRUE)
-elseif(MFEM_CONFIG)
-    set(_MFEM_REQUIRED_VAR "MFEM_CONFIG")
-    set(MFEM_FOUND TRUE)
+# For CMake-based MFEM, check MFEM_LIBRARY_DIR (set by MFEMConfig.cmake)
+# For Makefile-based MFEM, check MFEM_CONFIG (path to mfem-config script)
+if(mfem_FOUND)
+    find_package_handle_standard_args(MFEM
+        REQUIRED_VARS MFEM_LIBRARY_DIR
+        VERSION_VAR MFEM_VERSION
+    )
 else()
-    set(MFEM_FOUND FALSE)
+    find_package_handle_standard_args(MFEM
+        REQUIRED_VARS MFEM_CONFIG
+        VERSION_VAR MFEM_VERSION
+    )
 endif()
-
-find_package_handle_standard_args(MFEM
-    REQUIRED_VARS ${_MFEM_REQUIRED_VAR}
-    VERSION_VAR MFEM_VERSION
-)
 
 if(MFEM_FOUND)
     message(STATUS "MFEM version: ${MFEM_VERSION}")
