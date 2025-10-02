@@ -140,8 +140,21 @@ endif()
 
 # Handle standard find_package arguments
 include(FindPackageHandleStandardArgs)
+
+# For CMake-based MFEM, check if target exists
+# For Makefile-based MFEM, check if mfem-config was found
+if(TARGET mfem)
+    set(_MFEM_REQUIRED_VAR "mfem")
+    set(MFEM_FOUND TRUE)
+elseif(MFEM_CONFIG)
+    set(_MFEM_REQUIRED_VAR "MFEM_CONFIG")
+    set(MFEM_FOUND TRUE)
+else()
+    set(MFEM_FOUND FALSE)
+endif()
+
 find_package_handle_standard_args(MFEM
-    REQUIRED_VARS MFEM_FOUND
+    REQUIRED_VARS ${_MFEM_REQUIRED_VAR}
     VERSION_VAR MFEM_VERSION
 )
 
