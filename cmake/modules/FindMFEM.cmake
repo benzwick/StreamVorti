@@ -19,12 +19,16 @@
 #   mfem - The MFEM library
 
 # First, try to find MFEM using CMake config files
-# CMake looks for config files via <PackageName>_DIR (e.g., mfem_DIR)
-# If user provided MFEM_DIR, use it to set mfem_DIR for find_package
+# From https://github.com/GLVis/glvis/blob/9f2df220342d13ef42c2985257ed96ba43f3bb70/CMakeLists.txt
+# The following variables can be used to help CMake find MFEM:
+#  * MFEM_DIR - absolute path to the MFEM build or install prefix.
+#  * mfem_DIR - absolute path to where MFEMConfig.cmake is.
 if(MFEM_DIR)
-    set(mfem_DIR "${MFEM_DIR}/lib/cmake/mfem" CACHE PATH "Path to mfem CMake config" FORCE)
+    find_package(mfem REQUIRED NAMES MFEM HINTS "${MFEM_DIR}"
+                 "${MFEM_DIR}/lib/cmake/mfem" NO_DEFAULT_PATH)
+else()
+    find_package(mfem REQUIRED NAMES MFEM)
 endif()
-find_package(mfem CONFIG QUIET)
 
 if(mfem_FOUND)
     # CMake-based MFEM found
