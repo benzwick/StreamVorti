@@ -5,6 +5,23 @@ IF(POLICY CMP0181)
   CMAKE_POLICY(SET CMP0181 NEW) # CMake 3.30
 ENDIF()
 
+# Extract MFEM compiler before PROJECT() to enable using the same compiler as MFEM
+# This is needed when MFEM was built with MPI using an MPI compiler wrapper
+if(DEFINED MFEM_DIR AND EXISTS "${MFEM_DIR}/share/mfem/config.mk")
+  file(STRINGS "${MFEM_DIR}/share/mfem/config.mk" MFEM_CONFIG_LINES)
+  foreach(line ${MFEM_CONFIG_LINES})
+    if(line MATCHES "^MFEM_CXX[ ]*=[ ]*(.+)$")
+      set(MFEM_CXX_COMPILER "${CMAKE_MATCH_1}")
+      string(STRIP "${MFEM_CXX_COMPILER}" MFEM_CXX_COMPILER)
+      if(NOT CMAKE_CXX_COMPILER)
+        set(CMAKE_CXX_COMPILER "${MFEM_CXX_COMPILER}")
+        message(STATUS "Using MFEM compiler: ${CMAKE_CXX_COMPILER}")
+      endif()
+      break()
+    endif()
+  endforeach()
+endif()
+
 PROJECT(StreamVorti VERSION 2.0.0)
 
 
@@ -83,15 +100,18 @@ message(STATUS "Looking for mfem ...")
 set(MFEM_DIR "" CACHE PATH "Path to the MFEM build or install prefix.")
 find_package(MFEM REQUIRED)
 
-# Use the same C++ compiler as MFEM. This is needed when MFEM was built using
-# an MPI wrapper and we do not have explicitly the MPI compile and link flags.
-if (NOT CMAKE_CXX_COMPILER AND MFEM_CXX_COMPILER)
-  set(CMAKE_CXX_COMPILER "${MFEM_CXX_COMPILER}")
-endif()
-
 # Include paths and libraries needed by MFEM
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MFEM_CXX_FLAGS}")
 INCLUDE_DIRECTORIES(${MFEM_INCLUDE_DIRS})
+
+# Print compiler information for all components
+message(STATUS "========================================")
+message(STATUS "Compiler Configuration:")
+message(STATUS "  StreamVorti C++ compiler: ${CMAKE_CXX_COMPILER}")
+message(STATUS "  MFEM was built with:      ${MFEM_CXX_COMPILER}")
+message(STATUS "  CGAL version:             ${CGAL_VERSION}")
+message(STATUS "  Eigen3 include dir:       ${EIGEN3_INCLUDE_DIRS}")
+message(STATUS "========================================")
 
 # -------------------------
 
