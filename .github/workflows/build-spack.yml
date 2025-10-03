@@ -94,6 +94,19 @@ jobs:
         # Install all packages in environment
         spack install
 
+    - name: Show Spack environment info
+      if: always()
+      run: |
+        source ~/spack/share/spack/setup-env.sh
+        spack env activate streamvorti
+
+        echo "=== Spack Environment ==="
+        spack env status
+        echo "=== Environment Specs ==="
+        spack find
+        echo "=== MFEM Configuration ==="
+        spack spec mfem || true
+
     - name: Inspect MFEM Installation
       run: |
         source ~/spack/share/spack/setup-env.sh
@@ -194,15 +207,3 @@ jobs:
         else
           echo "WARNING: StreamVorti static library not found"
         fi
-
-    - name: Show Spack environment info
-      if: always()
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-        spack env activate streamvorti
-        echo "=== Spack Environment ==="
-        spack env status
-        echo "=== Environment Specs ==="
-        spack find
-        echo "=== MFEM Configuration ==="
-        spack spec mfem || true
