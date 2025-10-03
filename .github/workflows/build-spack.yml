@@ -141,6 +141,9 @@ jobs:
         find "$MFEM_DIR" -type f -executable
         echo ""
 
+        echo "--- config.mk contents ---"
+        cat "$MFEM_DIR/share/mfem/config.mk"
+        echo ""
 
         echo "========================================="
 
