@@ -141,30 +141,6 @@ jobs:
         find "$MFEM_DIR" -type f -executable
         echo ""
 
-        echo "--- Check for mfem-config in bin/ ---"
-        if [ -d "$MFEM_DIR/bin" ]; then
-          echo "bin/ directory exists:"
-          ls -la "$MFEM_DIR/bin/"
-          echo ""
-          if [ -f "$MFEM_DIR/bin/mfem-config" ]; then
-            echo "mfem-config found!"
-            file "$MFEM_DIR/bin/mfem-config"
-            "$MFEM_DIR/bin/mfem-config" --help || true
-          else
-            echo "mfem-config NOT found in bin/"
-          fi
-        else
-          echo "No bin/ directory found"
-        fi
-        echo ""
-
-        echo "--- MFEM-related environment variables ---"
-        env | grep -i mfem || echo "No MFEM env vars"
-        echo ""
-
-        echo "--- Check if mfem-config is in PATH ---"
-        which mfem-config || echo "mfem-config not in PATH"
-        echo ""
 
         echo "========================================="
 
