@@ -23,11 +23,25 @@
 # The following variables can be used to help CMake find MFEM:
 #  * MFEM_DIR - absolute path to the MFEM build or install prefix.
 #  * mfem_DIR - absolute path to where MFEMConfig.cmake is.
+
+message(STATUS "FindMFEM: Starting MFEM detection")
+message(STATUS "FindMFEM: MFEM_DIR = ${MFEM_DIR}")
+
 if(MFEM_DIR)
+    message(STATUS "FindMFEM: Searching for CMake config in:")
+    message(STATUS "  - ${MFEM_DIR}")
+    message(STATUS "  - ${MFEM_DIR}/lib/cmake/mfem")
     find_package(mfem QUIET NAMES MFEM HINTS "${MFEM_DIR}"
                  "${MFEM_DIR}/lib/cmake/mfem" NO_DEFAULT_PATH)
 else()
+    message(STATUS "FindMFEM: MFEM_DIR not set, searching default paths")
     find_package(mfem QUIET NAMES MFEM)
+endif()
+
+if(mfem_FOUND)
+    message(STATUS "FindMFEM: CMake config found - mfem_FOUND = TRUE")
+else()
+    message(STATUS "FindMFEM: CMake config NOT found - falling back to mfem-config script")
 endif()
 
 if(mfem_FOUND)
@@ -41,6 +55,10 @@ if(mfem_FOUND)
 
 else()
     # Try to find mfem-config script (Makefile-based installation)
+    message(STATUS "FindMFEM: Searching for mfem-config script")
+    message(STATUS "FindMFEM: Search base: ${MFEM_DIR}")
+    message(STATUS "FindMFEM: Will check: ${MFEM_DIR}/bin, ${MFEM_DIR}, and PATH")
+
     find_program(MFEM_CONFIG
         NAMES mfem-config
         HINTS ${MFEM_DIR}
@@ -48,8 +66,10 @@ else()
         DOC "MFEM configuration script"
     )
 
+    message(STATUS "FindMFEM: find_program result: MFEM_CONFIG = ${MFEM_CONFIG}")
+
     if(MFEM_CONFIG)
-        message(STATUS "Found mfem-config: ${MFEM_CONFIG}")
+        message(STATUS "FindMFEM: SUCCESS - Found mfem-config: ${MFEM_CONFIG}")
 
         # Execute mfem-config to get compilation and link flags
         execute_process(
@@ -138,6 +158,13 @@ else()
                 )
             endif()
         endif()
+
+        message(STATUS "FindMFEM: Created mfem target from mfem-config")
+        message(STATUS "FindMFEM: MFEM_VERSION = ${MFEM_VERSION}")
+        message(STATUS "FindMFEM: MFEM_INCLUDE_DIRS = ${MFEM_INCLUDE_DIRS}")
+        message(STATUS "FindMFEM: MFEM_LIBRARIES = ${MFEM_LIBRARIES}")
+    else()
+        message(STATUS "FindMFEM: FAILED - mfem-config script not found")
     endif()
 endif()
 

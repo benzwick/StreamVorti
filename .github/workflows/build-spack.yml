@@ -104,6 +104,70 @@ jobs:
         spack load suite-sparse
         spack load cmake@3.31
 
+    - name: Inspect MFEM Installation
+      run: |
+        source ~/spack/share/spack/setup-env.sh
+        spack load mfem
+
+        # Get installation path
+        MFEM_DIR=$(spack location -i mfem)
+        echo "========================================="
+        echo "MFEM Installation Information"
+        echo "========================================="
+        echo "MFEM_DIR=$MFEM_DIR"
+        echo ""
+
+        echo "--- Spack MFEM Info ---"
+        spack find -vl mfem
+        echo ""
+
+        echo "--- Directory Structure (tree-style) ---"
+        find "$MFEM_DIR" -print | sed -e "s;$MFEM_DIR;.;g;s;[^/]*\/;|__;g;s;__|; |;g"
+        echo ""
+
+        echo "--- Full Recursive Listing ---"
+        ls -laR "$MFEM_DIR"
+        echo ""
+
+        echo "--- All MFEM-related files ---"
+        find "$MFEM_DIR" -type f -name "*mfem*" -o -name "*MFEM*"
+        echo ""
+
+        echo "--- All .cmake files ---"
+        find "$MFEM_DIR" -type f -name "*.cmake"
+        echo ""
+
+        echo "--- All executable files ---"
+        find "$MFEM_DIR" -type f -executable
+        echo ""
+
+        echo "--- Check for mfem-config in bin/ ---"
+        if [ -d "$MFEM_DIR/bin" ]; then
+          echo "bin/ directory exists:"
+          ls -la "$MFEM_DIR/bin/"
+          echo ""
+          if [ -f "$MFEM_DIR/bin/mfem-config" ]; then
+            echo "mfem-config found!"
+            file "$MFEM_DIR/bin/mfem-config"
+            "$MFEM_DIR/bin/mfem-config" --help || true
+          else
+            echo "mfem-config NOT found in bin/"
+          fi
+        else
+          echo "No bin/ directory found"
+        fi
+        echo ""
+
+        echo "--- MFEM-related environment variables ---"
+        env | grep -i mfem || echo "No MFEM env vars"
+        echo ""
+
+        echo "--- Check if mfem-config is in PATH ---"
+        which mfem-config || echo "mfem-config not in PATH"
+        echo ""
+
+        echo "========================================="
+
     - name: Build StreamVorti
       run: |
         source ~/spack/share/spack/setup-env.sh
