@@ -92,8 +92,21 @@ else()
         elseif(line MATCHES "^MFEM_LIB_DIR[ ]*=[ ]*(.+)$")
             set(MFEM_LIB_DIR "${CMAKE_MATCH_1}")
             string(STRIP "${MFEM_LIB_DIR}" MFEM_LIB_DIR)
+        elseif(line MATCHES "^MFEM_TPLFLAGS[ ]*=[ ]*(.+)$")
+            set(MFEM_TPLFLAGS "${CMAKE_MATCH_1}")
+            string(STRIP "${MFEM_TPLFLAGS}" MFEM_TPLFLAGS)
         endif()
     endforeach()
+
+    # Parse MFEM_TPLFLAGS to extract third-party library include directories
+    # MFEM_TPLFLAGS contains flags like: -I/path/to/hypre/include -I/path/to/metis/include
+    if(MFEM_TPLFLAGS)
+        string(REGEX MATCHALL "-I([^ ]+)" TPL_INCLUDES "${MFEM_TPLFLAGS}")
+        foreach(inc ${TPL_INCLUDES})
+            string(REGEX REPLACE "^-I" "" inc_path "${inc}")
+            list(APPEND MFEM_INCLUDE_DIRS "${inc_path}")
+        endforeach()
+    endif()
 
     # Construct library path from MFEM_LIB_DIR
     set(MFEM_LIBRARY "${MFEM_LIB_DIR}/libmfem.a")
