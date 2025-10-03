@@ -24,10 +24,10 @@
 #  * MFEM_DIR - absolute path to the MFEM build or install prefix.
 #  * mfem_DIR - absolute path to where MFEMConfig.cmake is.
 if(MFEM_DIR)
-    find_package(mfem REQUIRED NAMES MFEM HINTS "${MFEM_DIR}"
+    find_package(mfem QUIET NAMES MFEM HINTS "${MFEM_DIR}"
                  "${MFEM_DIR}/lib/cmake/mfem" NO_DEFAULT_PATH)
 else()
-    find_package(mfem REQUIRED NAMES MFEM)
+    find_package(mfem QUIET NAMES MFEM)
 endif()
 
 if(mfem_FOUND)
