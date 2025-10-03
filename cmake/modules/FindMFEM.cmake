@@ -1,9 +1,10 @@
 # FindMFEM.cmake
 #
-# Finds the MFEM library, supporting both CMake-based and Makefile-based installations.
+# Finds the MFEM library, supporting both CMake-based and simple library installations.
 #
 # This module will first try to use MFEM's CMake config files (MFEMConfig.cmake).
-# If those are not found, it falls back to using mfem-config script (from Makefile builds).
+# If those are not found, it falls back to direct library and header detection
+# (which handles Spack installations and other simple builds).
 #
 # Input variables:
 #   MFEM_DIR - Path to MFEM installation prefix
@@ -12,8 +13,7 @@
 #   MFEM_FOUND - True if MFEM was found
 #   MFEM_INCLUDE_DIRS - Include directories for MFEM
 #   MFEM_LIBRARIES - Libraries to link against
-#   MFEM_VERSION - Version of MFEM
-#   MFEM_CXX_COMPILER - C++ compiler used to build MFEM
+#   MFEM_VERSION - Version of MFEM (extracted from config.hpp if available)
 #
 # Imported targets:
 #   mfem - The MFEM library
@@ -41,7 +41,7 @@ endif()
 if(mfem_FOUND)
     message(STATUS "FindMFEM: CMake config found - mfem_FOUND = TRUE")
 else()
-    message(STATUS "FindMFEM: CMake config NOT found - falling back to mfem-config script")
+    message(STATUS "FindMFEM: CMake config NOT found - falling back to direct detection")
 endif()
 
 if(mfem_FOUND)
@@ -54,135 +54,77 @@ if(mfem_FOUND)
     endif()
 
 else()
-    # Try to find mfem-config script (Makefile-based installation)
-    message(STATUS "FindMFEM: Searching for mfem-config script")
-    message(STATUS "FindMFEM: Search base: ${MFEM_DIR}")
-    message(STATUS "FindMFEM: Will check: ${MFEM_DIR}/bin, ${MFEM_DIR}, and PATH")
+    # CMake config not found - try direct library and header detection
+    # This handles Spack installations and other simple builds
+    message(STATUS "FindMFEM: CMake config not found - trying direct library/header detection")
 
-    find_program(MFEM_CONFIG
-        NAMES mfem-config
+    find_library(MFEM_LIBRARY
+        NAMES mfem libmfem
         HINTS ${MFEM_DIR}
-        PATH_SUFFIXES bin
-        DOC "MFEM configuration script"
+        PATH_SUFFIXES lib lib64
+        DOC "MFEM library"
     )
 
-    message(STATUS "FindMFEM: find_program result: MFEM_CONFIG = ${MFEM_CONFIG}")
+    find_path(MFEM_INCLUDE_DIR
+        NAMES mfem.hpp
+        HINTS ${MFEM_DIR}
+        PATH_SUFFIXES include
+        DOC "MFEM include directory"
+    )
 
-    if(MFEM_CONFIG)
-        message(STATUS "FindMFEM: SUCCESS - Found mfem-config: ${MFEM_CONFIG}")
+    if(MFEM_LIBRARY AND MFEM_INCLUDE_DIR)
+        message(STATUS "FindMFEM: SUCCESS - Found MFEM library and headers")
+        message(STATUS "FindMFEM: Library: ${MFEM_LIBRARY}")
+        message(STATUS "FindMFEM: Include: ${MFEM_INCLUDE_DIR}")
 
-        # Execute mfem-config to get compilation and link flags
-        execute_process(
-            COMMAND ${MFEM_CONFIG} --cxx
-            OUTPUT_VARIABLE MFEM_CXX_COMPILER
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET
-        )
+        set(MFEM_INCLUDE_DIRS ${MFEM_INCLUDE_DIR})
+        set(MFEM_LIBRARIES ${MFEM_LIBRARY})
 
-        execute_process(
-            COMMAND ${MFEM_CONFIG} --cppflags
-            OUTPUT_VARIABLE MFEM_CXX_FLAGS
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET
-        )
-
-        execute_process(
-            COMMAND ${MFEM_CONFIG} --incflags
-            OUTPUT_VARIABLE MFEM_INCLUDE_FLAGS
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET
-        )
-
-        execute_process(
-            COMMAND ${MFEM_CONFIG} --libs
-            OUTPUT_VARIABLE MFEM_LINK_FLAGS
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET
-        )
-
-        execute_process(
-            COMMAND ${MFEM_CONFIG} --version
-            OUTPUT_VARIABLE MFEM_VERSION
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET
-        )
-
-        execute_process(
-            COMMAND ${MFEM_CONFIG} --prefix
-            OUTPUT_VARIABLE MFEM_PREFIX
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET
-        )
-
-        # Parse include directories from flags
-        string(REGEX MATCHALL "-I[^ ]+" MFEM_INCLUDE_FLAGS_LIST "${MFEM_INCLUDE_FLAGS}")
-        set(MFEM_INCLUDE_DIRS "")
-        foreach(flag ${MFEM_INCLUDE_FLAGS_LIST})
-            string(SUBSTRING ${flag} 2 -1 include_dir)
-            list(APPEND MFEM_INCLUDE_DIRS ${include_dir})
-        endforeach()
-
-        # Parse libraries from link flags
-        string(REGEX MATCHALL "-L[^ ]+" MFEM_LIBRARY_DIRS_LIST "${MFEM_LINK_FLAGS}")
-        string(REGEX MATCHALL "-l[^ ]+" MFEM_LIBRARIES_LIST "${MFEM_LINK_FLAGS}")
-
-        set(MFEM_LIBRARY_DIRS "")
-        foreach(flag ${MFEM_LIBRARY_DIRS_LIST})
-            string(SUBSTRING ${flag} 2 -1 lib_dir)
-            list(APPEND MFEM_LIBRARY_DIRS ${lib_dir})
-        endforeach()
-
-        set(MFEM_LIBRARIES "")
-        foreach(flag ${MFEM_LIBRARIES_LIST})
-            string(SUBSTRING ${flag} 2 -1 lib_name)
-            list(APPEND MFEM_LIBRARIES ${lib_name})
-        endforeach()
-
-        # Add full path to MFEM library
-        if(MFEM_PREFIX)
-            list(INSERT MFEM_LIBRARIES 0 "${MFEM_PREFIX}/lib/libmfem.a")
+        # Try to extract version from config header
+        if(EXISTS "${MFEM_INCLUDE_DIR}/mfem/config/config.hpp")
+            file(READ "${MFEM_INCLUDE_DIR}/mfem/config/config.hpp" MFEM_CONFIG_CONTENT)
+            string(REGEX MATCH "#define MFEM_VERSION_STRING \"([0-9.]+)\"" _ "${MFEM_CONFIG_CONTENT}")
+            if(CMAKE_MATCH_1)
+                set(MFEM_VERSION ${CMAKE_MATCH_1})
+                message(STATUS "FindMFEM: Extracted version: ${MFEM_VERSION}")
+            endif()
         endif()
 
         # Create imported target
         if(NOT TARGET mfem)
-            add_library(mfem INTERFACE IMPORTED)
+            add_library(mfem UNKNOWN IMPORTED)
             set_target_properties(mfem PROPERTIES
+                IMPORTED_LOCATION "${MFEM_LIBRARY}"
                 INTERFACE_INCLUDE_DIRECTORIES "${MFEM_INCLUDE_DIRS}"
-                INTERFACE_LINK_LIBRARIES "${MFEM_LIBRARIES}"
             )
-
-            # Add any additional compile flags
-            if(MFEM_CXX_FLAGS)
-                set_target_properties(mfem PROPERTIES
-                    INTERFACE_COMPILE_OPTIONS "${MFEM_CXX_FLAGS}"
-                )
-            endif()
         endif()
 
-        message(STATUS "FindMFEM: Created mfem target from mfem-config")
-        message(STATUS "FindMFEM: MFEM_VERSION = ${MFEM_VERSION}")
-        message(STATUS "FindMFEM: MFEM_INCLUDE_DIRS = ${MFEM_INCLUDE_DIRS}")
-        message(STATUS "FindMFEM: MFEM_LIBRARIES = ${MFEM_LIBRARIES}")
+        message(STATUS "FindMFEM: Created mfem imported target")
     else()
-        message(STATUS "FindMFEM: FAILED - mfem-config script not found")
+        message(STATUS "FindMFEM: FAILED - Could not find MFEM library or headers")
+        if(NOT MFEM_LIBRARY)
+            message(STATUS "  MFEM_LIBRARY not found in ${MFEM_DIR}/lib")
+        endif()
+        if(NOT MFEM_INCLUDE_DIR)
+            message(STATUS "  MFEM_INCLUDE_DIR not found in ${MFEM_DIR}/include")
+        endif()
     endif()
 endif()
 
 # Handle standard find_package arguments
 include(FindPackageHandleStandardArgs)
 
-# For CMake-based MFEM, check MFEM_INCLUDE_DIRS (set by MFEMConfig.cmake)
-# For Makefile-based MFEM, check MFEM_CONFIG (path to mfem-config script)
+# Check which method succeeded and validate accordingly
 if(mfem_FOUND)
-    # CMake config was found - check for MFEM_INCLUDE_DIRS which is set by the config
+    # CMake config was found - check for MFEM_INCLUDE_DIRS set by MFEMConfig.cmake
     find_package_handle_standard_args(MFEM
         REQUIRED_VARS MFEM_INCLUDE_DIRS
         VERSION_VAR MFEM_VERSION
     )
 else()
-    # Makefile build - check for mfem-config script
+    # Direct detection - check for library and headers
     find_package_handle_standard_args(MFEM
-        REQUIRED_VARS MFEM_CONFIG
+        REQUIRED_VARS MFEM_LIBRARY MFEM_INCLUDE_DIR
         VERSION_VAR MFEM_VERSION
     )
 endif()
@@ -191,9 +133,6 @@ if(MFEM_FOUND)
     message(STATUS "MFEM version: ${MFEM_VERSION}")
     message(STATUS "MFEM include dirs: ${MFEM_INCLUDE_DIRS}")
     message(STATUS "MFEM libraries: ${MFEM_LIBRARIES}")
-    if(MFEM_CXX_COMPILER)
-        message(STATUS "MFEM C++ compiler: ${MFEM_CXX_COMPILER}")
-    endif()
 endif()
 
-mark_as_advanced(MFEM_CONFIG MFEM_CXX_COMPILER)
+mark_as_advanced(MFEM_LIBRARY MFEM_INCLUDE_DIR)
