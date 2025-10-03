@@ -65,49 +65,39 @@ jobs:
         spack mirror add binary_mirror https://binaries.spack.io/releases/v0.21
         spack buildcache keys --install --trust
 
-    - name: Cache Spack packages
+    - name: Cache Spack packages and environment
       uses: actions/cache@v3
       if: always()
       with:
         path: |
           ~/spack/var/spack/cache
           ~/spack/opt/spack
-        key: spack-packages-${{ runner.os }}-v1
+          ~/spack/var/spack/environments/streamvorti
+        key: spack-env-streamvorti-${{ runner.os }}-v1
         restore-keys: |
-          spack-packages-${{ runner.os }}-
+          spack-env-streamvorti-${{ runner.os }}-
 
-    - name: Install all dependencies with Spack
+    - name: Create and install Spack environment
       run: |
         source ~/spack/share/spack/setup-env.sh
 
-        # Install MFEM 4.8 with all required features
-        spack install mfem@4.8 \
-          +mpi \
-          +metis \
-          +lapack \
-          +zlib \
-          ^openmpi \
-          ^hypre+mpi \
-          ^metis+int64 \
-          ^suite-sparse
+        # Create environment from spack.yaml in repo
+        if spack env list | grep -q streamvorti; then
+          echo "Environment exists, activating..."
+          spack env activate streamvorti
+        else
+          echo "Creating environment from spack.yaml..."
+          spack env create streamvorti spack.yaml
+          spack env activate streamvorti
+        fi
 
-        # Install additional dependencies for StreamVorti
-        spack install cgal@6.0
-        spack install eigen@3.4
-        spack install cmake@3.31
-
-        # Load all the modules
-        spack load mfem
-        spack load cgal
-        spack load eigen
-        spack load openmpi
-        spack load suite-sparse
-        spack load cmake@3.31
+        # Install all packages in environment
+        spack install
 
     - name: Inspect MFEM Installation
       run: |
         source ~/spack/share/spack/setup-env.sh
-        spack load mfem
+        spack env activate streamvorti
 
         # Get installation path
         MFEM_DIR=$(spack location -i mfem)
@@ -150,16 +140,9 @@ jobs:
     - name: Build StreamVorti
       run: |
         source ~/spack/share/spack/setup-env.sh
+        spack env activate streamvorti
 
-        # Load all required modules
-        spack load cmake@3.31
-        spack load mfem
-        spack load cgal
-        spack load eigen
-        spack load openmpi
-        spack load suite-sparse
-
-        # Get installation paths
+        # Get MFEM installation path
         MFEM_DIR=$(spack location -i mfem)
         echo "MFEM_DIR=$MFEM_DIR"
 
@@ -167,8 +150,8 @@ jobs:
         mkdir build
         cd build
 
-        # Configure with CMake from Spack
-        # FindMFEM.cmake will automatically detect whether MFEM was built with CMake or Make
+        # Configure with CMake from Spack environment
+        # The environment view provides unified paths for all dependencies
         cmake \
           -DMFEM_DIR=$MFEM_DIR \
           -DCMAKE_BUILD_TYPE=Release \
@@ -180,10 +163,7 @@ jobs:
     - name: Run tests
       run: |
         source ~/spack/share/spack/setup-env.sh
-        spack load mfem
-        spack load cgal
-        spack load eigen
-        spack load openmpi
+        spack env activate streamvorti
 
         cd build
         ctest --output-on-failure || true
@@ -219,9 +199,10 @@ jobs:
       if: always()
       run: |
         source ~/spack/share/spack/setup-env.sh
-        echo "=== Spack Specs ==="
+        spack env activate streamvorti
+        echo "=== Spack Environment ==="
+        spack env status
+        echo "=== Environment Specs ==="
         spack find
-        echo "=== Loaded Modules ==="
-        spack find --loaded
         echo "=== MFEM Configuration ==="
         spack spec mfem || true
