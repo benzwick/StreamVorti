@@ -95,6 +95,9 @@ else()
         elseif(line MATCHES "^MFEM_TPLFLAGS[ ]*=[ ]*(.+)$")
             set(MFEM_TPLFLAGS "${CMAKE_MATCH_1}")
             string(STRIP "${MFEM_TPLFLAGS}" MFEM_TPLFLAGS)
+        elseif(line MATCHES "^MFEM_EXT_LIBS[ ]*=[ ]*(.+)$")
+            set(MFEM_EXT_LIBS "${CMAKE_MATCH_1}")
+            string(STRIP "${MFEM_EXT_LIBS}" MFEM_EXT_LIBS)
         endif()
     endforeach()
 
@@ -110,7 +113,15 @@ else()
 
     # Construct library path from MFEM_LIB_DIR
     set(MFEM_LIBRARY "${MFEM_LIB_DIR}/libmfem.a")
-    set(MFEM_LIBRARIES ${MFEM_LIBRARY})
+
+    # Include external libraries that MFEM depends on
+    if(MFEM_EXT_LIBS)
+        # Convert the space-separated string to a list and append to MFEM_LIBRARIES
+        separate_arguments(MFEM_EXT_LIBS_LIST UNIX_COMMAND "${MFEM_EXT_LIBS}")
+        set(MFEM_LIBRARIES ${MFEM_LIBRARY} ${MFEM_EXT_LIBS_LIST})
+    else()
+        set(MFEM_LIBRARIES ${MFEM_LIBRARY})
+    endif()
 
     message(STATUS "FindMFEM: Parsed config.mk successfully")
     message(STATUS "  Version: ${MFEM_VERSION}")
