@@ -12,7 +12,7 @@ cd test_mfemrun
 echo "========================================="
 echo "Test 1: MfemRun (5x5 mesh, 10 neighbors)"
 echo "========================================="
-../${MFEMRUN_PATH} -dim 2 -nx 5 -ny 5 -nn 10 -sd -sn
+${MFEMRUN_PATH} -dim 2 -nx 5 -ny 5 -nn 10 -sd -sn
 echo ""
 echo "MfemRun outputs:"
 ls -lh *.dat 2>/dev/null || echo "No .dat files found"
@@ -26,7 +26,7 @@ echo ""
 echo "========================================="
 echo "Test 2: StreamVorti (5x5 mesh, 10 neighbors, 10 timesteps)"
 echo "========================================="
-../${STREAMVORTI_PATH} -dim 2 -nx 5 -ny 5 -nn 10 -tf 0.01 -dt 1e-3 -sd -sn -pv
+${STREAMVORTI_PATH} -dim 2 -nx 5 -ny 5 -nn 10 -tf 0.01 -dt 1e-3 -sd -sn -pv
 echo ""
 echo "StreamVorti outputs:"
 ls -lh output_dat/*.dat 2>/dev/null || echo "No .dat files found"
