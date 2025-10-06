@@ -106,6 +106,8 @@ int main(int argc, char *argv[])
     args.AddOption(&visualization, "-vis", "--visualization", "-no-vis",
                    "--no-visualization",
                    "Enable or disable GLVis visualization.");
+    args.AddOption(&NumNeighbors, "-nn", "--num-neighbors",
+                   "Number of neighbors for DCPSE.");
     args.AddOption(&save_mesh,
                    "-sm", "--save-mesh", "-no-sm", "--no-save-mesh",
                    "Save mesh to file.");
