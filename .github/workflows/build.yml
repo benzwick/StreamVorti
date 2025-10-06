@@ -57,27 +57,10 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          cmake \
-          ccache \
-          libopenmpi-dev \
-          openmpi-bin \
-          liblapack-dev \
-          libsuitesparse-dev \
-          zlib1g-dev \
-          libcgal-dev \
-          libeigen3-dev
-          # These are used for building documentation only
-          # doxygen \
-          # graphviz
+      run: ./scripts/build-from-source/01-install-system-dependencies.sh
 
-    - name: Create Eigen symlinks
-      run: |
-        sudo ln -sf /usr/include/eigen3/Eigen /usr/include/Eigen
-        sudo ln -sf /usr/include/eigen3/unsupported /usr/include/unsupported
+    - name: Setup ccache and create Eigen symlinks
+      run: ./scripts/build-from-source/02-setup-ccache.sh
 
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
@@ -97,16 +80,7 @@ jobs:
 
     - name: Build HYPRE
       if: steps.cache-hypre.outputs.cache-hit != 'true'
-      run: |
-        # Download and extract HYPRE
-        wget ${{ env.HYPRE_URL }}/${{ env.HYPRE_ARCHIVE }}.tar.gz
-        tar -xzf ${{ env.HYPRE_ARCHIVE }}.tar.gz
-        cd ${{ env.HYPRE_TOP_DIR }}/src
-
-        # Configure and build HYPRE
-        ./configure --prefix=$PWD/../install CC=mpicc CXX=mpic++
-        make -j$(nproc)
-        make install
+      run: ./scripts/build-from-source/03-build-hypre.sh "${{ env.HYPRE_URL }}" "${{ env.HYPRE_ARCHIVE }}" "${{ env.HYPRE_TOP_DIR }}"
 
     # Build METIS (optional but recommended for MFEM)
     - name: Cache METIS build
@@ -120,14 +94,7 @@ jobs:
 
     - name: Build METIS
       if: steps.cache-metis.outputs.cache-hit != 'true'
-      run: |
-        # Download and extract METIS
-        wget ${{ env.METIS_URL }}/${{ env.METIS_ARCHIVE }}
-        tar -xzf ${{ env.METIS_ARCHIVE }}
-        cd ${{ env.METIS_TOP_DIR }}
-
-        # Build METIS library
-        make -C Lib CC=mpicc OPTFLAGS="-Wno-error=implicit-function-declaration -O2"
+      run: ./scripts/build-from-source/04-build-metis.sh "${{ env.METIS_URL }}" "${{ env.METIS_ARCHIVE }}" "${{ env.METIS_TOP_DIR }}"
 
     # Build MFEM with all dependencies
     - name: Cache MFEM build
@@ -139,56 +106,10 @@ jobs:
 
     - name: Build and install MFEM 4.8
       if: steps.cache-mfem.outputs.cache-hit != 'true'
-      run: |
-        # Clone MFEM repository
-        git clone https://github.com/mfem/mfem.git ${{ env.MFEM_TOP_DIR }}
-        cd ${{ env.MFEM_TOP_DIR }}
-        git checkout v4.8
-        cd ..
-
-        # Create build directory (following MFEM's approach)
-        mkdir mfem-build
-        cd mfem-build
-
-        # Configure MFEM with CMake
-        cmake \
-          -DCMAKE_INSTALL_PREFIX=/opt/mfem/${{ env.MFEM_TOP_DIR }} \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DMFEM_USE_MPI=YES \
-          -DHYPRE_DIR=$PWD/../${{ env.HYPRE_TOP_DIR }}/install \
-          -DMFEM_USE_METIS=YES \
-          -DMETIS_DIR=$PWD/../${{ env.METIS_TOP_DIR }} \
-          -DMFEM_USE_LAPACK=YES \
-          -DMFEM_USE_SUITESPARSE=YES \
-          -DMFEM_USE_ZLIB=YES \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          ../${{ env.MFEM_TOP_DIR }}
-
-        # Build and install
-        make -j$(nproc)
-        sudo make install
-
-        # Clean up source directories to save space
-        cd ..
-        rm -rf ${{ env.MFEM_TOP_DIR }} mfem-build
+      run: ./scripts/build-from-source/05-build-mfem.sh "${{ env.MFEM_TOP_DIR }}" "${{ env.HYPRE_TOP_DIR }}" "${{ env.METIS_TOP_DIR }}" "/opt/mfem/${{ env.MFEM_TOP_DIR }}"
 
     - name: Build StreamVorti
-      run: |
-        mkdir build
-        cd build
-
-        # Configure StreamVorti with MFEM
-        cmake \
-          -DMFEM_DIR=/opt/mfem/${{ env.MFEM_TOP_DIR }} \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          ..
-
-        # Build
-        make -j$(nproc)
+      run: ./scripts/build-from-source/06-build-streamvorti.sh "/opt/mfem/${{ env.MFEM_TOP_DIR }}" "Release"
 
     - name: Display ccache statistics
       run: |
@@ -197,63 +118,10 @@ jobs:
         ccache --show-stats
 
     - name: Run tests
-      run: |
-        cd build
-        ctest --output-on-failure || true
+      run: ./scripts/build-from-source/07-run-ctest.sh build
 
     - name: Check built artifacts
-      run: |
-        echo "Checking built executables and libraries:"
-        ls -la build/
-        ls -la build/lib/StreamVorti/ || true
-
-        if [ -f build/MfemRun ]; then
-          echo "MfemRun executable built successfully"
-          ldd build/MfemRun
-        else
-          echo "WARNING: MfemRun executable not found"
-        fi
-
-        if [ -f build/StreamVorti ]; then
-          echo "StreamVorti executable built successfully"
-          ldd build/StreamVorti
-        else
-          echo "WARNING: StreamVorti executable not found"
-        fi
-
-        if [ -f build/lib/StreamVorti/libStreamVorti_static.a ]; then
-          echo "StreamVorti static library built successfully"
-          file build/lib/StreamVorti/libStreamVorti_static.a
-        else
-          echo "WARNING: StreamVorti static library not found"
-        fi
+      run: ./scripts/build-from-source/08-check-built-artifacts.sh build
 
     - name: Run test examples
-      run: |
-        # Test MfemRun in its own directory
-        mkdir -p test_mfemrun
-        cd test_mfemrun
-        echo "========================================="
-        echo "Test 1: MfemRun (5x5 mesh, 10 neighbors)"
-        echo "========================================="
-        $GITHUB_WORKSPACE/build/MfemRun -dim 2 -nx 5 -ny 5 -nn 10 -sd -sn
-        echo ""
-        echo "MfemRun outputs:"
-        ls -lh *.dat 2>/dev/null || echo "No .dat files found"
-        echo "Files generated: $(ls -1 *.dat 2>/dev/null | wc -l)"
-
-        # Test StreamVorti in its own directory
-        cd $GITHUB_WORKSPACE
-        mkdir -p test_streamvorti
-        cd test_streamvorti
-        echo ""
-        echo "========================================="
-        echo "Test 2: StreamVorti (5x5 mesh, 10 neighbors, 10 timesteps)"
-        echo "========================================="
-        $GITHUB_WORKSPACE/build/StreamVorti -dim 2 -nx 5 -ny 5 -nn 10 -tf 0.01 -dt 1e-3 -sd -sn -pv
-        echo ""
-        echo "StreamVorti outputs:"
-        ls -lh output_dat/*.dat 2>/dev/null || echo "No .dat files found"
-        ls -lh ParaView/ 2>/dev/null || echo "No ParaView directory found"
-        echo "DAT files generated: $(ls -1 output_dat/*.dat 2>/dev/null | wc -l)"
-        echo "ParaView files generated: $(find ParaView -type f 2>/dev/null | wc -l)"
+      run: ./scripts/build-from-source/09-run-example-tests.sh "$GITHUB_WORKSPACE/build/MfemRun" "$GITHUB_WORKSPACE/build/StreamVorti"

@@ -20,22 +20,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Install minimal system prerequisites for Spack
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          ca-certificates \
-          coreutils \
-          curl \
-          environment-modules \
-          gfortran \
-          git \
-          gpg \
-          lsb-release \
-          python3 \
-          python3-venv \
-          unzip \
-          zip
+      run: ./scripts/build-with-spack/01-install-spack-prerequisites.sh
 
 
     - name: Cache Spack installation
@@ -50,20 +35,10 @@ jobs:
 
     - name: Install Spack
       if: steps.cache-spack.outputs.cache-hit != 'true'
-      run: |
-        git clone -c feature.manyFiles=true https://github.com/spack/spack.git ~/spack
-        echo "source ~/spack/share/spack/setup-env.sh" >> ~/.bashrc
+      run: ./scripts/build-with-spack/02-install-spack.sh ~/spack
 
     - name: Configure Spack
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-
-        # Configure Spack to use system compilers
-        spack compiler find
-
-        # Add binary mirror for faster installs
-        spack mirror add binary_mirror https://binaries.spack.io/releases/v0.21
-        spack buildcache keys --install --trust
+      run: ./scripts/build-with-spack/03-configure-spack.sh ~/spack
 
     - name: Cache Spack packages and environment
       uses: actions/cache@v3
@@ -78,165 +53,23 @@ jobs:
           spack-env-streamvorti-${{ runner.os }}-
 
     - name: Create and install Spack environment
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-
-        # Create environment from spack.yaml in repo
-        if spack env list | grep -q streamvorti; then
-          echo "Environment exists, activating..."
-          spack env activate streamvorti
-        else
-          echo "Creating environment from spack.yaml..."
-          spack env create streamvorti spack.yaml
-          spack env activate streamvorti
-        fi
-
-        # Install all packages in environment
-        spack install
+      run: ./scripts/build-with-spack/04-create-spack-environment.sh ~/spack streamvorti spack.yaml
 
     - name: Show Spack environment info
       if: always()
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-        spack env activate streamvorti
-
-        echo "=== Spack Environment ==="
-        spack env status
-        echo "=== Environment Specs ==="
-        spack find
-        echo "=== MFEM Configuration ==="
-        spack spec mfem || true
+      run: ./scripts/build-with-spack/05-show-spack-environment.sh ~/spack streamvorti
 
     - name: Inspect MFEM Installation
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-        spack env activate streamvorti
-
-        # Get installation path
-        MFEM_DIR=$(spack location -i mfem)
-        echo "========================================="
-        echo "MFEM Installation Information"
-        echo "========================================="
-        echo "MFEM_DIR=$MFEM_DIR"
-        echo ""
-
-        echo "--- Spack MFEM Info ---"
-        spack find -vl mfem
-        echo ""
-
-        echo "--- Directory Structure (tree-style) ---"
-        find "$MFEM_DIR" -print | sed -e "s;$MFEM_DIR;.;g;s;[^/]*\/;|__;g;s;__|; |;g"
-        echo ""
-
-        echo "--- Full Recursive Listing ---"
-        ls -laR "$MFEM_DIR"
-        echo ""
-
-        echo "--- All MFEM-related files ---"
-        find "$MFEM_DIR" -type f -name "*mfem*" -o -name "*MFEM*"
-        echo ""
-
-        echo "--- All .cmake files ---"
-        find "$MFEM_DIR" -type f -name "*.cmake"
-        echo ""
-
-        echo "--- All executable files ---"
-        find "$MFEM_DIR" -type f -executable
-        echo ""
-
-        echo "--- config.mk contents ---"
-        cat "$MFEM_DIR/share/mfem/config.mk"
-        echo ""
-
-        echo "========================================="
+      run: ./scripts/build-with-spack/06-inspect-mfem-installation.sh ~/spack streamvorti
 
     - name: Build StreamVorti
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-        spack env activate streamvorti
-
-        # Get MFEM installation path
-        MFEM_DIR=$(spack location -i mfem)
-        echo "MFEM_DIR=$MFEM_DIR"
-
-        # Create build directory
-        mkdir build
-        cd build
-
-        # Configure with CMake from Spack environment
-        # The environment view provides unified paths for all dependencies
-        cmake \
-          -DMFEM_DIR=$MFEM_DIR \
-          -DCMAKE_BUILD_TYPE=Release \
-          ..
-
-        # Build
-        make -j$(nproc) VERBOSE=1
+      run: ./scripts/build-with-spack/07-build-streamvorti.sh ~/spack streamvorti Release
 
     - name: Run tests
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-        spack env activate streamvorti
-
-        cd build
-        ctest --output-on-failure || true
+      run: ./scripts/build-with-spack/08-run-ctest.sh ~/spack streamvorti build
 
     - name: Check built artifacts
-      run: |
-        echo "Checking built executables and libraries:"
-        ls -la build/
-        ls -la build/lib/StreamVorti/ || true
-
-        if [ -f build/MfemRun ]; then
-          echo "MfemRun executable built successfully"
-          ldd build/MfemRun
-        else
-          echo "WARNING: MfemRun executable not found"
-        fi
-
-        if [ -f build/StreamVorti ]; then
-          echo "StreamVorti executable built successfully"
-          ldd build/StreamVorti
-        else
-          echo "WARNING: StreamVorti executable not found"
-        fi
-
-        if [ -f build/lib/StreamVorti/libStreamVorti_static.a ]; then
-          echo "StreamVorti static library built successfully"
-          file build/lib/StreamVorti/libStreamVorti_static.a
-        else
-          echo "WARNING: StreamVorti static library not found"
-        fi
+      run: ./scripts/build-with-spack/09-check-built-artifacts.sh build
 
     - name: Run test examples
-      run: |
-        source ~/spack/share/spack/setup-env.sh
-        spack env activate streamvorti
-
-        # Test MfemRun in its own directory
-        mkdir -p test_mfemrun
-        cd test_mfemrun
-        echo "========================================="
-        echo "Test 1: MfemRun (5x5 mesh, 10 neighbors)"
-        echo "========================================="
-        $GITHUB_WORKSPACE/build/MfemRun -dim 2 -nx 5 -ny 5 -nn 10 -sd -sn
-        echo ""
-        echo "MfemRun outputs:"
-        ls -lh *.dat 2>/dev/null || echo "No .dat files found"
-        echo "Files generated: $(ls -1 *.dat 2>/dev/null | wc -l)"
-
-        # Test StreamVorti in its own directory
-        cd $GITHUB_WORKSPACE
-        mkdir -p test_streamvorti
-        cd test_streamvorti
-        echo ""
-        echo "========================================="
-        echo "Test 2: StreamVorti (5x5 mesh, 10 neighbors, 10 timesteps)"
-        echo "========================================="
-        $GITHUB_WORKSPACE/build/StreamVorti -dim 2 -nx 5 -ny 5 -nn 10 -tf 0.01 -dt 1e-3 -sd -sn -pv
-        echo ""
-        echo "StreamVorti outputs:"
-        ls -lh output_dat/*.dat 2>/dev/null || echo "No .dat files found"
-        ls -lh ParaView/ 2>/dev/null || echo "No ParaView directory found"
-        echo "DAT files generated: $(ls -1 output_dat/*.dat 2>/dev/null | wc -l)"
-        echo "ParaView files generated: $(find ParaView -type f 2>/dev/null | wc -l)"
+      run: ./scripts/build-with-spack/10-run-example-tests.sh ~/spack streamvorti "$GITHUB_WORKSPACE/build/MfemRun" "$GITHUB_WORKSPACE/build/StreamVorti"
