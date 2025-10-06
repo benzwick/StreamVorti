@@ -19,6 +19,9 @@ SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/support_domain/support_domai
 
 ADD_LIBRARY(${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )
 
+# Link to CGAL to inherit its include directories
+TARGET_LINK_LIBRARIES(${PROJECT_NAME} CGAL::CGAL CGAL::CGAL_Core)
+
 SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
