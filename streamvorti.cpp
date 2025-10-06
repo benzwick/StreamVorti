@@ -1,4 +1,10 @@
-/*
+/**
+ * @file streamvorti.cpp
+ * @brief StreamVorti lid-driven cavity flow simulation
+ *
+ * Implements stream function-vorticity formulation for incompressible
+ * Navier-Stokes equations using DCPSE meshless method on MFEM meshes.
+ *
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
  * Copyright (C) 2020-2025 Benjamin F. Zwick
@@ -20,10 +26,12 @@
  *      George C. BOURANTAS
  *      Konstantinos A. MOUNTRIS
  *      Benjamin F. ZWICK
+ *
+ * @section usage Usage
+ * @code
+ * ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -sm -sn -sd -sdd -ss -pv
+ * @endcode
  */
-
-// Demo usage:
-//     ./MfemRun -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -sm -sn -sd -sdd -ss -pv
 
 #include <StreamVorti/stream_vorti.hpp>
 #include "mfem.hpp"
@@ -60,54 +68,157 @@
 // save solution
 
 
-// Simulation parameters structure
+/**
+ * @brief Simulation parameters structure
+ *
+ * Container for all simulation parameters including time stepping,
+ * Reynolds number, and output settings.
+ */
 struct SimulationParams {
-    double final_time = 60.0;
-    double dt = 1e-3;
-    double reynolds_number = 1000.0;
+    double final_time = 60.0;                      ///< Final simulation time
+    double dt = 1e-3;                              ///< Initial time step size
+    double reynolds_number = 1000.0;               ///< Reynolds number for flow simulation
 
-    std::string output_prefix = "mfem_square10x10";
-    std::string output_extension = ".dat";
+    std::string output_prefix = "mfem_square10x10"; ///< Prefix for output filenames
+    std::string output_extension = ".dat";          ///< Extension for output files
 
-    int output_frequency = 100;
-    int gershgorin_frequency = 1000;
-    bool enable_adaptive_timestep = true;
-    double gershgorin_safety_factor = 5.0;
+    int output_frequency = 100;                     ///< Output solution every N timesteps
+    int gershgorin_frequency = 1000;                ///< Recompute Gershgorin timestep every N steps
+    bool enable_adaptive_timestep = true;           ///< Enable adaptive timestepping
+    double gershgorin_safety_factor = 5.0;          ///< Safety factor for Gershgorin timestep
 
 };
 
-// Function declarations
-// Refactored functions
+/**
+ * @brief Create or load a mesh
+ * @param mesh_file Path to mesh file (empty string to generate mesh)
+ * @param dim Mesh dimension (2 or 3)
+ * @param nx Number of divisions in x direction
+ * @param ny Number of divisions in y direction
+ * @param nz Number of divisions in z direction
+ * @param sx Domain size in x direction
+ * @param sy Domain size in y direction
+ * @param sz Domain size in z direction
+ * @param save_mesh Whether to save the generated mesh
+ * @return Pointer to created or loaded mesh
+ */
 mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int nz,
                             double sx, double sy, double sz, bool save_mesh);
+
+/**
+ * @brief Initialize DCPSE derivative operators
+ * @param gf Grid function containing mesh and DOF information
+ * @param dim Spatial dimension (2 or 3)
+ * @param NumNeighbors Number of neighbors for DCPSE stencil
+ * @return Pointer to initialized DCPSE object (Dcpse2d or Dcpse3d)
+ */
 StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeighbors);
+
+/**
+ * @brief Save DCPSE derivative matrices to files
+ * @param derivs Pointer to DCPSE object containing derivative operators
+ * @param params Simulation parameters for output naming
+ * @param dim Spatial dimension
+ * @param save_d Save first derivative operators (dx, dy, dz)
+ * @param save_dd Save second derivative operators (dxx, dxy, etc.)
+ * @param dat_dir Directory for output files
+ */
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
                             int dim, bool save_d, bool save_dd, std::string dat_dir);
 
-// Lid-driven cavity boundaries
+/**
+ * @brief Identify boundary nodes for lid-driven cavity problem
+ * @param mesh Pointer to the mesh
+ * @param bottom_nodes Output vector of bottom boundary node indices (y=0)
+ * @param right_nodes Output vector of right boundary node indices (x=1)
+ * @param top_nodes Output vector of top boundary node indices (y=1)
+ * @param left_nodes Output vector of left boundary node indices (x=0)
+ * @param interior_nodes Output vector of interior node indices
+ */
 void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                             std::vector<int>& right_nodes, std::vector<int>& top_nodes,
                             std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
 
-// create Laplacian matrix
+/**
+ * @brief Create Laplacian matrix from second derivative operators
+ * @param dxx_matrix Second derivative operator in x direction
+ * @param dyy_matrix Second derivative operator in y direction
+ * @return Sparse matrix representing Laplacian operator (∇²)
+ */
 mfem::SparseMatrix CreateLaplacianMatrix(const mfem::SparseMatrix dxx_matrix, const mfem::SparseMatrix dyy_matrix);
+
+/**
+ * @brief Apply Dirichlet boundary conditions to a sparse matrix
+ * @param matrix Matrix to modify (in-place)
+ * @param boundary_nodes Indices of boundary nodes
+ */
 static void ApplyDirichletBC(mfem::SparseMatrix& matrix, const std::vector<int>& boundary_nodes);
+
+/**
+ * @brief Create Laplacian matrix with Dirichlet boundary conditions applied
+ * @param boundary_nodes Indices of boundary nodes
+ * @param dxx_matrix Second derivative operator in x direction
+ * @param dyy_matrix Second derivative operator in y direction
+ * @return Laplacian matrix with boundary conditions
+ */
 mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
                                         const mfem::SparseMatrix dxx_matrix,
                                         const mfem::SparseMatrix dyy_matrix);
 
-// simulation
+/**
+ * @brief Update vorticity field using explicit Euler time stepping
+ * @param dx_matrix First derivative operator in x direction
+ * @param dy_matrix First derivative operator in y direction
+ * @param dxx_matrix Second derivative operator in x direction
+ * @param dyy_matrix Second derivative operator in y direction
+ * @param streamfunction Current streamfunction field
+ * @param vorticity Vorticity field (updated in-place)
+ * @param dt Time step size
+ * @param reynolds_number Reynolds number
+ */
 void UpdateVorticity(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                     const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                     const mfem::Vector& streamfunction, mfem::Vector& vorticity,
                     double dt, double reynolds_number);
+
+/**
+ * @brief Apply boundary conditions for vorticity in lid-driven cavity
+ * @param bottom_nodes Bottom boundary node indices
+ * @param right_nodes Right boundary node indices
+ * @param top_nodes Top boundary node indices (moving lid)
+ * @param left_nodes Left boundary node indices
+ * @param dx_matrix First derivative operator in x direction
+ * @param dy_matrix First derivative operator in y direction
+ * @param streamfunction Current streamfunction field
+ * @param vorticity Vorticity field (updated in-place)
+ */
 void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::vector<int>& right_nodes,
                            const std::vector<int>& top_nodes, const std::vector<int>& left_nodes,
                            const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                            const mfem::Vector& streamfunction, mfem::Vector& vorticity);
+
+/**
+ * @brief Compute critical time step using Gershgorin circle theorem
+ * @param dx_matrix First derivative operator in x direction
+ * @param dy_matrix First derivative operator in y direction
+ * @param dxx_matrix Second derivative operator in x direction
+ * @param dyy_matrix Second derivative operator in y direction
+ * @param streamfunction Current streamfunction field
+ * @param reynolds_number Reynolds number
+ * @return Critical time step for stability
+ */
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                                 const mfem::Vector& streamfunction, double reynolds_number);
+
+/**
+ * @brief Save vorticity and streamfunction fields to files
+ * @param vorticity Vorticity field vector
+ * @param streamfunction Streamfunction field vector
+ * @param filename Base filename for output
+ * @param timestep Current timestep number
+ * @param dat_dir Directory for output files
+ */
 void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& streamfunction, const std::string& filename, int timestep, std::string dat_dir);
 
 // visulisation
@@ -115,6 +226,17 @@ void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& strea
 #include <sstream>
 
 
+/**
+ * @brief Main function for StreamVorti lid-driven cavity simulation
+ *
+ * Implements the stream function-vorticity formulation for solving the
+ * incompressible Navier-Stokes equations using DCPSE (DC Particle Strength Exchange)
+ * meshless method on MFEM meshes.
+ *
+ * @param argc Number of command line arguments
+ * @param argv Array of command line argument strings
+ * @return EXIT_SUCCESS on successful completion
+ */
 int main(int argc, char *argv[])
 {
     // Options
@@ -511,6 +633,12 @@ int main(int argc, char *argv[])
 }
 
 
+/**
+ * @brief Create a new mesh or load from file
+ *
+ * Generates a Cartesian mesh (2D quadrilateral or 3D hexahedral) if no mesh file
+ * is provided, otherwise loads the mesh from the specified file.
+ */
 mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int nz,
                             double sx, double sy, double sz, bool save_mesh)
 {
@@ -537,6 +665,13 @@ mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int
 }
 
 
+/**
+ * @brief Initialize DCPSE derivative operators from mesh
+ *
+ * Creates a Dcpse2d or Dcpse3d object based on the spatial dimension and
+ * computes all derivative operators (first and second derivatives).
+ * Reports timing for initialization and computation phases.
+ */
 StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeighbors)
 {
     std::cout << "InitialiseDCPSE: Initialising DC PSE derivatives." << std::endl;
@@ -564,6 +699,13 @@ StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int NumNeig
 }
 
 
+/**
+ * @brief Save derivative operator matrices to files
+ *
+ * Exports the DCPSE derivative operators to data files for analysis or
+ * verification. Saves first derivatives (dx, dy, dz) and/or second
+ * derivatives (dxx, dxy, dxz, dyy, dyz, dzz) based on flags.
+ */
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
                            int dim, bool save_d, bool save_dd, std::string dat_dir)
 {
@@ -590,9 +732,12 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
 }
 
 
-// Functions matching MATLAB  "Explicit_streamfunction_vorticity_meshless.m"
-
-// Identify boundary ndoes for Lid-Driven Cavity problem
+/**
+ * @brief Identify boundary nodes for lid-driven cavity problem
+ *
+ * Classifies mesh vertices into boundary segments (bottom, right, top, left)
+ * and interior nodes based on their coordinates. Assumes a unit square domain [0,1]×[0,1].
+ */
 void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                           std::vector<int>& right_nodes, std::vector<int>& top_nodes,
                           std::vector<int>& left_nodes, std::vector<int>& interior_nodes)
@@ -633,7 +778,12 @@ void IdentifyBoundaryNodesLDC(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
 
 
 
-// Utility method to create Laplacian matrix
+/**
+ * @brief Create Laplacian matrix from second derivative operators
+ *
+ * Constructs the discrete Laplacian operator ∇² = ∂²/∂x² + ∂²/∂y² by summing
+ * the dxx and dyy matrices element-wise.
+ */
 mfem::SparseMatrix CreateLaplacianMatrix(const mfem::SparseMatrix dxx_matrix, const mfem::SparseMatrix dyy_matrix) {
     const mfem::SparseMatrix& dxx = dxx_matrix;
     const mfem::SparseMatrix& dyy = dyy_matrix;
@@ -663,7 +813,12 @@ mfem::SparseMatrix CreateLaplacianMatrix(const mfem::SparseMatrix dxx_matrix, co
 }
 
 
-// Method to apply Dirichlet boundary conditions to any matrix
+/**
+ * @brief Apply Dirichlet boundary conditions to a sparse matrix
+ *
+ * Modifies the matrix in-place by zeroing out rows corresponding to boundary nodes
+ * and setting diagonal entries to 1. This enforces homogeneous Dirichlet BCs.
+ */
 static void ApplyDirichletBC(mfem::SparseMatrix& matrix, const std::vector<int>& boundary_nodes) {
     for (int boundary_idx : boundary_nodes) {
         // Zero out the row
@@ -681,7 +836,12 @@ static void ApplyDirichletBC(mfem::SparseMatrix& matrix, const std::vector<int>&
     }
 }
 
-// Method to create Laplacian with boundary conditions applied
+/**
+ * @brief Create Laplacian matrix with boundary conditions applied
+ *
+ * Combines CreateLaplacianMatrix and ApplyDirichletBC into a single operation,
+ * returning a Laplacian operator ready for solving the Poisson equation.
+ */
 mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
                                         const mfem::SparseMatrix dxx_matrix,
                                         const mfem::SparseMatrix dyy_matrix) {
@@ -690,6 +850,13 @@ mfem::SparseMatrix CreateLaplacianWithBC(const std::vector<int>& boundary_nodes,
     return laplacian;
 }
 
+/**
+ * @brief Update vorticity field using explicit Euler time stepping
+ *
+ * Implements Equation 11 from Bourantas et al. (2019):
+ * ω^(n+1) = ω^n + dt*[(1/Re)*∇²ω - (∂ψ/∂y)(∂ω/∂x) + (∂ψ/∂x)(∂ω/∂y)]
+ * where the second and third terms represent convection.
+ */
 void UpdateVorticity(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                     const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                     const mfem::Vector& streamfunction, mfem::Vector& vorticity,
@@ -720,6 +887,13 @@ void UpdateVorticity(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatr
     }
 }
 
+/**
+ * @brief Apply vorticity boundary conditions for lid-driven cavity
+ *
+ * Implements Equation 33 from Bourantas et al. (2019): ω = ∂v/∂x - ∂u/∂y
+ * First applies velocity BCs (u=v=0 on walls, u=1 on top lid), then
+ * computes boundary vorticity from the velocity field.
+ */
 void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::vector<int>& right_nodes,
                            const std::vector<int>& top_nodes, const std::vector<int>& left_nodes,
                            const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
@@ -765,6 +939,12 @@ void ApplyBoundaryConditions(const std::vector<int>& bottom_nodes, const std::ve
 }
 
 
+/**
+ * @brief Compute critical time step using Gershgorin circle theorem
+ *
+ * Implements Equation 42 from Bourantas et al. (2019) to estimate the maximum
+ * eigenvalue of the linearized system matrix. Returns dt ≤ 2/|λ_max| for stability.
+ */
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
                                 const mfem::Vector& streamfunction, double reynolds_number) {
@@ -805,6 +985,12 @@ double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem
     return (max_eigenvalue_bound > 0.0) ? 2.0 / max_eigenvalue_bound : 1e-4;
 }
 
+/**
+ * @brief Save vorticity and streamfunction fields to data files
+ *
+ * Exports solution fields as text files with one value per line for analysis
+ * in MATLAB or other post-processing tools.
+ */
 void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& streamfunction,
                        const std::string& filename, int timestep, std::string dat_dir) {
     //std::string vort_filename = filename + "_vorticity_" + std::to_string(timestep) + ".dat";
