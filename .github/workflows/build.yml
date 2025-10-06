@@ -227,3 +227,31 @@ jobs:
         else
           echo "WARNING: StreamVorti static library not found"
         fi
+
+    - name: Run test examples
+      run: |
+        # Test MfemRun in its own directory
+        mkdir -p test_mfemrun
+        cd test_mfemrun
+        echo "========================================="
+        echo "Test 1: MfemRun (5x5 mesh, 10 neighbors)"
+        echo "========================================="
+        $GITHUB_WORKSPACE/build/MfemRun -dim 2 -nx 5 -ny 5 -nn 10 -sd -sn
+        echo ""
+        echo "MfemRun outputs:"
+        ls -lh *.dat 2>/dev/null || echo "No .dat files found"
+        echo "Files generated: $(ls -1 *.dat 2>/dev/null | wc -l)"
+
+        # Test StreamVorti in its own directory
+        cd $GITHUB_WORKSPACE
+        mkdir -p test_streamvorti
+        cd test_streamvorti
+        echo ""
+        echo "========================================="
+        echo "Test 2: StreamVorti (5x5 mesh, 10 neighbors)"
+        echo "========================================="
+        $GITHUB_WORKSPACE/build/StreamVorti -dim 2 -nx 5 -ny 5 -nn 10 -sd -sn
+        echo ""
+        echo "StreamVorti outputs:"
+        ls -lh output_dat/*.dat 2>/dev/null || echo "No .dat files found"
+        echo "Files generated: $(ls -1 output_dat/*.dat 2>/dev/null | wc -l)"
