@@ -324,6 +324,12 @@ int main(int argc, char *argv[])
     args.AddOption(&paraview_output, "-pv", "--paraview", "-no-pv",
                   "--no-paraview",
                   "Enable or disable ParaView output.");
+    args.AddOption(&params.final_time, "-tf", "--final-time",
+                   "Final simulation time.");
+    args.AddOption(&params.dt, "-dt", "--timestep",
+                   "Initial time step size.");
+    args.AddOption(&params.reynolds_number, "-re", "--reynolds",
+                   "Reynolds number for flow simulation.");
     args.Parse();
 
     if (!args.Good())
