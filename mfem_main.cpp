@@ -1,4 +1,11 @@
-/*
+/**
+ * @file mfem_main.cpp
+ * @brief MFEM integration demo for DCPSE derivative operators
+ *
+ * Demonstrates computation of DCPSE derivative matrices on MFEM meshes.
+ * Generates or loads a mesh, computes support domains and DCPSE operators,
+ * and optionally saves derivative matrices and neighbor information.
+ *
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
  * Copyright (C) 2020-2025 Benjamin F. Zwick
@@ -20,10 +27,12 @@
  *      George C. BOURANTAS
  *      Konstantinos A. MOUNTRIS
  *      Benjamin F. ZWICK
+ *
+ * @section usage Usage
+ * @code
+ * MfemRun -sd -sn
+ * @endcode
  */
-
-// Demo usage:
-//     MfemRun -sd -sn
 
 #include <StreamVorti/stream_vorti.hpp>
 
