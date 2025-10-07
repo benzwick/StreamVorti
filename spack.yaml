@@ -3,7 +3,7 @@ spack:
   - mfem@4.8 +mpi +metis +lapack +zlib ^openmpi ^hypre+mpi ^metis+int64 ^suite-sparse
   - cgal@6.0
   - eigen@3.4
-  - cmake@3.30.5
+  - cmake@3.30.9
   - openmpi
   - suite-sparse
 
