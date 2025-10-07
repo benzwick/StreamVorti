@@ -1,0 +1,27 @@
+# Minimal Spack packages.yaml for Setonix
+#
+# This file provides compiler preferences and provider priorities for building
+# StreamVorti on Pawsey's Setonix supercomputer.
+#
+# Source: Simplified from https://github.com/PawseySC/pawsey-spack-config
+#         (systems/setonix/configs/site/packages.yaml)
+#
+# Maintenance: Update compiler versions when Pawsey updates their Cray PE.
+#              Check available compilers with: module avail gcc cce aocc
+#
+# Key settings:
+# - compiler: Priority order for compiler selection (gcc preferred)
+# - providers: Priority order for virtual packages (MPI, BLAS, etc.)
+# - permissions: world-readable, user-writable for /software installs
+
+packages:
+  all:
+    compiler: [gcc@14.2.0, cce@19.0.0, aocc@5.0.0]
+    providers:
+      mpi: [cray-mpich]
+      blas: [openblas, amdblis]
+      lapack: [openblas, netlib-lapack, amdlibflame]
+      fftw-api: [fftw, amdfftw]
+    permissions:
+      read: world
+      write: user
