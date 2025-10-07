@@ -60,7 +60,12 @@ cd streamvorti
 # See: https://spack.readthedocs.io/en/latest/getting_started.html (Spack installation)
 sg pawsey1243 -c './scripts/build-with-spack/02-install-spack.sh ../spack'
 sg pawsey1243 -c 'git clone https://github.com/PawseySC/pawsey-spack-config.git ../pawsey-spack-config'
-cp -r ../pawsey-spack-config/systems/setonix/configs/site/* ../spack/etc/spack/
+# Copy only packages.yaml and compilers.yaml (skip repos.yaml which needs Pawsey's system setup)
+cp ../pawsey-spack-config/systems/setonix/configs/site/packages.yaml ../spack/etc/spack/
+cp ../pawsey-spack-config/systems/setonix/configs/site/compilers.yaml ../spack/etc/spack/
+# Configure Spack to use /software for caching (not home directory which has 1GB limit)
+export SPACK_USER_CACHE_PATH=/software/projects/pawsey1243/shared/spack-cache
+mkdir -p $SPACK_USER_CACHE_PATH
 
 # 5. Configure compilers
 # See: https://spack.readthedocs.io/en/latest/getting_started.html#compiler-configuration
