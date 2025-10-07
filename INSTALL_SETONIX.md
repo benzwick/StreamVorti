@@ -15,8 +15,10 @@ Building StreamVorti on [Setonix](https://pawsey.org.au/systems/setonix/) using 
 # 1. Request compute node
 salloc --nodes=1 --partition=work --time=4:00:00 --account=<project>
 
-# 2. Go to software directory
-cd /software/projects/<project>/<user>/streamvorti
+# 2. Clone StreamVorti to software directory
+cd /software/projects/<project>/<user>/
+sg <project> -c 'git clone https://github.com/benzwick/StreamVorti.git streamvorti'
+cd streamvorti
 
 # 3. Install Spack with Pawsey's Setonix config
 sg <project> -c './scripts/build-with-spack/02-install-spack.sh ../spack'
