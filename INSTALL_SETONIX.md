@@ -9,32 +9,38 @@ Building StreamVorti on [Setonix](https://pawsey.org.au/systems/setonix/) using 
 - **Use compute nodes**: NOT login nodes - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925954/Compiling)
 - **Use `sg`**: All `/software` operations need `sg pawsey1243 -c 'command'` - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925886/Spack)
 - **Partition**: Use `work` (NOT `debug`) for builds - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51929058/Running+Jobs+on+Setonix)
-- **Setgid bit**: The `shared` directory has setgid (`s`), so all new files/folders inherit `pawsey1243` group
+- **Permissions**: `chmod 2775` sets setgid + group write, so all new files/folders inherit `pawsey1243` group and are writable
 
 ## Installation Steps
 
 ```bash
-# 1. Request compute node
+# 1. Create shared directory with correct permissions
+cd /software/projects/pawsey1243/
+sg pawsey1243 -c 'mkdir -p shared'
+sg pawsey1243 -c 'chmod 2775 shared'
+# Verify: ls -la should show drwxrwsr-x with pawsey1243 group
+
+# 2. Request compute node
 salloc --nodes=1 --partition=work --time=4:00:00 --account=pawsey1243
 
-# 2. Clone StreamVorti to shared directory
+# 3. Clone StreamVorti to shared directory
 cd /software/projects/pawsey1243/shared/
 sg pawsey1243 -c 'git clone https://github.com/benzwick/StreamVorti.git streamvorti'
 cd streamvorti
 
-# 3. Install Spack with Pawsey's Setonix config
+# 4. Install Spack with Pawsey's Setonix config
 sg pawsey1243 -c './scripts/build-with-spack/02-install-spack.sh ../spack'
 sg pawsey1243 -c 'git clone https://github.com/PawseySC/pawsey-spack-config.git ../pawsey-spack-config'
 cp -r ../pawsey-spack-config/systems/setonix/configs/site/* ../spack/etc/spack/
 
-# 4. Configure compilers
+# 5. Configure compilers
 ../spack/bin/spack compiler find
 
-# 5. Build StreamVorti
+# 6. Build StreamVorti
 sg pawsey1243 -c './scripts/build-with-spack/04-create-spack-environment.sh ../spack streamvorti spack.yaml'
 sg pawsey1243 -c './scripts/build-with-spack/07-build-streamvorti.sh ../spack streamvorti'
 
-# 6. Test
+# 7. Test
 ./scripts/build-with-spack/08-run-ctest.sh ../spack streamvorti
 ./scripts/build-with-spack/09-check-built-artifacts.sh
 ./scripts/build-with-spack/10-run-example-tests.sh ../spack streamvorti
