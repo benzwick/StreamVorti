@@ -37,8 +37,9 @@ if __name__ == '__main__':
         output_lines.append(line)
 
     # Fix empty package entries - add {} to lines that are just "package_name:"
+    # Skip special entries like "all:" which have nested content
     for i, line in enumerate(output_lines):
-        if re.match(r'^  \w[\w-]*:\s*$', line):
+        if re.match(r'^  \w[\w-]*:\s*$', line) and not re.match(r'^  all:\s*$', line):
             output_lines[i] = line.rstrip() + ' {}\n'
 
     with open(output_file, 'w') as f:
