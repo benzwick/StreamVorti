@@ -4,33 +4,35 @@ Building StreamVorti on [Setonix](https://pawsey.org.au/systems/setonix/) using 
 
 ## Key Setonix Requirements
 
-- **Build location**: `/software/projects/<project>/<user>/` ([docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925878/How+to+Manually+Build+Software))
-- **Use compute nodes**: NOT login nodes ([docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925954/Compiling))
-- **Use `sg`**: All `/software` operations need `sg <project> -c 'command'` ([docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925886/Spack))
-- **Partition**: Use `work` (NOT `debug`) for builds ([docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51929058/Running+Jobs+on+Setonix))
+- **Project**: `pawsey1243`
+- **Build location**: `/software/projects/pawsey1243/shared/` (shared by all project members) - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925878/How+to+Manually+Build+Software)
+- **Use compute nodes**: NOT login nodes - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925954/Compiling)
+- **Use `sg`**: All `/software` operations need `sg pawsey1243 -c 'command'` - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925886/Spack)
+- **Partition**: Use `work` (NOT `debug`) for builds - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51929058/Running+Jobs+on+Setonix)
+- **Setgid bit**: The `shared` directory has setgid (`s`), so all new files/folders inherit `pawsey1243` group
 
 ## Installation Steps
 
 ```bash
 # 1. Request compute node
-salloc --nodes=1 --partition=work --time=4:00:00 --account=<project>
+salloc --nodes=1 --partition=work --time=4:00:00 --account=pawsey1243
 
-# 2. Clone StreamVorti to software directory
-cd /software/projects/<project>/<user>/
-sg <project> -c 'git clone https://github.com/benzwick/StreamVorti.git streamvorti'
+# 2. Clone StreamVorti to shared directory
+cd /software/projects/pawsey1243/shared/
+sg pawsey1243 -c 'git clone https://github.com/benzwick/StreamVorti.git streamvorti'
 cd streamvorti
 
 # 3. Install Spack with Pawsey's Setonix config
-sg <project> -c './scripts/build-with-spack/02-install-spack.sh ../spack'
-sg <project> -c 'git clone https://github.com/PawseySC/pawsey-spack-config.git ../pawsey-spack-config'
+sg pawsey1243 -c './scripts/build-with-spack/02-install-spack.sh ../spack'
+sg pawsey1243 -c 'git clone https://github.com/PawseySC/pawsey-spack-config.git ../pawsey-spack-config'
 cp -r ../pawsey-spack-config/systems/setonix/configs/site/* ../spack/etc/spack/
 
 # 4. Configure compilers
 ../spack/bin/spack compiler find
 
 # 5. Build StreamVorti
-sg <project> -c './scripts/build-with-spack/04-create-spack-environment.sh ../spack streamvorti spack.yaml'
-sg <project> -c './scripts/build-with-spack/07-build-streamvorti.sh ../spack streamvorti'
+sg pawsey1243 -c './scripts/build-with-spack/04-create-spack-environment.sh ../spack streamvorti spack.yaml'
+sg pawsey1243 -c './scripts/build-with-spack/07-build-streamvorti.sh ../spack streamvorti'
 
 # 6. Test
 ./scripts/build-with-spack/08-run-ctest.sh ../spack streamvorti
