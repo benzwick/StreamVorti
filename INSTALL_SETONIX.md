@@ -28,6 +28,8 @@ All new files/folders created inside will automatically get the `pawsey1243` gro
 
 ```bash
 # 1. Create shared directory with correct permissions
+# See: https://pawsey.atlassian.net/wiki/spaces/US/pages/51925886/Spack (sg usage)
+# See: https://pawsey.atlassian.net/wiki/spaces/US/pages/51925878/How+to+Manually+Build+Software (build location)
 cd /software/projects/pawsey1243/
 sg pawsey1243 -c 'mkdir -p shared'
 sg pawsey1243 -c 'chmod 2775 shared'
@@ -40,19 +42,26 @@ salloc -p work -N 1 -n 1 -c 64 --mem=115G --time=4:00:00 -A pawsey1243
 # salloc --nodes=1 --partition=work --time=4:00:00 --account=pawsey1243
 
 # 3. Clone StreamVorti to shared directory
+# See: https://pawsey.atlassian.net/wiki/spaces/US/pages/51925886/Spack (sg for /software operations)
 cd /software/projects/pawsey1243/shared/
 sg pawsey1243 -c 'git clone https://github.com/benzwick/StreamVorti.git streamvorti'
 cd streamvorti
 
 # 4. Install Spack with Pawsey's Setonix config
+# See: https://github.com/PawseySC/pawsey-spack-config (Pawsey's Spack configs)
+# See: https://spack.readthedocs.io/en/latest/getting_started.html (Spack installation)
 sg pawsey1243 -c './scripts/build-with-spack/02-install-spack.sh ../spack'
 sg pawsey1243 -c 'git clone https://github.com/PawseySC/pawsey-spack-config.git ../pawsey-spack-config'
 cp -r ../pawsey-spack-config/systems/setonix/configs/site/* ../spack/etc/spack/
 
 # 5. Configure compilers
+# See: https://spack.readthedocs.io/en/latest/getting_started.html#compiler-configuration
+# See: https://pawsey.atlassian.net/wiki/spaces/US/pages/51929054/Setonix+Software+Environment (Cray compilers)
 ../spack/bin/spack compiler find
 
 # 6. Build StreamVorti
+# See: https://spack.readthedocs.io/en/latest/environments.html (Spack environments)
+# See: https://pawsey.atlassian.net/wiki/spaces/US/pages/51925954/Compiling (compiling on compute nodes)
 sg pawsey1243 -c './scripts/build-with-spack/04-create-spack-environment.sh ../spack streamvorti spack.yaml'
 sg pawsey1243 -c './scripts/build-with-spack/07-build-streamvorti.sh ../spack streamvorti'
 
