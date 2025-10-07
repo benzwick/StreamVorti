@@ -61,19 +61,19 @@ cd streamvorti
 sg pawsey1243 -c './scripts/build-with-spack/02-install-spack.sh ../spack'
 sg pawsey1243 -c 'git clone https://github.com/PawseySC/pawsey-spack-config.git ../pawsey-spack-config'
 # Copy compilers.yaml (optimized flags and Cray compiler paths)
-cp ../pawsey-spack-config/systems/setonix/configs/site/compilers.yaml ../spack/etc/spack/
+sg pawsey1243 -c 'cp ../pawsey-spack-config/systems/setonix/configs/site/compilers.yaml ../spack/etc/spack/'
 # Copy minimal packages.yaml (compiler preferences and providers)
 # Note: This is a simplified version of Pawsey's packages.yaml without version constraints
 # See scripts/build-with-spack/setonix-packages.yaml for details
-cp scripts/build-with-spack/setonix-packages.yaml ../spack/etc/spack/packages.yaml
+sg pawsey1243 -c 'cp scripts/build-with-spack/setonix-packages.yaml ../spack/etc/spack/packages.yaml'
 # Configure Spack to use /software for caching (not home directory which has 1GB limit)
 export SPACK_USER_CACHE_PATH=/software/projects/pawsey1243/shared/spack-cache
-mkdir -p $SPACK_USER_CACHE_PATH
+sg pawsey1243 -c 'mkdir -p $SPACK_USER_CACHE_PATH'
 
 # 5. Configure compilers
 # See: https://spack.readthedocs.io/en/latest/getting_started.html#compiler-configuration
 # See: https://pawsey.atlassian.net/wiki/spaces/US/pages/51929054/Setonix+Software+Environment (Cray compilers)
-../spack/bin/spack compiler find
+sg pawsey1243 -c '../spack/bin/spack compiler find'
 
 # 6. Build StreamVorti
 # See: https://spack.readthedocs.io/en/latest/environments.html (Spack environments)
