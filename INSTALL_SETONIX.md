@@ -94,6 +94,30 @@ Use [Pawsey's Spack config for Setonix](https://github.com/PawseySC/pawsey-spack
 
 See [Spack configuration docs](https://spack.readthedocs.io/en/latest/configuration.html) for customization.
 
+## Troubleshooting
+
+### Remove Spack environment and start over
+
+```bash
+../spack/bin/spack env rm -y streamvorti
+```
+
+Then re-run step 6 from Installation Steps.
+
+### Clean up failed package repo clones
+
+```bash
+rm -rf ~/.spack/package_repos
+```
+
+Ensure `SPACK_USER_CACHE_PATH` is set (see step 4).
+
+### Check available package versions
+
+```bash
+../spack/bin/spack versions <package-name>
+```
+
 ## Documentation Links
 
 - [Setonix User Guide](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925434/Setonix+User+Guide)
