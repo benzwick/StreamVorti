@@ -19,9 +19,13 @@ if __name__ == '__main__':
     skip_next = False
 
     for i, line in enumerate(lines):
-        # Skip lines with "version:" and the array values that follow
+        # Skip lines with "version:" on separate line
         if re.match(r'^\s+version:\s*$', line):
             skip_next = True
+            continue
+
+        # Skip inline version: [...]
+        if re.search(r'\s+version:\s*\[', line):
             continue
 
         # Skip array elements after version: (lines starting with whitespace and -)
