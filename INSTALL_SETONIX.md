@@ -33,8 +33,11 @@ sg pawsey1243 -c 'mkdir -p shared'
 sg pawsey1243 -c 'chmod 2775 shared'
 # Verify: ls -la should show drwxrwsr-x with pawsey1243 group
 
-# 2. Request compute node
-salloc --nodes=1 --partition=work --time=4:00:00 --account=pawsey1243
+# 2. Request compute node (see: https://pawsey.atlassian.net/wiki/spaces/US/pages/51925964/Job+Scheduling)
+# Example from Pawsey docs for shared node access:
+salloc -p work -N 1 -n 1 -c 64 --mem=115G --time=4:00:00 -A pawsey1243
+# Or simpler for full node:
+# salloc --nodes=1 --partition=work --time=4:00:00 --account=pawsey1243
 
 # 3. Clone StreamVorti to shared directory
 cd /software/projects/pawsey1243/shared/
