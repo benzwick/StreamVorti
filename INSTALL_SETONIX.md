@@ -63,8 +63,9 @@ sg pawsey1243 -c 'git clone https://github.com/PawseySC/pawsey-spack-config.git 
 # Copy compilers.yaml (optimized flags and Cray compiler paths)
 cp ../pawsey-spack-config/systems/setonix/configs/site/compilers.yaml ../spack/etc/spack/
 # Copy packages.yaml (external packages, variants) but remove version constraints
-cp ../pawsey-spack-config/systems/setonix/configs/site/packages.yaml ../spack/etc/spack/
-sed -i '/version:/d' ../spack/etc/spack/packages.yaml
+python3 scripts/build-with-spack/setonix-remove-spack-package-versions.py \
+  ../pawsey-spack-config/systems/setonix/configs/site/packages.yaml \
+  ../spack/etc/spack/packages.yaml
 # Configure Spack to use /software for caching (not home directory which has 1GB limit)
 export SPACK_USER_CACHE_PATH=/software/projects/pawsey1243/shared/spack-cache
 mkdir -p $SPACK_USER_CACHE_PATH
