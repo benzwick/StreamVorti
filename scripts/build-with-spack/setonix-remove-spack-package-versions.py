@@ -36,6 +36,11 @@ if __name__ == '__main__':
 
         output_lines.append(line)
 
+    # Fix empty package entries - add {} to lines that are just "package_name:"
+    for i, line in enumerate(output_lines):
+        if re.match(r'^  \w[\w-]*:\s*$', line):
+            output_lines[i] = line.rstrip() + ' {}\n'
+
     with open(output_file, 'w') as f:
         f.writelines(output_lines)
 
