@@ -40,6 +40,14 @@ sg pawsey1243 -c 'chmod 2775 shared'
 salloc -p work -N 1 -n 1 -c 64 --mem=115G --time=4:00:00 -A pawsey1243
 # Or simpler for full node:
 # salloc --nodes=1 --partition=work --time=4:00:00 --account=pawsey1243
+#
+# When allocation succeeds, you'll see:
+#   salloc: Granted job allocation XXXXXXX
+#   salloc: Waiting for resource configuration
+#   salloc: Nodes nidXXXXXX are ready for job
+# Your shell prompt will change from setonix-XX to nidXXXXXX showing you're on the compute node.
+# All subsequent commands now execute on the compute node (not login node).
+# Use 'exit' to release the node when done.
 
 # 3. Clone StreamVorti to shared directory
 # See: https://pawsey.atlassian.net/wiki/spaces/US/pages/51925886/Spack (sg for /software operations)
