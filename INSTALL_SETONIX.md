@@ -99,10 +99,28 @@ See [Spack configuration docs](https://spack.readthedocs.io/en/latest/configurat
 
 ## Troubleshooting
 
+### Disk quota exceeded errors
+
+If you get "Disk quota exceeded" errors, files may be created with wrong group ownership. Check quota:
+
+```bash
+lfs quota -h /software/projects/pawsey1243
+```
+
+If your user quota is high (>1GB) instead of project quota, files have wrong group. Fix by:
+
+```bash
+# Delete everything and start over
+cd /software/projects/pawsey1243/
+sg pawsey1243 -c 'rm -rf shared'
+
+# Recreate with correct permissions from step 1
+```
+
 ### Remove Spack environment and start over
 
 ```bash
-../spack/bin/spack env rm -y streamvorti
+sg pawsey1243 -c '../spack/bin/spack env rm -y streamvorti'
 ```
 
 Then re-run step 6 from Installation Steps.
