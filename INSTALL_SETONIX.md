@@ -9,7 +9,20 @@ Building StreamVorti on [Setonix](https://pawsey.org.au/systems/setonix/) using 
 - **Use compute nodes**: NOT login nodes - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925954/Compiling)
 - **Use `sg`**: All `/software` operations need `sg pawsey1243 -c 'command'` - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51925886/Spack)
 - **Partition**: Use `work` (NOT `debug`) for builds - [docs](https://pawsey.atlassian.net/wiki/spaces/US/pages/51929058/Running+Jobs+on+Setonix)
-- **Permissions**: `chmod 2775` sets setgid + group write, so all new files/folders inherit `pawsey1243` group and are writable
+
+## Shared Directory Permissions
+
+The `shared` directory setup ensures all project members can collaborate:
+
+1. Create directory with `sg pawsey1243 -c 'mkdir -p shared'`
+2. Set permissions with `chmod 2775` which gives:
+   - `2` = setgid bit (inherits group)
+   - `7` = owner rwx
+   - `7` = group rwx (read+write+execute)
+   - `5` = others rx (read+execute)
+3. This results in `drwxrwsr-x` where group members can read and write
+
+All new files/folders created inside will automatically get the `pawsey1243` group and be accessible to all project members.
 
 ## Installation Steps
 
