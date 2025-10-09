@@ -48,17 +48,18 @@
 struct SimulationParams {
     double final_time = 60000.0;
     double dt = 1e-2;
-    double reynolds_number = 1000.0;
+    int reynolds_number = 1000;
+    int NumNeighbors = 25;
 
     std::string output_prefix = "mfem_square10x10";
     std::string output_extension = ".dat";
 
     // Solution output
-    int output_frequency = 100;
-    int paraview_output_frequency = 1000;  // Default value
+    int output_frequency = 100; // Default=100
+    int paraview_output_frequency = 1000;  // Default=1000
 
     // Adaptive timestep options
-    int gershgorin_frequency = 1000;
+    int gershgorin_frequency = 1000; // Default=1000
     bool enable_adaptive_timestep = true;
     double gershgorin_safety_factor = 5.0;
 
@@ -69,16 +70,16 @@ struct SimulationParams {
     int solver_print_level = 0;
 
     // Convergence parameters
-    double steady_state_tol = 1e-6;
-    int steady_state_freq = 500;
-    int steady_state_checks = 2;
+    double steady_state_tol = 1e-5; // L2 normal (global)
+    int steady_state_freq = 100; // Default=100
+    int steady_state_checks = 3;
 
     // Residual monitoring
     bool check_residuals = false;
-    int residual_check_freq = 100;
+    int residual_check_freq = 100; // Default=100
 
     // Grid-adaptive timestep computation
-    void ComputeStableTimestep(int num_nodes, double reynolds) {
+    void ComputeStableTimestep(int num_nodes, int reynolds) {
         // Estimate grid size (assuming square grid)
         int N = static_cast<int>(std::sqrt(num_nodes));
         double h = 1.0 / (N - 1);  // Grid spacing for unit square
@@ -98,19 +99,12 @@ struct SimulationParams {
 
         // Update if current dt is too large
         if (dt > dt_recommended) {
-            std::cout << "WARNING: Default dt=" << dt << " exceeds stability limit!" << std::endl;
+            std::cout << "WARNING: Current dt=" << dt << " exceeds stability limit!" << std::endl;
             std::cout << "  Grid: " << N << "x" << N << " (h=" << h << ")" << std::endl;
             std::cout << "  CFL limit: " << dt_cfl << std::endl;
             std::cout << "  Diffusion limit: " << dt_diffusion << std::endl;
-            std::cout << "  Adjusting dt to: " << dt_recommended << std::endl;
-            dt = dt_recommended;
-        }
-
-        // Additional safety for very fine grids
-        if (N >= 200) {
-            // Based on paper's empirical values
-            dt = std::min(dt, 5e-3);
-            std::cout << "Fine grid detected. Limiting dt to: " << dt << std::endl;
+            std::cout << "  Recommend dt to: " << dt_recommended << std::endl;
+            // dt = dt_recommended; //Use fixed dt for output consistency
         }
     }
 };
@@ -224,7 +218,7 @@ struct PerformanceMetrics {
         std::cout << std::setw(10) << std::to_string(metrics.grid_size) + " x " + std::to_string(metrics.grid_size)
                 << std::setw(17) << std::fixed << std::setprecision(4) << metrics.derivative_time << " s"
                 << std::setw(17) << std::fixed << std::setprecision(4) << metrics.factorization_time << " s"
-                << std::setw(20) << std::fixed << std::setprecision(4) << metrics.solution_time_per_iter << " s" << "\n";
+                << std::setw(17) << std::fixed << std::setprecision(4) << metrics.solution_time_per_iter << " s" << "\n";
         std::cout << "========================================================================\n\n";
     }
 };
@@ -244,7 +238,7 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
 
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
-                                const mfem::Vector& streamfunction, double reynolds_number);
+                                const mfem::Vector& streamfunction, int reynolds_number);
 
 mfem::Solver* CreateLinearSolver(const std::string& solver_type, const mfem::SparseMatrix& A, const SimulationParams& params);
 
@@ -269,8 +263,8 @@ int main(int argc, char *argv[])
     std::string fext = ".dat";
 
     // DC PSE parameters
-    double reynolds_number = 1000.0;
-    int NumNeighbors = 25;
+    // double reynolds_number = 1000.0;
+    // int NumNeighbors = 25;
 
     // Mesh generation
     int dim = 2;
@@ -317,10 +311,14 @@ int main(int argc, char *argv[])
                    "Mesh size in y direction.");
     args.AddOption(&sz, "-sz", "--size-z",
                    "Mesh size in z direction.");
-    args.AddOption(&NumNeighbors, "-nn", "--num-neighbors",
+    args.AddOption(&params.NumNeighbors, "-nn", "--num-neighbors",
                     "Number of neighbors for DCPSE (default: 25).");
-    args.AddOption(&reynolds_number, "-Re", "--reynolds-number",
+    args.AddOption(&params.reynolds_number, "-Re", "--reynolds-number",
                     "Reynolds number of simulating fluid (default: 1000).");
+    args.AddOption(&params.dt, "-dt", "--timestep",
+                    "Time step size (default: 1e-4).");
+    args.AddOption(&params.final_time, "-ft", "--final-time",
+                    "Final simulation time (default: 60000).");
     // Output options
     args.AddOption(&save_mesh,
                    "-sm", "--save-mesh", "-no-sm", "--no-save-mesh",
@@ -398,9 +396,16 @@ int main(int argc, char *argv[])
     std::cout << "main: Number of finite element unknowns: " << fes.GetTrueVSize() << std::endl;
     mfem::GridFunction gf(&fes); // as 'x' in ex1.cpp
 
+    // ================== Timing PHASE 1: DERIVATIVE COMPUTATION ==================
+    mfem::StopWatch deriv_timer;
+    deriv_timer.Start();
     // Initialise DCPSE derivatives
-    StreamVorti::Dcpse* derivs = InitialiseDCPSE(gf, dim, NumNeighbors);
-    std::cout << "main: DC PSE derivatives." << std::endl;
+    StreamVorti::Dcpse* derivs = InitialiseDCPSE(gf, dim, params.NumNeighbors);
+
+    deriv_timer.Stop();
+    perf_metrics.derivative_time = deriv_timer.RealTime();
+
+    std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
     // save derivs matrices
     SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
@@ -412,9 +417,11 @@ int main(int argc, char *argv[])
         std::cout << "done." << std::endl;
     }
 
-// ====================================================================
-// SIMULATION SETUP
-// ====================================================================
+
+// ================================================================
+// PART 1: INITIALIZATION
+// ================================================================
+
     const int num_nodes = mesh->GetNV();
 
     // Ensure we have a 2D DCPSE object first
@@ -423,10 +430,6 @@ int main(int argc, char *argv[])
         MFEM_ABORT("Setup: Only 2D simulations are currently supported.");
     }
 
-    // ================== Timing PHASE 1: DERIVATIVE COMPUTATION ==================
-    mfem::StopWatch deriv_timer;
-    deriv_timer.Start();
-
     // Get DCPSE derivative matrices
     const mfem::SparseMatrix& dx_matrix = dcpse2d->ShapeFunctionDx();
     const mfem::SparseMatrix& dy_matrix = dcpse2d->ShapeFunctionDy();
@@ -434,11 +437,6 @@ int main(int argc, char *argv[])
     const mfem::SparseMatrix& dyy_matrix = dcpse2d->ShapeFunctionDyy();
 
     std::cout << "Setup: Retrieved DCPSE derivative matrices successfully." << std::endl;
-
-    deriv_timer.Stop();
-    perf_metrics.derivative_time = deriv_timer.RealTime();
-
-    std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
     // Identify boundary and interior nodes
     std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
@@ -490,16 +488,31 @@ int main(int argc, char *argv[])
     streamfunction = 0.0;
 
     // Derivative vectors (allocated once, reused throughout)
-    mfem::Vector dpsi_dy(num_nodes);      // ∂ψ/∂y = u-velocity =
-    mfem::Vector dpsi_dx(num_nodes);      // ∂ψ/∂x (needs negation for v-velocity)
+    // Streamfunction derivatives (for interior vorticity update)
+    mfem::Vector dpsi_dy(num_nodes);      // ∂ψ/∂y
+    mfem::Vector dpsi_dx(num_nodes);      // ∂ψ/∂x
+
+    // CRITICAL FIX: Separate velocity vectors (for boundary conditions)
+    mfem::Vector u_velocity(num_nodes);   // u = ∂ψ/∂y (with BCs applied)
+    mfem::Vector v_velocity(num_nodes);   // v = -∂ψ/∂x (with BCs applied)
+
+    // Velocity derivatives (for boundary vorticity calculation)
+    mfem::Vector du_dy(num_nodes);        // ∂u/∂y
+    mfem::Vector dv_dx(num_nodes);        // ∂v/∂x
+
+    // Vorticity derivatives
     mfem::Vector domega_dx(num_nodes);
     mfem::Vector domega_dy(num_nodes);
     mfem::Vector d2omega_dx2(num_nodes);
     mfem::Vector d2omega_dy2(num_nodes);
 
-// ====================================================================
-// PARAVIEW OUTPUT SETUP
-// ====================================================================
+    // Residual monitoring vectors
+    mfem::Vector convection_term(num_nodes);
+    mfem::Vector diffusion_term(num_nodes);
+
+    // ====================================================================
+    // PARAVIEW OUTPUT SETUP
+    // ====================================================================
     // Create finite element spaces
     mfem::FiniteElementSpace scalar_fes(const_cast<mfem::Mesh*>(mesh), &fec, 1);
     mfem::FiniteElementSpace vector_fes(const_cast<mfem::Mesh*>(mesh), &fec, mesh->Dimension());
@@ -530,11 +543,11 @@ int main(int argc, char *argv[])
         std::cout << "Created ParaView output directory: " << "ParaView" << std::endl;
     }
 
-// ====================================================================
-// TIME-STEPPING PARAMETERS
-// ====================================================================
+    // ====================================================================
+    // TIME-STEPPING PARAMETERS
+    // ====================================================================
     // Todo:  check ComputeStableTimestep
-    // params.ComputeStableTimestep(num_nodes, reynolds_number);
+    params.ComputeStableTimestep(num_nodes, params.reynolds_number);
     double current_dt = params.dt;
     int num_timesteps = static_cast<int>(params.final_time / params.dt);
 
@@ -545,6 +558,7 @@ int main(int argc, char *argv[])
     bool steady_initialized = false;
 
     ResidualHistory residual_history;  // Always create (empty if not used)
+
     if (params.check_residuals) {
         std::cout << "\nResidual monitoring ENABLED" << std::endl;
         std::cout << "  Check frequency: every " << params.residual_check_freq
@@ -559,23 +573,14 @@ int main(int argc, char *argv[])
 
 
 // ====================================================================
-// TIME-STEPPING LOOP
+// PART 2: TIME-STEPPING LOOP
 // ====================================================================
     // ================== Timing PHASE 3: SIMULATION  ==================
     mfem::StopWatch main_loop_timer;
     main_loop_timer.Start();
 
-    // #ifdef _OPENMP
-    // int max_threads = omp_get_max_threads();
-    // std::cout << "Using OpenMP with " << max_threads << " threads" << std::endl;
-    // #else
-    // std::cout << "OpenMP NOT enabled (serial execution)" << std::endl;
-    // #endif
-
-    // volatile bool flag=false;
-
-    // #pragma omp parallel for schedule(dynamic, 64)
     // Main simulation loop (implementing Algorithm from Bourantas et al. 2019)
+
     for (int time_step = 1; time_step <= num_timesteps; ++time_step) {
         // if(flag) continue;
         double current_time = time_step * current_dt;
@@ -594,13 +599,20 @@ int main(int argc, char *argv[])
         dyy_matrix.Mult(vorticity, d2omega_dy2);      // ∂²ω/∂y²
 
         // ================================================================
-        // STEP 1: UPDATE VORTICITY (using derivatives computed above)
+        // STEP 1: UPDATE VORTICITY (using derivatives computed above) (interior only)
         // ================================================================
         // Use explicit Euler scheme (Eq. 11)
-        for (int i = 0; i < num_nodes; ++i) {
-            double convection = dpsi_dy[i] * domega_dx[i] - dpsi_dx[i] * domega_dy[i];
-            double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[i] + d2omega_dy2[i]);
-            vorticity[i] += current_dt * (diffusion - convection);
+        for (int idx : interior_nodes) {
+            double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
+            double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
+
+                // Store for residual computation (if enabled)
+            if (params.check_residuals) {
+                convection_term[idx] = convection;
+                diffusion_term[idx] = diffusion;
+            }
+            // Update vorticity
+            vorticity[idx] += current_dt * (diffusion - convection);
         }
 
         // ================================================================
@@ -610,6 +622,7 @@ int main(int argc, char *argv[])
         rhs = vorticity;
 
         // Apply homogeneous Dirichlet boundary conditions: ψ = 0 on all boundaries
+        // for lid-driven cavity
         for (int idx : all_boundary_nodes) {
             rhs[idx] = 0.0;
         }
@@ -617,28 +630,38 @@ int main(int argc, char *argv[])
         linear_solver->Mult(rhs, streamfunction);
 
         // ================================================================
-        // STEP 3: APPLY BOUNDARY CONDITIONS
+        // STEP 3: APPLY BOUNDARY CONDITIONS (CRITICAL FIX HERE!)
         // ================================================================
-        // We already have u = dpsi_dy and need v = -dpsi_dx
-        // Apply velocity BCs first
-        // Lid driven cavity
-        for (int idx : bottom_nodes) { dpsi_dy[idx] = 0.0; dpsi_dx[idx] = 0.0; }  // u=0, v=0
-        for (int idx : right_nodes)  { dpsi_dy[idx] = 0.0; dpsi_dx[idx] = 0.0; }  // u=0, v=0
-        for (int idx : left_nodes)   { dpsi_dy[idx] = 0.0; dpsi_dx[idx] = 0.0; }  // u=0, v=0
-        for (int idx : top_nodes)    { dpsi_dy[idx] = 1.0; dpsi_dx[idx] = 0.0; }  // u=1, v=0 (lid)
+        // FIX: Create SEPARATE velocity vectors (like old code)
+        // This is critical - we must apply BCs to velocity, then take derivatives
+
+        //mfem::Vector u_velocity(num_nodes);  // u = ∂ψ/∂y
+        //mfem::Vector v_velocity(num_nodes);  // v = -∂ψ/∂x
+
+        // Compute velocities from updated streamfunction
+        dy_matrix.Mult(streamfunction, u_velocity);  // u = ∂ψ/∂y
+        dx_matrix.Mult(streamfunction, v_velocity);  // temp = ∂ψ/∂x
+        v_velocity *= -1.0;                          // v = -∂ψ/∂x
+
+        // Apply velocity boundary conditions for lid-driven cavity
+        for (int idx : bottom_nodes) { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
+        for (int idx : right_nodes)  { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
+        for (int idx : left_nodes)   { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
+        for (int idx : top_nodes)    { u_velocity[idx] = 1.0; v_velocity[idx] = 0.0; }  // u=1, v=0 (moving lid)
 
         // Compute boundary vorticity: ω = ∂v/∂x - ∂u/∂y
-        // We need derivatives of velocity (which are already enforced at boundaries)
+        // CRITICAL: Take derivatives of the BC-enforced velocity fields
         mfem::Vector du_dy(num_nodes);
         mfem::Vector dv_dx(num_nodes);
-        dy_matrix.Mult(dpsi_dy, du_dy);  // ∂u/∂y (using BC-enforced u)
-        dx_matrix.Mult(dpsi_dx, dv_dx);  // ∂(-v)/∂x = -∂v/∂x
-        dv_dx *= -1.0;                   // Now it's ∂v/∂x
 
-        // Apply to all boundary nodes
+        dy_matrix.Mult(u_velocity, du_dy);  // ∂u/∂y (u has BCs applied)
+        dx_matrix.Mult(v_velocity, dv_dx);  // ∂v/∂x (v has BCs applied)
+
+        // Set vorticity at ALL boundary nodes
         for (int idx : all_boundary_nodes) {
             vorticity[idx] = dv_dx[idx] - du_dy[idx];
         }
+
 
         // ================================================================
         // STEP 4: COMPUTE AND LOG RESIDUALS (if enabled)
@@ -649,9 +672,9 @@ int main(int argc, char *argv[])
             double vort_sum_sq = 0.0, vort_max = 0.0;
             for (int idx : interior_nodes) {
                 double domega_dt = (vorticity[idx] - vorticity_old[idx]) / current_dt;
-                double conv = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
-                double diff = (1.0 / params.reynolds_number) *
-                            (d2omega_dx2[idx] + d2omega_dy2[idx]);
+                double conv = convection_term[idx];
+                double diff = diffusion_term[idx];
+
                 double res = domega_dt + conv - diff;
                 vort_sum_sq += res * res;
                 vort_max = std::max(vort_max, std::abs(res));
@@ -714,7 +737,7 @@ int main(int argc, char *argv[])
 
             for (int i = 0; i < num_nodes; ++i) {
                 // Convection operator contribution
-                double K_sum = std::abs(dpsi_dx[i]) + std::abs(dpsi_dy[i]);
+                double K_sum = std::abs(u_velocity[i]) + std::abs(v_velocity[i]);
 
                 // Diffusion operator contribution
                 double L_sum = (1.0 / params.reynolds_number) *
@@ -736,12 +759,7 @@ int main(int argc, char *argv[])
         // STEP 6: OUTPUT SOLUTION PERIODICALLY (if enabled)
         // ================================================================
         if (save_solutions && (time_step % params.output_frequency == 0)) {
-            // dpsi_dy = u-velocity
-            // Create v-velocity from dpsi_dx with sign correction
-            mfem::Vector v_velocity = dpsi_dx;
-            v_velocity *= -1.0;
-
-            SaveSolutionToFile(vorticity, streamfunction, dpsi_dy, v_velocity,
+            SaveSolutionToFile(vorticity, streamfunction, u_velocity, v_velocity,
                             params.output_prefix, time_step, dat_dir, false);
         }
 
@@ -749,14 +767,12 @@ int main(int argc, char *argv[])
         // STEP 7: PARAVIEW OUTPUT (if enabled)
         // ================================================================
         if (paraview_output && (time_step % params.paraview_output_frequency == 0)) {
-            // dpsi_dy is already u-velocity
-            // dpsi_dx needs to be negated for v-velocity
 
             for (int i = 0; i < num_nodes; ++i) {
                 vorticity_gf[i] = vorticity[i];
                 streamfunction_gf[i] = streamfunction[i];
-                velocity_gf[i] = dpsi_dy[i];                    // u
-                velocity_gf[i + num_nodes] = -dpsi_dx[i];      // v = -∂ψ/∂x
+                velocity_gf[i] = u_velocity[i];                    // u
+                velocity_gf[i + num_nodes] = v_velocity[i];      // v = -∂ψ/∂x
             }
 
             paraview_dc.SetTime(current_time);
@@ -767,7 +783,7 @@ int main(int argc, char *argv[])
         // ================================================================
         // STEP 8: CHECK STEADY STATE
         // ================================================================
-        if (time_step >= 100 && time_step % params.steady_state_freq == 0) {
+        if (time_step >= 100 && (time_step % params.steady_state_freq == 0)) {
 
             // Initialize on first check
             if (!steady_initialized) {
@@ -853,6 +869,22 @@ int main(int argc, char *argv[])
                 steady_prev_streamfunction = streamfunction;
             }
         }
+
+
+        // ====================================================================
+        // SIMPLE REAL-TIME MONITORING
+        // ====================================================================
+
+        // Ranges of Vorticity and Streamfunction results
+        if (time_step % 1000 == 0) {
+            std::cout << "\nStep " << time_step
+                    << " | t=" << std::fixed << std::setprecision(2) << current_time
+                    << " | ω: [" << std::setprecision(3) << vorticity.Min()
+                    << ", " << vorticity.Max() << "]"
+                    << " | ψ: [" << streamfunction.Min()
+                    << ", " << streamfunction.Max() << "]" << std::endl;
+        }
+
     } // End of time-stepping loop
 
     main_loop_timer.Stop();
@@ -878,14 +910,12 @@ int main(int argc, char *argv[])
     // Additional statistics
     std::cout << "Additional Performance Statistics:\n";
     std::cout << "  Total simulation time: " << total_solve_time << " s\n";
-    std::cout << "  Total iterations completed: " << perf_metrics.total_iterations << "\n";
+    std::cout << "  Total iterations(time steps) completed: " << perf_metrics.total_iterations << "\n";
     std::cout << "  Average time per iteration: " << total_solve_time / perf_metrics.total_iterations << " s\n\n";
 
 
     // Final solution statistics
     std::cout << "Final simulation statistics:" << std::endl;
-    std::cout << "  - Final time step size: " << current_dt << std::endl;
-    std::cout << "  - Total time steps completed: " << std::min(num_timesteps, static_cast<int>(params.final_time / current_dt)) << std::endl;
     std::cout << "  - Maximum vorticity: " << vorticity.Max() << std::endl;
     std::cout << "  - Minimum vorticity: " << vorticity.Min() << std::endl;
     std::cout << "  - Maximum streamfunction: " << streamfunction.Max() << std::endl;
@@ -1057,7 +1087,7 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh,
 
 double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
                                 const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
-                                const mfem::Vector& streamfunction, double reynolds_number) {
+                                const mfem::Vector& streamfunction, int reynolds_number) {
     // Implement Gershgorin circle theorem estimation (Equation 42 from paper)
     double max_eigenvalue_bound = 0.0;
     const int num_nodes = streamfunction.Size();
