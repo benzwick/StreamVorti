@@ -25,7 +25,7 @@
  */
 
 // Demo usage: (save everything)
-//     ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -Re 1000 -solver umfpack -sm -sn -sd -sdd -ss -pv -cr
+//     ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -Re 1000 -solver umfpack -adaptive -sm -sn -sd -sdd -ss -pv -cr
 
 #include <StreamVorti/stream_vorti.hpp>
 #include "mfem.hpp"
@@ -46,8 +46,8 @@
 
 // Simulation parameters structure
 struct SimulationParams {
-    double final_time = 60000.0;
-    double dt = 1e-2;
+    double final_time = 60.0;
+    double dt = 1e-3;
     int reynolds_number = 1000;
     int NumNeighbors = 25;
 
@@ -60,7 +60,7 @@ struct SimulationParams {
 
     // Adaptive timestep options
     int gershgorin_frequency = 1000; // Default=1000
-    bool enable_adaptive_timestep = true;
+    bool enable_adaptive_timestep = false;
     double gershgorin_safety_factor = 5.0;
 
     // Linear solver options
@@ -77,36 +77,6 @@ struct SimulationParams {
     // Residual monitoring
     bool check_residuals = false;
     int residual_check_freq = 100; // Default=100
-
-    // Grid-adaptive timestep computation
-    void ComputeStableTimestep(int num_nodes, int reynolds) {
-        // Estimate grid size (assuming square grid)
-        int N = static_cast<int>(std::sqrt(num_nodes));
-        double h = 1.0 / (N - 1);  // Grid spacing for unit square
-
-        // CFL condition for advection
-        double dt_cfl = h;  // Since U_max = 1.0 for lid-driven cavity
-
-        // Diffusion stability limit
-        double dt_diffusion = 0.25 * h * h * reynolds;
-
-        // Use more restrictive limit
-        double dt_stability = std::min(dt_cfl, dt_diffusion);
-
-        // Apply safety factor for explicit scheme
-        double safety_factor = 0.5;
-        double dt_recommended = safety_factor * dt_stability;
-
-        // Update if current dt is too large
-        if (dt > dt_recommended) {
-            std::cout << "WARNING: Current dt=" << dt << " exceeds stability limit!" << std::endl;
-            std::cout << "  Grid: " << N << "x" << N << " (h=" << h << ")" << std::endl;
-            std::cout << "  CFL limit: " << dt_cfl << std::endl;
-            std::cout << "  Diffusion limit: " << dt_diffusion << std::endl;
-            std::cout << "  Recommend dt to: " << dt_recommended << std::endl;
-            // dt = dt_recommended; //Use fixed dt for output consistency
-        }
-    }
 };
 
 // Structure to hold residual history
@@ -235,10 +205,6 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
 void IdentifyBoundaryNodes(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                             std::vector<int>& right_nodes, std::vector<int>& top_nodes,
                             std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
-
-double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
-                                const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
-                                const mfem::Vector& streamfunction, int reynolds_number);
 
 mfem::Solver* CreateLinearSolver(const std::string& solver_type, const mfem::SparseMatrix& A, const SimulationParams& params);
 
@@ -546,9 +512,7 @@ int main(int argc, char *argv[])
     // ====================================================================
     // TIME-STEPPING PARAMETERS
     // ====================================================================
-    // Todo:  check ComputeStableTimestep
-    params.ComputeStableTimestep(num_nodes, params.reynolds_number);
-    double current_dt = params.dt;
+    double current_dt = params.dt; //fixed dt
     int num_timesteps = static_cast<int>(params.final_time / params.dt);
 
     // Initialize steady state monitoring
@@ -582,7 +546,6 @@ int main(int argc, char *argv[])
     // Main simulation loop (implementing Algorithm from Bourantas et al. 2019)
 
     for (int time_step = 1; time_step <= num_timesteps; ++time_step) {
-        // if(flag) continue;
         double current_time = time_step * current_dt;
         perf_metrics.total_iterations = time_step;
 
@@ -728,30 +691,72 @@ int main(int argc, char *argv[])
         }
 
         // ================================================================
-        // STEP 5: ADAPTIVE TIMESTEP (if enabled)
+        // STEP 5: ADAPTIVE TIMESTEP
+        // Implement Gershgorin circle theorem estimation (Equation 42 from paper)
         // ================================================================
         if (params.enable_adaptive_timestep &&
             time_step % params.gershgorin_frequency == 0) {
-            // Gershgorin critical timestep (inline to avoid recomputing derivatives)
-            double max_row_sum = 0.0;
+            // Compute Gershgorin bound: max_i { Σ_j (|L_ij| + |K_ij|) }
+            double max_eigenvalue_bound = 0.0;
 
             for (int i = 0; i < num_nodes; ++i) {
-                // Convection operator contribution
-                double K_sum = std::abs(u_velocity[i]) + std::abs(v_velocity[i]);
+                double row_sum = 0.0;
 
-                // Diffusion operator contribution
-                double L_sum = (1.0 / params.reynolds_number) *
-                              (std::abs(d2omega_dx2[i]) + std::abs(d2omega_dy2[i]));
+                // ============================================================
+                // DIFFUSION OPERATOR: L = (1/Re) * (∂²/∂x² + ∂²/∂y²)
+                // Accumulate |L_ij| = |(1/Re) * (dxx_matrix[i,j] + dyy_matrix[i,j])|
+                // ============================================================
 
-                max_row_sum = std::max(max_row_sum, K_sum + L_sum);
+                // Contribution from ∂²/∂x² operator
+                for (int j = dxx_matrix.GetI()[i]; j < dxx_matrix.GetI()[i + 1]; ++j) {
+                    row_sum += std::abs((1.0 / params.reynolds_number) *
+                                    dxx_matrix.GetData()[j]);
+                }
+
+                // Contribution from ∂²/∂y² operator
+                for (int j = dyy_matrix.GetI()[i]; j < dyy_matrix.GetI()[i + 1]; ++j) {
+                    row_sum += std::abs((1.0 / params.reynolds_number) *
+                                    dyy_matrix.GetData()[j]);
+                }
+
+                // ============================================================
+                // CONVECTION OPERATOR: K = u*(∂/∂x) + v*(∂/∂y)
+                // Accumulate |K_ij| = |u_i * dx_matrix[i,j] + v_i * dy_matrix[i,j]|
+                // ============================================================
+
+                // Contribution from u*(∂/∂x) term
+                for (int j = dx_matrix.GetI()[i]; j < dx_matrix.GetI()[i + 1]; ++j) {
+                    row_sum += std::abs(dpsi_dy[i] * dx_matrix.GetData()[j]);
+                }
+
+                // Contribution from v*(∂/∂y) term (v = -∂ψ/∂x)
+                for (int j = dy_matrix.GetI()[i]; j < dy_matrix.GetI()[i + 1]; ++j) {
+                    row_sum += std::abs(-dpsi_dx[i] * dy_matrix.GetData()[j]);
+                }
+
+                // Track maximum row sum across all nodes
+                max_eigenvalue_bound = std::max(max_eigenvalue_bound, row_sum);
             }
 
-            double dt_critical = 2.0 / max_row_sum;
+            // ============================================================
+            // CRITICAL TIMESTEP: dt ≤ 2/|λ_max|  (Equation 40)
+            // ============================================================
+            double dt_critical = (max_eigenvalue_bound > 0.0) ?
+                                2.0 / max_eigenvalue_bound : 1e-4;
 
+            // Apply safety factor and adjust timestep if necessary
             if (current_dt > dt_critical / params.gershgorin_safety_factor) {
                 current_dt = dt_critical / params.gershgorin_safety_factor;
                 num_timesteps = static_cast<int>(params.final_time / current_dt);
-                std::cout << "Adjusted dt = " << current_dt << std::endl;
+
+                std::cout << "Adaptive timestep adjustment:" << std::endl;
+                std::cout << "  |λ_max| ≈ " << std::scientific << std::setprecision(4)
+                        << max_eigenvalue_bound << std::endl;
+                std::cout << "  dt_critical = " << dt_critical << std::endl;
+                std::cout << "  dt_new = " << current_dt
+                        << " (safety factor: " << params.gershgorin_safety_factor << ")"
+                        << std::endl;
+                std::cout << "  Updated total steps = " << num_timesteps << std::endl;
             }
         }
 
@@ -1084,47 +1089,6 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh,
     // For a 20×20 grid: 20, 18, 20, 18 (total boundary: 76)
     // For a 40×40 grid: 40, 38, 40, 38 (total boundary: 156)
 }
-
-double ComputeGershgorinTimeStep(const mfem::SparseMatrix& dx_matrix, const mfem::SparseMatrix& dy_matrix,
-                                const mfem::SparseMatrix& dxx_matrix, const mfem::SparseMatrix& dyy_matrix,
-                                const mfem::Vector& streamfunction, int reynolds_number) {
-    // Implement Gershgorin circle theorem estimation (Equation 42 from paper)
-    double max_eigenvalue_bound = 0.0;
-    const int num_nodes = streamfunction.Size();
-
-    // Compute velocity components
-    mfem::Vector u(num_nodes), v(num_nodes);
-    dy_matrix.Mult(streamfunction, u);   // u = ∂ψ/∂y
-    dx_matrix.Mult(streamfunction, v);   // v = -∂ψ/∂x
-    // v *= -1.0;
-
-    // For each node, compute the Gershgorin bound
-    for (int i = 0; i < num_nodes; ++i) {
-        double row_sum = 0.0;
-
-        // Diffusion terms: (1/Re) * (∂²/∂x² + ∂²/∂y²)
-        for (int j = dxx_matrix.GetI()[i]; j < dxx_matrix.GetI()[i + 1]; ++j) {
-            row_sum += std::abs((1.0 / reynolds_number) * dxx_matrix.GetData()[j]);
-        }
-        for (int j = dyy_matrix.GetI()[i]; j < dyy_matrix.GetI()[i + 1]; ++j) {
-            row_sum += std::abs((1.0 / reynolds_number) * dyy_matrix.GetData()[j]);
-        }
-
-        // Convection terms: u*(∂/∂x) + v*(∂/∂y)
-        for (int j = dx_matrix.GetI()[i]; j < dx_matrix.GetI()[i + 1]; ++j) {
-            row_sum += std::abs(u[i] * dx_matrix.GetData()[j]);
-        }
-        for (int j = dy_matrix.GetI()[i]; j < dy_matrix.GetI()[i + 1]; ++j) {
-            row_sum += std::abs(v[i] * dy_matrix.GetData()[j]);
-        }
-
-        max_eigenvalue_bound = std::max(max_eigenvalue_bound, row_sum);
-    }
-
-    // Critical time step: dt ≤ 2/|λ_max|
-    return (max_eigenvalue_bound > 0.0) ? 2.0 / max_eigenvalue_bound : 1e-4;
-}
-
 
 void SaveSolutionToFile(const mfem::Vector& vorticity,
                        const mfem::Vector& streamfunction,
