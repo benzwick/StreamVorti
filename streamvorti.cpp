@@ -66,11 +66,11 @@ struct SimulationParams {
     // Linear solver options
     std::string solver_type = "umfpack";
     int solver_max_iter = 500;
-    double solver_rel_tol = 1e-12;
+    double solver_rel_tol = 1e-8;
     int solver_print_level = 0;
 
     // Convergence parameters
-    double steady_state_tol = 1e-5; // L2 normal (global)
+    double steady_state_tol = 1e-12; // L2 relative change (global)
     int steady_state_freq = 100; // Default=100
     int steady_state_checks = 3;
 
@@ -193,6 +193,17 @@ struct PerformanceMetrics {
     }
 };
 
+// Structure to hold solver and its preconditioner
+struct SolverPackage {
+    mfem::Solver* solver = nullptr;
+    mfem::Solver* preconditioner = nullptr;  // nullptr for direct solvers
+
+    ~SolverPackage() {
+        delete solver;
+        delete preconditioner;
+    }
+};
+
 // Function declarations
 
 mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int nz,
@@ -206,7 +217,7 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                             std::vector<int>& right_nodes, std::vector<int>& top_nodes,
                             std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
 
-mfem::Solver* CreateLinearSolver(const std::string& solver_type, const mfem::SparseMatrix& A, const SimulationParams& params);
+SolverPackage* CreateLinearSolver(const std::string& solver_type, const mfem::SparseMatrix& A, const SimulationParams& params);
 
 void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& streamfunction,
                        const mfem::Vector& u_velocity, const mfem::Vector& v_velocity,
@@ -434,11 +445,13 @@ int main(int argc, char *argv[])
     factor_timer.Start();
 
     // Create and setup linear solver (factorization happens here for direct solvers)
-    mfem::Solver* linear_solver = CreateLinearSolver(params.solver_type, *laplacian_matrix, params);
+    SolverPackage* solver_package = CreateLinearSolver(params.solver_type, *laplacian_matrix, params);
 
-    if (!linear_solver) {
+    if (!solver_package || !solver_package->solver) {
         MFEM_ABORT("Failed to create linear solver");
     }
+
+    mfem::Solver* linear_solver = solver_package->solver;
 
     factor_timer.Stop();
     perf_metrics.factorization_time = factor_timer.RealTime();
@@ -667,8 +680,18 @@ int main(int argc, char *argv[])
                 diff_vort -= steady_prev_vorticity;
                 diff_stream = streamfunction;
                 diff_stream -= steady_prev_streamfunction;
-                vort_rel_change = diff_vort.Norml2() / std::max(vorticity.Norml2(), 1e-12);
-                psi_rel_change = diff_stream.Norml2() / std::max(streamfunction.Norml2(), 1e-12);
+
+                // Compute relative changes with proper threshold check
+                double vort_norm = vorticity.Norml2();
+                double stream_norm = streamfunction.Norml2();
+                const double norm_threshold = 1e-12;
+
+                vort_rel_change = (vort_norm > norm_threshold) ?
+                                  diff_vort.Norml2() / vort_norm :
+                                  diff_vort.Norml2();
+                psi_rel_change = (stream_norm > norm_threshold) ?
+                                 diff_stream.Norml2() / stream_norm :
+                                 diff_stream.Norml2();
             }
 
             // Store in history
@@ -808,16 +831,23 @@ int main(int argc, char *argv[])
                 diff_stream = streamfunction;
                 diff_stream -= steady_prev_streamfunction;
 
-                double vort_change = diff_vort.Norml2() /
-                                    std::max(vorticity.Norml2(), 1e-12);
-                double stream_change = diff_stream.Norml2() /
-                                    std::max(streamfunction.Norml2(), 1e-12);
+                // Compute relative changes with proper threshold check
+                double vort_norm = vorticity.Norml2();
+                double stream_norm = streamfunction.Norml2();
+                const double norm_threshold = 1e-12;
+
+                double vort_change = (vort_norm > norm_threshold) ?
+                                     diff_vort.Norml2() / vort_norm :
+                                     diff_vort.Norml2();
+                double stream_change = (stream_norm > norm_threshold) ?
+                                       diff_stream.Norml2() / stream_norm :
+                                       diff_stream.Norml2();
                 double max_change = std::max(vort_change, stream_change);
 
                 // Report progress
                 std::cout << "Step " << time_step << " (t=" << std::fixed
                         << std::setprecision(6) << current_time
-                        << "): ‖Δ‖/‖·‖ = " << std::scientific << max_change;
+                        << "): Temporal ‖Δ‖/‖·‖ = " << std::scientific << max_change;
 
                 // Show current residuals if available
                 if (params.check_residuals && !residual_history.timesteps.empty()) {
@@ -929,7 +959,7 @@ int main(int argc, char *argv[])
     // Cleanup
     delete derivs;
     delete mesh;
-    delete linear_solver;
+    delete solver_package;  // This will delete both solver and preconditioner
     delete laplacian_matrix;
 
     std::cout << "main: success!" << std::endl;
@@ -1156,11 +1186,11 @@ void SaveSolutionToFile(const mfem::Vector& vorticity,
 
 // Create appropriate linear solver based on user selection
 // Options: umfpack, klu, cg, minres, gmres, bicgstab, hypre
-mfem::Solver* CreateLinearSolver(const std::string& solver_type,
-                                  const mfem::SparseMatrix& A,
-                                  const SimulationParams& params)
+SolverPackage* CreateLinearSolver(const std::string& solver_type,
+                                   const mfem::SparseMatrix& A,
+                                   const SimulationParams& params)
 {
-    mfem::Solver* solver = nullptr;
+    SolverPackage* package = new SolverPackage();
 
     std::cout << "Creating linear solver: " << solver_type << std::endl;
 
@@ -1170,9 +1200,11 @@ mfem::Solver* CreateLinearSolver(const std::string& solver_type,
         mfem::UMFPackSolver* umf_solver = new mfem::UMFPackSolver();
         umf_solver->Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
         umf_solver->SetOperator(A);
-        solver = umf_solver;
+        package->solver = umf_solver;
+        // No preconditioner needed for direct solver
 #else
         std::cerr << "ERROR: UMFPACK not available. Rebuild MFEM with SuiteSparse." << std::endl;
+        delete package;
         return nullptr;
 #endif
     }
@@ -1181,9 +1213,11 @@ mfem::Solver* CreateLinearSolver(const std::string& solver_type,
         std::cout << "Using KLUSolver (direct solver)" << std::endl;
         mfem::KLUSolver* klu_solver = new mfem::KLUSolver();
         klu_solver->SetOperator(A);
-        solver = klu_solver;
+        package->solver = klu_solver;
+        // No preconditioner needed for direct solver
 #else
         std::cerr << "ERROR: KLU not available. Rebuild MFEM with SuiteSparse." << std::endl;
+        delete package;
         return nullptr;
 #endif
     }
@@ -1194,11 +1228,13 @@ mfem::Solver* CreateLinearSolver(const std::string& solver_type,
         cg_solver->SetMaxIter(params.solver_max_iter);
         cg_solver->SetPrintLevel(params.solver_print_level);
 
-        // Optional: Add preconditioner
+        // Add preconditioner (Gauss-Seidel smoother)
         mfem::GSSmoother* precond = new mfem::GSSmoother();
         cg_solver->SetPreconditioner(*precond);
         cg_solver->SetOperator(A);
-        solver = cg_solver;
+
+        package->solver = cg_solver;
+        package->preconditioner = precond;  // Store for proper cleanup
     }
     else if (solver_type == "gmres") {
         std::cout << "Using GMRESSolver (iterative, general matrices)" << std::endl;
@@ -1208,15 +1244,13 @@ mfem::Solver* CreateLinearSolver(const std::string& solver_type,
         gmres_solver->SetPrintLevel(params.solver_print_level);
         gmres_solver->SetKDim(200); // Restart parameter
 
-        // Optional: Add preconditioner
-        // Option 1: Gauss-Seidel (simple, effective)
+        // Add preconditioner (Gauss-Seidel smoother)
         mfem::GSSmoother* gs_precond = new mfem::GSSmoother();
         gmres_solver->SetPreconditioner(*gs_precond);
-
-        // Option 2: Jacobi (parallel-friendly)
-        // mfem::DSmoother* jacobi_precond = new mfem::DSmoother();
         gmres_solver->SetOperator(A);
-        solver = gmres_solver;
+
+        package->solver = gmres_solver;
+        package->preconditioner = gs_precond;
     }
     else if (solver_type == "minres") {
         std::cout << "Using MINRESSolver (iterative, symmetric indefinite)" << std::endl;
@@ -1225,7 +1259,9 @@ mfem::Solver* CreateLinearSolver(const std::string& solver_type,
         minres_solver->SetMaxIter(params.solver_max_iter);
         minres_solver->SetPrintLevel(params.solver_print_level);
         minres_solver->SetOperator(A);
-        solver = minres_solver;
+
+        package->solver = minres_solver;
+        // No preconditioner for MINRES in this implementation
     }
     else if (solver_type == "bicgstab") {
         std::cout << "Using BiCGSTABSolver (iterative, nonsymmetric)" << std::endl;
@@ -1235,11 +1271,13 @@ mfem::Solver* CreateLinearSolver(const std::string& solver_type,
         bicg_solver->SetMaxIter(params.solver_max_iter);
         bicg_solver->SetPrintLevel(params.solver_print_level);
 
-        // Optional: Add preconditioner
+        // Add preconditioner (Gauss-Seidel smoother)
         mfem::GSSmoother* precond = new mfem::GSSmoother();
         bicg_solver->SetPreconditioner(*precond);
         bicg_solver->SetOperator(A);
-        solver = bicg_solver;
+
+        package->solver = bicg_solver;
+        package->preconditioner = precond;
     }
     else if (solver_type == "hypre") { // Todo: HypreBoomerAMG does not work (require HypreParMatrix)
 #ifdef MFEM_USE_HYPRE
@@ -1247,19 +1285,23 @@ mfem::Solver* CreateLinearSolver(const std::string& solver_type,
         mfem::HypreBoomerAMG* amg = new mfem::HypreBoomerAMG();
         amg->SetPrintLevel(params.solver_print_level);
         amg->SetOperator(A);
-        solver = amg;
+
+        package->solver = amg;
+        // No preconditioner needed for AMG (it is a preconditioner itself)
 #else
         std::cerr << "ERROR: HYPRE not available. Rebuild MFEM with HYPRE support." << std::endl;
+        delete package;
         return nullptr;
 #endif
     }
     else {
         std::cerr << "ERROR: Unknown solver type: " << solver_type << std::endl;
-        std::cerr << "Available solvers: umfpack, klu, cg, gmres, minres, bicgstab, hypre, amg" << std::endl;
+        std::cerr << "Available solvers: umfpack, klu, cg, gmres, minres, bicgstab, hypre" << std::endl;
+        delete package;
         return nullptr;
     }
 
-    return solver;
+    return package;
 }
 
 std::string GetCurrentDateTime() {
