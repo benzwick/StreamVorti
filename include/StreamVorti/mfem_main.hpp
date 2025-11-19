@@ -25,7 +25,7 @@
 
 
 /*!
-   \file stream_vorti.hpp
+   \file mfem_main.hpp
    \brief StreamVorti software header file. Should be included in a project to use StreamVorti.
    \author Konstantinos A. Mountris
    \date 12/01/2018

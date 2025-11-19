@@ -40,7 +40,7 @@ StreamVorti is a C++ library for solving PDEs using explicit methods, specifical
   - `dcpse_2d.hpp/cpp` - 2D-specific DCPSE methods
   - `dcpse_3d.hpp/cpp` - 3D-specific DCPSE methods
 - `src/support_domain/` - Support domain calculations for meshless methods
-- `include/StreamVorti/stream_vorti.hpp` - Main header that includes all modules
+- `include/StreamVorti/mfem_main.hpp` - Main header that includes all modules
 
 **Main Executable:**
 - `mfem_main.cpp` - MFEM integration example/demo
@@ -54,6 +54,6 @@ StreamVorti is a C++ library for solving PDEs using explicit methods, specifical
 **Library Structure:**
 - Header-only style with implementation in `src/` compiled into static library
 - Modular design with each component as separate CMake target
-- All functionality accessible through single `stream_vorti.hpp` header
+- All functionality accessible through single `mfem_main.hpp` header
 
 The codebase focuses on meshless methods for computational fluid dynamics, with MFEM providing mesh handling and linear algebra operations while StreamVorti implements the meshless approximation schemes.

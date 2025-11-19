@@ -64,7 +64,7 @@ INCLUDE_DIRECTORIES( ${CMAKE_SOURCE_DIR}/include )
 
 
 # Set the headers of the StreamVorti library.
-SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/stream_vorti.hpp )
+SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/mfem_main.hpp )
 
 
 # Find dependencies of StreamVorti.

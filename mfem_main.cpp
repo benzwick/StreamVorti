@@ -34,7 +34,7 @@
  * @endcode
  */
 
-#include <StreamVorti/stream_vorti.hpp>
+#include <StreamVorti/mfem_main.hpp>
 
 #include <cstddef>
 #include <filesystem>
