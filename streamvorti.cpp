@@ -28,7 +28,7 @@
 //     ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -Re 1000 -sm -sn -sd -sdd -ss -pv -cr
 
 // Related header
-#include <StreamVorti/stream_vorti.hpp>
+#include <StreamVorti/streamvorti.hpp>
 
 // C++ standard library headers (alphabetically sorted)
 #include <chrono>
