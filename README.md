@@ -1,7 +1,7 @@
 # StreamVorti
 
-[![Build](https://github.com/benzwick/StreamVorti/actions/workflows/build.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build.yml)
-[![Build with Spack](https://github.com/benzwick/StreamVorti/actions/workflows/build-spack.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-spack.yml)
+[![Build](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source.yml)
+[![Build with Spack](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-spack.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-spack.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![C++](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B17)
 [![MFEM](https://img.shields.io/badge/MFEM-4.8-green.svg)](https://mfem.org/)
