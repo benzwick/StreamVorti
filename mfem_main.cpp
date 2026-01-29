@@ -232,6 +232,7 @@ int main(int argc, char *argv[])
     std::cout << "done." << std::endl;
 
     // Free the used memory
+    delete derivs;
     delete mesh;
 
     std::cout << "main: success!" << std::endl;
