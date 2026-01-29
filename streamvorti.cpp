@@ -26,9 +26,18 @@
 
 // Demo usage: (save everything)
 //     ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -Re 1000 -sm -sn -sd -sdd -ss -pv -cr
+//
+// SDL usage (requires ECL):
+//     ./StreamVorti -f demo/cavity.lisp -pv
 
 // Related header
 #include <StreamVorti/streamvorti.hpp>
+
+// SDL/Lisp support (conditional)
+#ifdef STREAMVORTI_WITH_ECL
+#include <StreamVorti/lisp/ecl_runtime.hpp>
+#include <StreamVorti/lisp/lisp_loader.hpp>
+#endif
 
 // C++ standard library headers (alphabetically sorted)
 #include <chrono>
@@ -83,6 +92,8 @@ int main(int argc, char *argv[])
 {
     // Options
     const char *mesh_file = "";
+    const char *sdl_file = "";  // SDL file for Lisp-based configuration
+    const char *lisp_path = ""; // Path to SDL Lisp source files
     int order = 1;
 
     // Output filename prefix and extension
@@ -115,7 +126,13 @@ int main(int argc, char *argv[])
 
     // Parse command-line options
     mfem::OptionsParser args(argc, argv);
-    // Similation options
+#ifdef STREAMVORTI_WITH_ECL
+    args.AddOption(&sdl_file, "-f", "--sdl-file",
+                   "SDL (Simulation Definition Language) file to load.");
+    args.AddOption(&lisp_path, "-lp", "--lisp-path",
+                   "Path to SDL Lisp source files.");
+#endif
+    // Simulation options
     args.AddOption(&mesh_file, "-m", "--mesh",
                    "Mesh file to use.");
     args.AddOption(&order, "-o", "--order",
@@ -193,8 +210,103 @@ int main(int argc, char *argv[])
     }
     args.PrintOptions(std::cout);
 
-    // Create or load mesh
-    mfem::Mesh* mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
+    // Mesh pointer - will be set by SDL mode or traditional mode
+    mfem::Mesh* mesh = nullptr;
+#ifdef STREAMVORTI_WITH_ECL
+    bool sdl_mode = false;
+#endif
+
+#ifdef STREAMVORTI_WITH_ECL
+    // ===== SDL Mode =====
+    // If an SDL file is specified, use the Lisp-based configuration
+    if (sdl_file[0] != '\0')
+    {
+        sdl_mode = true;
+        std::cout << "\n" << std::string(70, '=') << std::endl;
+        std::cout << "SDL MODE - Loading simulation from: " << sdl_file << std::endl;
+        std::cout << std::string(70, '=') << "\n" << std::endl;
+
+        try {
+            // Initialize ECL runtime
+            std::string lpath = lisp_path[0] != '\0' ? lisp_path : "lisp";
+            StreamVorti::Lisp::Runtime::init(lpath);
+
+            // Load simulation from SDL file
+            auto config = StreamVorti::Lisp::Loader::load(sdl_file);
+
+            std::cout << "Loaded simulation: " << config.name << std::endl;
+            std::cout << "  Dimension: " << config.dimension << std::endl;
+            std::cout << "  Mesh vertices: " << config.mesh->GetNV() << std::endl;
+            std::cout << "  Mesh elements: " << config.mesh->GetNE() << std::endl;
+            std::cout << "  Boundaries defined: " << config.boundaries.size() << std::endl;
+
+            // Note: SDL boundary conditions are loaded but currently the solver
+            // uses hardcoded lid-driven cavity BCs. Full SDL BC integration is
+            // planned for a future release.
+            if (!config.boundaries.empty()) {
+                std::cout << "  WARNING: SDL boundary conditions are not yet fully integrated.\n";
+                std::cout << "           Using hardcoded lid-driven cavity BCs.\n";
+                for (const auto& bc : config.boundaries) {
+                    std::cout << "    - " << bc.name << " (attr=" << bc.attribute
+                              << ", type=" << bc.type << ")\n";
+                }
+            }
+
+            // Map SDL config to SimulationParams
+            params.num_neighbors = config.dcpse.num_neighbors;
+            params.reynolds_number = static_cast<int>(config.physics.reynolds);
+            params.dt = config.solver.dt;
+            params.final_time = config.solver.end_time;
+            params.output_prefix = config.name;
+
+            // Map solver tolerance and iterations
+            params.solver_rel_tol = config.solver.tolerance;
+            params.solver_max_iter = config.solver.max_iterations;
+
+            // Map output settings
+            if (config.output.format == "vtk") {
+                paraview_output = true;
+            }
+            // Map output interval to paraview frequency (convert time to steps)
+            if (config.output.interval > 0 && params.dt > 0) {
+                params.paraview_output_frequency = static_cast<int>(config.output.interval / params.dt);
+            }
+
+            std::cout << "\nMapped SDL parameters:" << std::endl;
+            std::cout << "  Reynolds number: " << params.reynolds_number << std::endl;
+            std::cout << "  Timestep: " << params.dt << std::endl;
+            std::cout << "  Final time: " << params.final_time << std::endl;
+            std::cout << "  DCPSE neighbors: " << params.num_neighbors << std::endl;
+            std::cout << "  Solver tolerance: " << params.solver_rel_tol << std::endl;
+            std::cout << "  ParaView output frequency: " << params.paraview_output_frequency << std::endl;
+
+            // Get mesh dimensions from SDL config (for grid_size reporting)
+            // Note: GetNV() = (nx+1)*(ny+1) for a structured mesh, so sqrt gives nx+1
+            int nv = config.mesh->GetNV();
+            nx = ny = static_cast<int>(std::sqrt(static_cast<double>(nv))) - 1;
+            dim = config.dimension;
+
+            // Transfer ownership of mesh
+            mesh = config.mesh.release();
+
+            std::cout << "\nContinuing with SDL-configured simulation...\n" << std::endl;
+
+        } catch (const StreamVorti::Lisp::EclException& e) {
+            std::cerr << "ECL Error: " << e.what() << std::endl;
+            StreamVorti::Lisp::Runtime::shutdown();
+            return EXIT_FAILURE;
+        } catch (const std::exception& e) {
+            std::cerr << "Error loading SDL file: " << e.what() << std::endl;
+            StreamVorti::Lisp::Runtime::shutdown();
+            return EXIT_FAILURE;
+        }
+    }
+#endif // STREAMVORTI_WITH_ECL
+
+    // Create or load mesh (traditional mode - only if not in SDL mode)
+    if (mesh == nullptr) {
+        mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
+    }
     perf_metrics.grid_size = nx;
 
     // dat files for Matlab
@@ -781,6 +893,13 @@ int main(int argc, char *argv[])
     delete mesh;
     delete solver_package;  // delete both solver and preconditioner
     delete laplacian_matrix;
+
+#ifdef STREAMVORTI_WITH_ECL
+    // Shutdown ECL if it was initialized
+    if (sdl_mode) {
+        StreamVorti::Lisp::Runtime::shutdown();
+    }
+#endif
 
     std::cout << "main: success!" << std::endl;
     return EXIT_SUCCESS;
