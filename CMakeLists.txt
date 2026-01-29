@@ -108,13 +108,44 @@ INCLUDE_DIRECTORIES(${MFEM_INCLUDE_DIRS})
 
 # Find ECL (Embeddable Common Lisp) for SDL support
 IF(STREAMVORTI_WITH_ECL)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(ECL REQUIRED ecl)
+    # Try pkg-config first, fall back to manual detection
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(ECL QUIET ecl)
+    endif()
+
+    if(NOT ECL_FOUND)
+        # Manual detection for systems without pkg-config file (e.g., Ubuntu)
+        find_path(ECL_INCLUDE_DIRS ecl/ecl.h
+            PATHS /usr/include /usr/local/include
+        )
+        find_library(ECL_LIBRARIES ecl
+            PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib
+        )
+        if(ECL_INCLUDE_DIRS AND ECL_LIBRARIES)
+            set(ECL_FOUND TRUE)
+            # Try to get version from ecl-config or header
+            execute_process(
+                COMMAND ecl-config --version
+                OUTPUT_VARIABLE ECL_VERSION
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            if(NOT ECL_VERSION)
+                set(ECL_VERSION "unknown")
+            endif()
+        endif()
+    endif()
+
+    if(NOT ECL_FOUND)
+        message(FATAL_ERROR "ECL (Embeddable Common Lisp) not found. "
+            "Install with: apt install ecl libecl-dev")
+    endif()
+
     message(STATUS "Found ECL version ${ECL_VERSION}")
     message(STATUS "  ECL include dirs: ${ECL_INCLUDE_DIRS}")
     message(STATUS "  ECL libraries: ${ECL_LIBRARIES}")
     INCLUDE_DIRECTORIES(${ECL_INCLUDE_DIRS})
-    link_directories(${ECL_LIBRARY_DIRS})
     add_compile_definitions(STREAMVORTI_WITH_ECL)
 ENDIF()
 
