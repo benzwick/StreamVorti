@@ -169,7 +169,7 @@ std::string Bridge::toCppString(cl_object obj)
         return "";
     }
 
-    if (ECL_STRINGP(obj)) {
+    if (isString(obj)) {
         cl_index length = ecl_length(obj);
         std::string result;
         result.reserve(length);
@@ -180,7 +180,7 @@ std::string Bridge::toCppString(cl_object obj)
     }
 
     // If it's a symbol, get its name
-    if (ECL_SYMBOLP(obj)) {
+    if (isSymbol(obj)) {
         return toCppString(ecl_symbol_name(obj));
     }
 
@@ -197,9 +197,9 @@ std::vector<double> Bridge::toVector(cl_object list)
 
     result.reserve(listLength(list));
 
-    while (!isNil(list) && ECL_CONSP(list)) {
-        result.push_back(toCppDouble(ECL_CONS_CAR(list)));
-        list = ECL_CONS_CDR(list);
+    while (!isNil(list) && !isNil(cl_consp(list))) {
+        result.push_back(toCppDouble(cl_car(list)));
+        list = cl_cdr(list);
     }
 
     return result;
@@ -215,9 +215,9 @@ std::vector<int> Bridge::toIntVector(cl_object list)
 
     result.reserve(listLength(list));
 
-    while (!isNil(list) && ECL_CONSP(list)) {
-        result.push_back(toCppInt(ECL_CONS_CAR(list)));
-        list = ECL_CONS_CDR(list);
+    while (!isNil(list) && !isNil(cl_consp(list))) {
+        result.push_back(toCppInt(cl_car(list)));
+        list = cl_cdr(list);
     }
 
     return result;
@@ -238,7 +238,7 @@ cl_object Bridge::nth(cl_object list, size_t index)
 
 std::string Bridge::symbolName(cl_object sym)
 {
-    if (!ECL_SYMBOLP(sym)) {
+    if (!isSymbol(sym)) {
         return "";
     }
     return toCppString(ecl_symbol_name(sym));
@@ -253,27 +253,27 @@ bool Bridge::isNil(cl_object obj)
 
 bool Bridge::isNumber(cl_object obj)
 {
-    return ECL_NUMBERP(obj);
+    return !isNil(cl_numberp(obj));
 }
 
 bool Bridge::isString(cl_object obj)
 {
-    return ECL_STRINGP(obj);
+    return !isNil(cl_stringp(obj));
 }
 
 bool Bridge::isList(cl_object obj)
 {
-    return ECL_LISTP(obj);
+    return !isNil(cl_listp(obj));
 }
 
 bool Bridge::isSymbol(cl_object obj)
 {
-    return ECL_SYMBOLP(obj);
+    return !isNil(cl_symbolp(obj));
 }
 
 bool Bridge::isFunction(cl_object obj)
 {
-    return ecl_functionp(obj);
+    return !isNil(cl_functionp(obj));
 }
 
 // ==================== Function Calls ====================
@@ -343,7 +343,8 @@ cl_object Bridge::findSymbol(const std::string& name,
     }
 
     int intern_flag;
-    return ecl_intern(name.c_str(), name.length(), pkg, &intern_flag);
+    cl_object name_str = ecl_make_simple_base_string(name.c_str(), name.length());
+    return ecl_intern(name_str, pkg, &intern_flag);
 }
 
 cl_object Bridge::symbolFunction(cl_object sym)
