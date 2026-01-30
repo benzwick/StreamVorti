@@ -91,6 +91,8 @@ public:
 
     inline int NumNeighbors() const { return this->num_neighbors_; }
 
+    inline int NumSupportNodes() const { return this->num_support_nodes_; }
+
 protected:
     /*! Number of neighbors requested for support domain */
     int num_neighbors_ = 0;

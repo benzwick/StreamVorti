@@ -102,8 +102,8 @@ int sv_dcpse_num_nodes(void* dcpse_ptr)
     if (!dcpse_ptr) return 0;
 
     StreamVorti::Dcpse* dcpse = static_cast<StreamVorti::Dcpse*>(dcpse_ptr);
-    // Access through the D(0) matrix dimensions
-    return dcpse->D(0).Height();
+    // Use NumSupportNodes() which is available immediately after construction
+    return dcpse->NumSupportNodes();
 }
 
 int sv_dcpse_num_neighbors(void* dcpse_ptr)
