@@ -113,7 +113,8 @@ TEST_F(LispBridgeTest, FromLispInt) {
 }
 
 TEST_F(LispBridgeTest, FromLispDouble) {
-    EclObject obj = StreamVorti::Lisp::Runtime::eval("2.718281828");
+    // Use d0 suffix to get double-float precision in Common Lisp
+    EclObject obj = StreamVorti::Lisp::Runtime::eval("2.718281828d0");
     EXPECT_NEAR(StreamVorti::Lisp::Bridge::toCppDouble(obj), 2.718281828, 1e-8);
 }
 
