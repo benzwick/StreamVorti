@@ -89,6 +89,12 @@ public:
     void SaveNeighsToFile(const std::vector<std::vector<int> > &neighbor_ids,
                           const std::string &filename) const;
 
+    inline int NumNeighbors() const { return this->num_neighbors_; }
+
+protected:
+    /*! Number of neighbors requested for support domain */
+    int num_neighbors_ = 0;
+
 private:
     /*! Dimension of the mesh */
     const int dim_;

@@ -111,7 +111,7 @@ int sv_dcpse_num_neighbors(void* dcpse_ptr)
     if (!dcpse_ptr) return 0;
 
     StreamVorti::Dcpse* dcpse = static_cast<StreamVorti::Dcpse*>(dcpse_ptr);
-    return dcpse->NumberOfNeighbors();
+    return dcpse->NumNeighbors();
 }
 
 void sv_dcpse_apply_dx(void* dcpse_ptr, const double* input, double* output, int n)

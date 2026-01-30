@@ -312,23 +312,23 @@ EclObject Bridge::funcall(EclObject func,
 
     switch (nargs) {
         case 0:
-            return to_ecl(cl_funcall(1, cl_func));
+            return to_ecl(::cl_funcall(1, cl_func));
         case 1: {
             auto it = args.begin();
-            return to_ecl(cl_funcall(2, cl_func, to_cl(*it)));
+            return to_ecl(::cl_funcall(2, cl_func, to_cl(*it)));
         }
         case 2: {
             auto it = args.begin();
             cl_object a1 = to_cl(*it++);
             cl_object a2 = to_cl(*it);
-            return to_ecl(cl_funcall(3, cl_func, a1, a2));
+            return to_ecl(::cl_funcall(3, cl_func, a1, a2));
         }
         case 3: {
             auto it = args.begin();
             cl_object a1 = to_cl(*it++);
             cl_object a2 = to_cl(*it++);
             cl_object a3 = to_cl(*it);
-            return to_ecl(cl_funcall(4, cl_func, a1, a2, a3));
+            return to_ecl(::cl_funcall(4, cl_func, a1, a2, a3));
         }
         case 4: {
             auto it = args.begin();
@@ -336,7 +336,7 @@ EclObject Bridge::funcall(EclObject func,
             cl_object a2 = to_cl(*it++);
             cl_object a3 = to_cl(*it++);
             cl_object a4 = to_cl(*it);
-            return to_ecl(cl_funcall(5, cl_func, a1, a2, a3, a4));
+            return to_ecl(::cl_funcall(5, cl_func, a1, a2, a3, a4));
         }
         default: {
             // For more arguments, use apply with a list
@@ -398,7 +398,7 @@ EclObject LispFunction::operator()() const
     if (!isValid()) {
         throw EclException("Invalid Lisp function");
     }
-    return to_ecl(cl_funcall(1, to_cl(func_)));
+    return to_ecl(::cl_funcall(1, to_cl(func_)));
 }
 
 EclObject LispFunction::operator()(std::initializer_list<EclObject> args) const
