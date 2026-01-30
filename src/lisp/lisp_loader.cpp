@@ -206,10 +206,41 @@ std::vector<BoundaryCondition> Loader::extractBoundaries(EclObject sim_obj)
         bc.attribute = getIntProperty(bc_spec, "attribute", 1);
         bc.type = getStringProperty(bc_spec, "type", "velocity");
 
-        // Get the boundary function
-        EclObject func = getProperty(bc_spec, "function");
-        if (!Bridge::isNil(func) && Bridge::isFunction(func)) {
-            bc.function = std::make_unique<LispFunction>(func);
+        // Get the boundary function(s)
+        if (bc.type == "velocity") {
+            // Try to get separate u and v functions for vector velocity BCs
+            EclObject u_func = getProperty(bc_spec, "u-function");
+            EclObject v_func = getProperty(bc_spec, "v-function");
+            EclObject w_func = getProperty(bc_spec, "w-function");
+
+            if (!Bridge::isNil(u_func) && Bridge::isFunction(u_func)) {
+                bc.u_function = std::make_unique<LispFunction>(u_func);
+            }
+            if (!Bridge::isNil(v_func) && Bridge::isFunction(v_func)) {
+                bc.v_function = std::make_unique<LispFunction>(v_func);
+            }
+            if (!Bridge::isNil(w_func) && Bridge::isFunction(w_func)) {
+                bc.w_function = std::make_unique<LispFunction>(w_func);
+            }
+
+            // Fallback: if single function provided, use it for u-component (legacy support)
+            EclObject func = getProperty(bc_spec, "function");
+            if (!Bridge::isNil(func) && Bridge::isFunction(func)) {
+                bc.function = std::make_unique<LispFunction>(func);
+                // If no separate u-function, use the legacy function for u
+                if (!bc.u_function) {
+                    EclObject func_copy = getProperty(bc_spec, "function");
+                    if (!Bridge::isNil(func_copy) && Bridge::isFunction(func_copy)) {
+                        bc.u_function = std::make_unique<LispFunction>(func_copy);
+                    }
+                }
+            }
+        } else {
+            // For non-velocity BCs (pressure, temperature), use single function
+            EclObject func = getProperty(bc_spec, "function");
+            if (!Bridge::isNil(func) && Bridge::isFunction(func)) {
+                bc.function = std::make_unique<LispFunction>(func);
+            }
         }
 
         boundaries.push_back(std::move(bc));

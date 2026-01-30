@@ -56,7 +56,14 @@ struct BoundaryCondition {
     std::string name;           ///< Region name
     int attribute;              ///< Mesh boundary attribute
     std::string type;           ///< "velocity", "pressure", etc.
-    std::unique_ptr<LispFunction> function;  ///< Evaluable BC function
+
+    /// For scalar BCs (pressure, temperature, or legacy single-function velocity)
+    std::unique_ptr<LispFunction> function;
+
+    /// For vector velocity BCs (separate u, v, w components)
+    std::unique_ptr<LispFunction> u_function;  ///< u-velocity (x-direction)
+    std::unique_ptr<LispFunction> v_function;  ///< v-velocity (y-direction)
+    std::unique_ptr<LispFunction> w_function;  ///< w-velocity (z-direction, 3D only)
 
     BoundaryCondition() = default;
     BoundaryCondition(BoundaryCondition&&) = default;

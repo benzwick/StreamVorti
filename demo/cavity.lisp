@@ -6,7 +6,9 @@
 ;;;; for defining a classic lid-driven cavity flow problem.
 ;;;;
 ;;;; Run with:
-;;;;   MfemRun -f demo/cavity.lisp
+;;;;   MfemRun -f demo/cavity.lisp -pv
+;;;;
+;;;; For validation against Ghia et al. (1982), use a 40x40 grid.
 
 (in-package :sdl)
 
@@ -26,35 +28,65 @@
     (defparameter *domain* (rectangle '(0 0) '(1 1))))
 
   ;;; --------------------------------------------------------
-  ;;; 10x10 quad mesh
+  ;;; 40x40 quad mesh (recommended for Ghia validation)
+  ;;; Use 10x10 for quick tests, 40x40 for accurate validation
   ;;; --------------------------------------------------------
   (mesh
     (generate *domain*
               :type :quad
-              :divisions '(10 10)))
+              :divisions '(40 40)))
 
   ;;; --------------------------------------------------------
   ;;; Boundary conditions
+  ;;; For velocity BCs, we specify separate u and v functions
   ;;; --------------------------------------------------------
   (boundaries
-    ;; Lid moves with unit velocity
-    (defun lid-velocity (x y)
+    ;; Lid: u=1, v=0 (moving in x-direction)
+    (defun lid-u-velocity (x y)
+      "Lid moves with unit velocity in x-direction"
       (declare (ignore x y))
-      1.0)
+      1.0d0)
 
-    ;; Walls are stationary (no-slip)
-    (defun wall-velocity (x y)
+    (defun lid-v-velocity (x y)
+      "Lid has zero velocity in y-direction"
       (declare (ignore x y))
-      0.0)
+      0.0d0)
 
-    ;; Apply BCs to each boundary
-    (region "lid"    (where (= y 1.0)) (velocity #'lid-velocity))
-    (region "bottom" (where (= y 0.0)) (velocity #'wall-velocity))
-    (region "left"   (where (= x 0.0)) (velocity #'wall-velocity))
-    (region "right"  (where (= x 1.0)) (velocity #'wall-velocity)))
+    ;; Walls: u=0, v=0 (no-slip)
+    (defun wall-u-velocity (x y)
+      "Walls have zero u-velocity"
+      (declare (ignore x y))
+      0.0d0)
+
+    (defun wall-v-velocity (x y)
+      "Walls have zero v-velocity"
+      (declare (ignore x y))
+      0.0d0)
+
+    ;; Apply BCs to each boundary with separate u and v functions
+    (region "lid"
+      (where (= y 1.0))
+      (velocity :u-function #'lid-u-velocity
+                :v-function #'lid-v-velocity))
+
+    (region "bottom"
+      (where (= y 0.0))
+      (velocity :u-function #'wall-u-velocity
+                :v-function #'wall-v-velocity))
+
+    (region "left"
+      (where (= x 0.0))
+      (velocity :u-function #'wall-u-velocity
+                :v-function #'wall-v-velocity))
+
+    (region "right"
+      (where (= x 1.0))
+      (velocity :u-function #'wall-u-velocity
+                :v-function #'wall-v-velocity)))
 
   ;;; --------------------------------------------------------
   ;;; Physics: incompressible Navier-Stokes
+  ;;; Re=100 for initial validation (Ghia 1982 benchmark)
   ;;; --------------------------------------------------------
   (physics
     :type :incompressible-navier-stokes
