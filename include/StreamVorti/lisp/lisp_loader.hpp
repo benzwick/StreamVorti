@@ -34,8 +34,11 @@
 #include <map>
 #include <functional>
 
-// Include ECL header for proper type definitions
-#include <ecl/ecl.h>
+// Forward declare ECL types - actual ECL header included only in .cpp files
+// to avoid ECL macro conflicts with MFEM headers (e.g., ECL defines Ct macro
+// which conflicts with mfem::Hybridization::Ct member variable)
+// Use void* as opaque pointer - type safety enforced in implementation
+typedef void* EclObject;
 
 // Forward declarations
 namespace mfem {
@@ -178,7 +181,7 @@ public:
      * @param sim_obj The Lisp simulation object
      * @return MFEM Mesh pointer (caller owns)
      */
-    static std::unique_ptr<mfem::Mesh> extractMesh(cl_object sim_obj);
+    static std::unique_ptr<mfem::Mesh> extractMesh(EclObject sim_obj);
 
     /**
      * @brief Extract boundary conditions from loaded SDL
@@ -186,7 +189,7 @@ public:
      * @param sim_obj The Lisp simulation object
      * @return Vector of boundary conditions
      */
-    static std::vector<BoundaryCondition> extractBoundaries(cl_object sim_obj);
+    static std::vector<BoundaryCondition> extractBoundaries(EclObject sim_obj);
 
     /**
      * @brief Extract DCPSE parameters from loaded SDL
@@ -194,7 +197,7 @@ public:
      * @param sim_obj The Lisp simulation object
      * @return DCPSEParams struct
      */
-    static DCPSEParams extractDCPSEParams(cl_object sim_obj);
+    static DCPSEParams extractDCPSEParams(EclObject sim_obj);
 
     /**
      * @brief Extract solver parameters from loaded SDL
@@ -202,7 +205,7 @@ public:
      * @param sim_obj The Lisp simulation object
      * @return SolverParams struct
      */
-    static SolverParams extractSolverParams(cl_object sim_obj);
+    static SolverParams extractSolverParams(EclObject sim_obj);
 
     /**
      * @brief Extract physics parameters from loaded SDL
@@ -210,7 +213,7 @@ public:
      * @param sim_obj The Lisp simulation object
      * @return PhysicsParams struct
      */
-    static PhysicsParams extractPhysicsParams(cl_object sim_obj);
+    static PhysicsParams extractPhysicsParams(EclObject sim_obj);
 
     /**
      * @brief Extract output parameters from loaded SDL
@@ -218,28 +221,28 @@ public:
      * @param sim_obj The Lisp simulation object
      * @return OutputParams struct
      */
-    static OutputParams extractOutputParams(cl_object sim_obj);
+    static OutputParams extractOutputParams(EclObject sim_obj);
 
 private:
     /**
      * @brief Helper to get property from Lisp plist
      */
-    static cl_object getProperty(cl_object plist, const std::string& key);
+    static EclObject getProperty(EclObject plist, const std::string& key);
 
     /**
      * @brief Helper to get integer property
      */
-    static int getIntProperty(cl_object plist, const std::string& key, int default_value);
+    static int getIntProperty(EclObject plist, const std::string& key, int default_value);
 
     /**
      * @brief Helper to get double property
      */
-    static double getDoubleProperty(cl_object plist, const std::string& key, double default_value);
+    static double getDoubleProperty(EclObject plist, const std::string& key, double default_value);
 
     /**
      * @brief Helper to get string property
      */
-    static std::string getStringProperty(cl_object plist, const std::string& key,
+    static std::string getStringProperty(EclObject plist, const std::string& key,
                                           const std::string& default_value);
 };
 

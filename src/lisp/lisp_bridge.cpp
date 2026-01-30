@@ -22,83 +22,92 @@
  * @brief Implementation of C++/Lisp type conversion bridge
  */
 
+// IMPORTANT: Include MFEM FIRST before ECL to avoid macro conflicts
+// ECL defines macros (like Ct) that conflict with MFEM member names
+#include "mfem.hpp"
+
+// Now include ECL
+#include <ecl/ecl.h>
+
+// Include our headers after MFEM and ECL
 #include "StreamVorti/lisp/lisp_bridge.hpp"
 #include "StreamVorti/lisp/ecl_runtime.hpp"
-
-#include <ecl/ecl.h>
-#include "mfem.hpp"
 
 namespace StreamVorti {
 namespace Lisp {
 
+// Helper functions for type conversion between EclObject (void*) and cl_object
+static inline cl_object to_cl(EclObject x) { return reinterpret_cast<cl_object>(x); }
+static inline EclObject to_ecl(cl_object x) { return reinterpret_cast<EclObject>(x); }
+
 // ==================== C++ to Lisp ====================
 
-cl_object Bridge::toDouble(double value)
+EclObject Bridge::toDouble(double value)
 {
-    return ecl_make_double_float(value);
+    return to_ecl(ecl_make_double_float(value));
 }
 
-cl_object Bridge::toInt(int value)
+EclObject Bridge::toInt(int value)
 {
-    return ecl_make_fixnum(value);
+    return to_ecl(ecl_make_fixnum(value));
 }
 
-cl_object Bridge::toInt64(int64_t value)
+EclObject Bridge::toInt64(int64_t value)
 {
-    return ecl_make_int64_t(value);
+    return to_ecl(ecl_make_int64_t(value));
 }
 
-cl_object Bridge::toBool(bool value)
+EclObject Bridge::toBool(bool value)
 {
-    return value ? ECL_T : ECL_NIL;
+    return to_ecl(value ? ECL_T : ECL_NIL);
 }
 
-cl_object Bridge::toString(const std::string& value)
+EclObject Bridge::toString(const std::string& value)
 {
-    return ecl_make_simple_base_string(value.c_str(), value.length());
+    return to_ecl(ecl_make_simple_base_string(value.c_str(), value.length()));
 }
 
-cl_object Bridge::toList(const std::vector<double>& vec)
+EclObject Bridge::toList(const std::vector<double>& vec)
 {
     if (vec.empty()) {
-        return ECL_NIL;
+        return to_ecl(ECL_NIL);
     }
 
     // Build list in reverse order, then reverse (more efficient)
     cl_object result = ECL_NIL;
     for (auto it = vec.rbegin(); it != vec.rend(); ++it) {
-        result = ecl_cons(toDouble(*it), result);
+        result = ecl_cons(to_cl(toDouble(*it)), result);
     }
-    return result;
+    return to_ecl(result);
 }
 
-cl_object Bridge::toIntList(const std::vector<int>& vec)
+EclObject Bridge::toIntList(const std::vector<int>& vec)
 {
     if (vec.empty()) {
-        return ECL_NIL;
+        return to_ecl(ECL_NIL);
     }
 
     cl_object result = ECL_NIL;
     for (auto it = vec.rbegin(); it != vec.rend(); ++it) {
-        result = ecl_cons(toInt(*it), result);
+        result = ecl_cons(to_cl(toInt(*it)), result);
     }
-    return result;
+    return to_ecl(result);
 }
 
-cl_object Bridge::toList(const mfem::Vector& vec)
+EclObject Bridge::toList(const mfem::Vector& vec)
 {
     if (vec.Size() == 0) {
-        return ECL_NIL;
+        return to_ecl(ECL_NIL);
     }
 
     cl_object result = ECL_NIL;
     for (int i = vec.Size() - 1; i >= 0; --i) {
-        result = ecl_cons(toDouble(vec(i)), result);
+        result = ecl_cons(to_cl(toDouble(vec(i))), result);
     }
-    return result;
+    return to_ecl(result);
 }
 
-cl_object Bridge::toNestedList(const double* data, int rows, int cols)
+EclObject Bridge::toNestedList(const double* data, int rows, int cols)
 {
     cl_object result = ECL_NIL;
 
@@ -106,88 +115,92 @@ cl_object Bridge::toNestedList(const double* data, int rows, int cols)
     for (int i = rows - 1; i >= 0; --i) {
         cl_object row = ECL_NIL;
         for (int j = cols - 1; j >= 0; --j) {
-            row = ecl_cons(toDouble(data[i * cols + j]), row);
+            row = ecl_cons(to_cl(toDouble(data[i * cols + j])), row);
         }
         result = ecl_cons(row, result);
     }
 
-    return result;
+    return to_ecl(result);
 }
 
-cl_object Bridge::toKeyword(const std::string& name)
+EclObject Bridge::toKeyword(const std::string& name)
 {
     cl_object keyword_pkg = ecl_find_package("KEYWORD");
-    return ecl_intern(name.c_str(), name.length(), keyword_pkg, NULL);
+    cl_object name_str = ecl_make_simple_base_string(name.c_str(), name.length());
+    int intern_flag;
+    return to_ecl(ecl_intern(name_str, keyword_pkg, &intern_flag));
 }
 
-cl_object Bridge::toSymbol(const std::string& name)
+EclObject Bridge::toSymbol(const std::string& name)
 {
-    return ecl_read_from_cstring(name.c_str());
+    return to_ecl(ecl_read_from_cstring(name.c_str()));
 }
 
-cl_object Bridge::cons(cl_object car, cl_object cdr)
+EclObject Bridge::cons(EclObject car, EclObject cdr)
 {
-    return ecl_cons(car, cdr);
+    return to_ecl(ecl_cons(to_cl(car), to_cl(cdr)));
 }
 
-cl_object Bridge::makeList(std::initializer_list<cl_object> items)
+EclObject Bridge::makeList(std::initializer_list<EclObject> items)
 {
     cl_object result = ECL_NIL;
     // Build in reverse
-    std::vector<cl_object> vec(items);
+    std::vector<EclObject> vec(items);
     for (auto it = vec.rbegin(); it != vec.rend(); ++it) {
-        result = ecl_cons(*it, result);
+        result = ecl_cons(to_cl(*it), result);
     }
-    return result;
+    return to_ecl(result);
 }
 
 // ==================== Lisp to C++ ====================
 
-double Bridge::toCppDouble(cl_object obj)
+double Bridge::toCppDouble(EclObject obj)
 {
-    return ecl_to_double(obj);
+    return ecl_to_double(to_cl(obj));
 }
 
-int Bridge::toCppInt(cl_object obj)
+int Bridge::toCppInt(EclObject obj)
 {
-    return ecl_to_int(obj);
+    return ecl_to_int(to_cl(obj));
 }
 
-int64_t Bridge::toCppInt64(cl_object obj)
+int64_t Bridge::toCppInt64(EclObject obj)
 {
-    return ecl_to_int64_t(obj);
+    return ecl_to_int64_t(to_cl(obj));
 }
 
-bool Bridge::toCppBool(cl_object obj)
+bool Bridge::toCppBool(EclObject obj)
 {
-    return obj != ECL_NIL;
+    return to_cl(obj) != ECL_NIL;
 }
 
-std::string Bridge::toCppString(cl_object obj)
+std::string Bridge::toCppString(EclObject obj)
 {
     if (isNil(obj)) {
         return "";
     }
 
+    cl_object cl_obj = to_cl(obj);
+
     if (isString(obj)) {
-        cl_index length = ecl_length(obj);
+        cl_index length = ecl_length(cl_obj);
         std::string result;
         result.reserve(length);
         for (cl_index i = 0; i < length; ++i) {
-            result.push_back(ecl_char(obj, i));
+            result.push_back(ecl_char(cl_obj, i));
         }
         return result;
     }
 
     // If it's a symbol, get its name
     if (isSymbol(obj)) {
-        return toCppString(ecl_symbol_name(obj));
+        return toCppString(to_ecl(ecl_symbol_name(cl_obj)));
     }
 
     return "";
 }
 
-std::vector<double> Bridge::toVector(cl_object list)
+std::vector<double> Bridge::toVector(EclObject list)
 {
     std::vector<double> result;
 
@@ -195,17 +208,18 @@ std::vector<double> Bridge::toVector(cl_object list)
         return result;
     }
 
+    cl_object cl_list = to_cl(list);
     result.reserve(listLength(list));
 
-    while (!isNil(list) && !isNil(cl_consp(list))) {
-        result.push_back(toCppDouble(cl_car(list)));
-        list = cl_cdr(list);
+    while (cl_list != ECL_NIL && !isNil(to_ecl(cl_consp(cl_list)))) {
+        result.push_back(toCppDouble(to_ecl(cl_car(cl_list))));
+        cl_list = cl_cdr(cl_list);
     }
 
     return result;
 }
 
-std::vector<int> Bridge::toIntVector(cl_object list)
+std::vector<int> Bridge::toIntVector(EclObject list)
 {
     std::vector<int> result;
 
@@ -213,148 +227,151 @@ std::vector<int> Bridge::toIntVector(cl_object list)
         return result;
     }
 
+    cl_object cl_list = to_cl(list);
     result.reserve(listLength(list));
 
-    while (!isNil(list) && !isNil(cl_consp(list))) {
-        result.push_back(toCppInt(cl_car(list)));
-        list = cl_cdr(list);
+    while (cl_list != ECL_NIL && !isNil(to_ecl(cl_consp(cl_list)))) {
+        result.push_back(toCppInt(to_ecl(cl_car(cl_list))));
+        cl_list = cl_cdr(cl_list);
     }
 
     return result;
 }
 
-size_t Bridge::listLength(cl_object list)
+size_t Bridge::listLength(EclObject list)
 {
     if (isNil(list)) {
         return 0;
     }
-    return ecl_length(list);
+    return ecl_length(to_cl(list));
 }
 
-cl_object Bridge::nth(cl_object list, size_t index)
+EclObject Bridge::nth(EclObject list, size_t index)
 {
-    return ecl_nth(index, list);
+    return to_ecl(ecl_nth(index, to_cl(list)));
 }
 
-std::string Bridge::symbolName(cl_object sym)
+std::string Bridge::symbolName(EclObject sym)
 {
     if (!isSymbol(sym)) {
         return "";
     }
-    return toCppString(ecl_symbol_name(sym));
+    return toCppString(to_ecl(ecl_symbol_name(to_cl(sym))));
 }
 
 // ==================== Type Checking ====================
 
-bool Bridge::isNil(cl_object obj)
+bool Bridge::isNil(EclObject obj)
 {
-    return obj == ECL_NIL || obj == NULL;
+    cl_object cl_obj = to_cl(obj);
+    return cl_obj == ECL_NIL || cl_obj == NULL;
 }
 
-bool Bridge::isNumber(cl_object obj)
+bool Bridge::isNumber(EclObject obj)
 {
-    return !isNil(cl_numberp(obj));
+    return !isNil(to_ecl(cl_numberp(to_cl(obj))));
 }
 
-bool Bridge::isString(cl_object obj)
+bool Bridge::isString(EclObject obj)
 {
-    return !isNil(cl_stringp(obj));
+    return !isNil(to_ecl(cl_stringp(to_cl(obj))));
 }
 
-bool Bridge::isList(cl_object obj)
+bool Bridge::isList(EclObject obj)
 {
-    return !isNil(cl_listp(obj));
+    return !isNil(to_ecl(cl_listp(to_cl(obj))));
 }
 
-bool Bridge::isSymbol(cl_object obj)
+bool Bridge::isSymbol(EclObject obj)
 {
-    return !isNil(cl_symbolp(obj));
+    return !isNil(to_ecl(cl_symbolp(to_cl(obj))));
 }
 
-bool Bridge::isFunction(cl_object obj)
+bool Bridge::isFunction(EclObject obj)
 {
-    return !isNil(cl_functionp(obj));
+    return !isNil(to_ecl(cl_functionp(to_cl(obj))));
 }
 
 // ==================== Function Calls ====================
 
-cl_object Bridge::funcall(const std::string& func_name,
-                          std::initializer_list<cl_object> args)
+EclObject Bridge::funcall(const std::string& func_name,
+                          std::initializer_list<EclObject> args)
 {
-    cl_object sym = findSymbol(func_name);
+    EclObject sym = findSymbol(func_name);
     if (isNil(sym)) {
         throw EclException("Function not found: " + func_name);
     }
     return funcall(symbolFunction(sym), args);
 }
 
-cl_object Bridge::funcall(cl_object func,
-                          std::initializer_list<cl_object> args)
+EclObject Bridge::funcall(EclObject func,
+                          std::initializer_list<EclObject> args)
 {
     size_t nargs = args.size();
+    cl_object cl_func = to_cl(func);
 
     switch (nargs) {
         case 0:
-            return cl_funcall(1, func);
+            return to_ecl(cl_funcall(1, cl_func));
         case 1: {
             auto it = args.begin();
-            return cl_funcall(2, func, *it);
+            return to_ecl(cl_funcall(2, cl_func, to_cl(*it)));
         }
         case 2: {
             auto it = args.begin();
-            cl_object a1 = *it++;
-            cl_object a2 = *it;
-            return cl_funcall(3, func, a1, a2);
+            cl_object a1 = to_cl(*it++);
+            cl_object a2 = to_cl(*it);
+            return to_ecl(cl_funcall(3, cl_func, a1, a2));
         }
         case 3: {
             auto it = args.begin();
-            cl_object a1 = *it++;
-            cl_object a2 = *it++;
-            cl_object a3 = *it;
-            return cl_funcall(4, func, a1, a2, a3);
+            cl_object a1 = to_cl(*it++);
+            cl_object a2 = to_cl(*it++);
+            cl_object a3 = to_cl(*it);
+            return to_ecl(cl_funcall(4, cl_func, a1, a2, a3));
         }
         case 4: {
             auto it = args.begin();
-            cl_object a1 = *it++;
-            cl_object a2 = *it++;
-            cl_object a3 = *it++;
-            cl_object a4 = *it;
-            return cl_funcall(5, func, a1, a2, a3, a4);
+            cl_object a1 = to_cl(*it++);
+            cl_object a2 = to_cl(*it++);
+            cl_object a3 = to_cl(*it++);
+            cl_object a4 = to_cl(*it);
+            return to_ecl(cl_funcall(5, cl_func, a1, a2, a3, a4));
         }
         default: {
             // For more arguments, use apply with a list
-            cl_object args_list = makeList(args);
+            EclObject args_list = makeList(args);
             return apply(func, args_list);
         }
     }
 }
 
-cl_object Bridge::apply(cl_object func, cl_object args_list)
+EclObject Bridge::apply(EclObject func, EclObject args_list)
 {
-    return cl_apply(2, func, args_list);
+    return to_ecl(cl_apply(2, to_cl(func), to_cl(args_list)));
 }
 
-cl_object Bridge::findSymbol(const std::string& name,
+EclObject Bridge::findSymbol(const std::string& name,
                              const std::string& package)
 {
     cl_object pkg = ecl_find_package(package.c_str());
-    if (isNil(pkg)) {
-        return ECL_NIL;
+    if (pkg == ECL_NIL) {
+        return to_ecl(ECL_NIL);
     }
 
     int intern_flag;
     cl_object name_str = ecl_make_simple_base_string(name.c_str(), name.length());
-    return ecl_intern(name_str, pkg, &intern_flag);
+    return to_ecl(ecl_intern(name_str, pkg, &intern_flag));
 }
 
-cl_object Bridge::symbolFunction(cl_object sym)
+EclObject Bridge::symbolFunction(EclObject sym)
 {
-    return ecl_fdefinition(sym);
+    return to_ecl(ecl_fdefinition(to_cl(sym)));
 }
 
 // ==================== LispFunction ====================
 
-LispFunction::LispFunction(cl_object func)
+LispFunction::LispFunction(EclObject func)
     : func_(func)
 {
 }
@@ -362,7 +379,7 @@ LispFunction::LispFunction(cl_object func)
 LispFunction::LispFunction(const std::string& name,
                            const std::string& package)
 {
-    cl_object sym = Bridge::findSymbol(name, package);
+    EclObject sym = Bridge::findSymbol(name, package);
     if (!Bridge::isNil(sym)) {
         func_ = Bridge::symbolFunction(sym);
     } else {
@@ -376,15 +393,15 @@ bool LispFunction::isValid() const
            Bridge::isFunction(func_);
 }
 
-cl_object LispFunction::operator()() const
+EclObject LispFunction::operator()() const
 {
     if (!isValid()) {
         throw EclException("Invalid Lisp function");
     }
-    return cl_funcall(1, func_);
+    return to_ecl(cl_funcall(1, to_cl(func_)));
 }
 
-cl_object LispFunction::operator()(std::initializer_list<cl_object> args) const
+EclObject LispFunction::operator()(std::initializer_list<EclObject> args) const
 {
     if (!isValid()) {
         throw EclException("Invalid Lisp function");
@@ -394,7 +411,7 @@ cl_object LispFunction::operator()(std::initializer_list<cl_object> args) const
 
 double LispFunction::evaluateAt(double x, double y, double z) const
 {
-    cl_object result = Bridge::funcall(func_, {
+    EclObject result = Bridge::funcall(func_, {
         Bridge::toDouble(x),
         Bridge::toDouble(y),
         Bridge::toDouble(z)

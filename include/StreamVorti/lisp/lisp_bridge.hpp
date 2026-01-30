@@ -33,8 +33,11 @@
 #include <map>
 #include <functional>
 
-// Include ECL header for proper type definitions
-#include <ecl/ecl.h>
+// Forward declare ECL types - actual ECL header included only in .cpp files
+// to avoid ECL macro conflicts with MFEM headers (e.g., ECL defines Ct macro
+// which conflicts with mfem::Hybridization::Ct member variable)
+// Use void* as opaque pointer - type safety enforced in implementation
+typedef void* EclObject;
 
 // Forward declare MFEM types
 namespace mfem {
@@ -59,181 +62,181 @@ public:
     /**
      * @brief Convert double to Lisp double-float
      */
-    static cl_object toDouble(double value);
+    static EclObject toDouble(double value);
 
     /**
      * @brief Convert int to Lisp integer
      */
-    static cl_object toInt(int value);
+    static EclObject toInt(int value);
 
     /**
      * @brief Convert int64 to Lisp integer
      */
-    static cl_object toInt64(int64_t value);
+    static EclObject toInt64(int64_t value);
 
     /**
      * @brief Convert bool to Lisp T/NIL
      */
-    static cl_object toBool(bool value);
+    static EclObject toBool(bool value);
 
     /**
      * @brief Convert string to Lisp string
      */
-    static cl_object toString(const std::string& value);
+    static EclObject toString(const std::string& value);
 
     /**
      * @brief Convert C++ vector to Lisp list
      */
-    static cl_object toList(const std::vector<double>& vec);
+    static EclObject toList(const std::vector<double>& vec);
 
     /**
      * @brief Convert C++ vector of ints to Lisp list
      */
-    static cl_object toIntList(const std::vector<int>& vec);
+    static EclObject toIntList(const std::vector<int>& vec);
 
     /**
      * @brief Convert MFEM Vector to Lisp list
      */
-    static cl_object toList(const mfem::Vector& vec);
+    static EclObject toList(const mfem::Vector& vec);
 
     /**
      * @brief Convert 2D array (row-major) to Lisp nested list
      */
-    static cl_object toNestedList(const double* data, int rows, int cols);
+    static EclObject toNestedList(const double* data, int rows, int cols);
 
     /**
      * @brief Create a Lisp keyword symbol
      */
-    static cl_object toKeyword(const std::string& name);
+    static EclObject toKeyword(const std::string& name);
 
     /**
      * @brief Create a Lisp symbol in current package
      */
-    static cl_object toSymbol(const std::string& name);
+    static EclObject toSymbol(const std::string& name);
 
     /**
      * @brief Create a Lisp cons cell
      */
-    static cl_object cons(cl_object car, cl_object cdr);
+    static EclObject cons(EclObject car, EclObject cdr);
 
     /**
      * @brief Create a Lisp list from multiple objects
      */
-    static cl_object makeList(std::initializer_list<cl_object> items);
+    static EclObject makeList(std::initializer_list<EclObject> items);
 
     // ==================== Lisp to C++ ====================
 
     /**
      * @brief Convert Lisp number to double
      */
-    static double toCppDouble(cl_object obj);
+    static double toCppDouble(EclObject obj);
 
     /**
      * @brief Convert Lisp integer to int
      */
-    static int toCppInt(cl_object obj);
+    static int toCppInt(EclObject obj);
 
     /**
      * @brief Convert Lisp integer to int64
      */
-    static int64_t toCppInt64(cl_object obj);
+    static int64_t toCppInt64(EclObject obj);
 
     /**
      * @brief Convert Lisp T/NIL to bool
      */
-    static bool toCppBool(cl_object obj);
+    static bool toCppBool(EclObject obj);
 
     /**
      * @brief Convert Lisp string to C++ string
      */
-    static std::string toCppString(cl_object obj);
+    static std::string toCppString(EclObject obj);
 
     /**
      * @brief Convert Lisp list to C++ vector of doubles
      */
-    static std::vector<double> toVector(cl_object list);
+    static std::vector<double> toVector(EclObject list);
 
     /**
      * @brief Convert Lisp list to C++ vector of ints
      */
-    static std::vector<int> toIntVector(cl_object list);
+    static std::vector<int> toIntVector(EclObject list);
 
     /**
      * @brief Get length of Lisp list
      */
-    static size_t listLength(cl_object list);
+    static size_t listLength(EclObject list);
 
     /**
      * @brief Get nth element of Lisp list (0-indexed)
      */
-    static cl_object nth(cl_object list, size_t index);
+    static EclObject nth(EclObject list, size_t index);
 
     /**
      * @brief Get symbol name as string
      */
-    static std::string symbolName(cl_object sym);
+    static std::string symbolName(EclObject sym);
 
     // ==================== Type Checking ====================
 
     /**
      * @brief Check if object is NIL
      */
-    static bool isNil(cl_object obj);
+    static bool isNil(EclObject obj);
 
     /**
      * @brief Check if object is a number
      */
-    static bool isNumber(cl_object obj);
+    static bool isNumber(EclObject obj);
 
     /**
      * @brief Check if object is a string
      */
-    static bool isString(cl_object obj);
+    static bool isString(EclObject obj);
 
     /**
      * @brief Check if object is a list
      */
-    static bool isList(cl_object obj);
+    static bool isList(EclObject obj);
 
     /**
      * @brief Check if object is a symbol
      */
-    static bool isSymbol(cl_object obj);
+    static bool isSymbol(EclObject obj);
 
     /**
      * @brief Check if object is a function
      */
-    static bool isFunction(cl_object obj);
+    static bool isFunction(EclObject obj);
 
     // ==================== Function Calls ====================
 
     /**
      * @brief Call a Lisp function by name with arguments
      */
-    static cl_object funcall(const std::string& func_name,
-                             std::initializer_list<cl_object> args);
+    static EclObject funcall(const std::string& func_name,
+                             std::initializer_list<EclObject> args);
 
     /**
      * @brief Call a Lisp function object with arguments
      */
-    static cl_object funcall(cl_object func,
-                             std::initializer_list<cl_object> args);
+    static EclObject funcall(EclObject func,
+                             std::initializer_list<EclObject> args);
 
     /**
      * @brief Apply a Lisp function to a list of arguments
      */
-    static cl_object apply(cl_object func, cl_object args_list);
+    static EclObject apply(EclObject func, EclObject args_list);
 
     /**
      * @brief Look up a symbol in a package
      */
-    static cl_object findSymbol(const std::string& name,
+    static EclObject findSymbol(const std::string& name,
                                 const std::string& package = "SDL");
 
     /**
      * @brief Get the function value of a symbol
      */
-    static cl_object symbolFunction(cl_object sym);
+    static EclObject symbolFunction(EclObject sym);
 
 private:
     Bridge() = delete;
@@ -252,7 +255,7 @@ public:
     /**
      * @brief Create from a Lisp function object
      */
-    explicit LispFunction(cl_object func);
+    explicit LispFunction(EclObject func);
 
     /**
      * @brief Create from a function name in a package
@@ -268,12 +271,12 @@ public:
     /**
      * @brief Call with no arguments
      */
-    cl_object operator()() const;
+    EclObject operator()() const;
 
     /**
      * @brief Call with arguments
      */
-    cl_object operator()(std::initializer_list<cl_object> args) const;
+    EclObject operator()(std::initializer_list<EclObject> args) const;
 
     /**
      * @brief Evaluate boundary condition at point (convenience method)
@@ -283,10 +286,10 @@ public:
     /**
      * @brief Get the underlying Lisp object
      */
-    cl_object get() const { return func_; }
+    EclObject get() const { return func_; }
 
 private:
-    cl_object func_;
+    EclObject func_;
 };
 
 } // namespace Lisp

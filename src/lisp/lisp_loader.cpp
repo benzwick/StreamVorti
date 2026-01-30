@@ -22,13 +22,18 @@
  * @brief Implementation of SDL file loader
  */
 
+// IMPORTANT: Include MFEM FIRST before ECL to avoid macro conflicts
+// ECL defines macros (like Ct) that conflict with MFEM member names
+#include "mfem.hpp"
+
+// Now include ECL
+#include <ecl/ecl.h>
+
+// Include our headers after MFEM and ECL
 #include "StreamVorti/lisp/lisp_loader.hpp"
 #include "StreamVorti/lisp/ecl_runtime.hpp"
 #include "StreamVorti/lisp/lisp_bridge.hpp"
 #include "StreamVorti/lisp/lisp_mesh.hpp"
-
-#include <ecl/ecl.h>
-#include "mfem.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -36,6 +41,10 @@
 
 namespace StreamVorti {
 namespace Lisp {
+
+// Helper functions for type conversion
+static inline cl_object to_cl(EclObject x) { return reinterpret_cast<cl_object>(x); }
+static inline EclObject to_ecl(cl_object x) { return reinterpret_cast<EclObject>(x); }
 
 SimulationConfig Loader::load(const std::string& path)
 {
@@ -54,7 +63,7 @@ SimulationConfig Loader::load(const std::string& path)
 
     // Get the simulation object from Lisp
     // The SDL file should define *current-simulation* or return a simulation object
-    cl_object sim_obj = Runtime::eval("(sdl:get-current-simulation)");
+    EclObject sim_obj = Runtime::eval("(sdl:get-current-simulation)");
 
     if (Bridge::isNil(sim_obj)) {
         throw EclException("No simulation defined in SDL file: " + path);
@@ -96,7 +105,7 @@ SimulationConfig Loader::loadFromString(const std::string& sdl_content)
     Runtime::eval(eval_expr.str());
 
     // Get the simulation object
-    cl_object sim_obj = Runtime::eval("(sdl:get-current-simulation)");
+    EclObject sim_obj = Runtime::eval("(sdl:get-current-simulation)");
 
     if (Bridge::isNil(sim_obj)) {
         throw EclException("No simulation defined in SDL content");
@@ -121,23 +130,23 @@ LispFunction Loader::getFunction(const std::string& name)
     return LispFunction(name, "SDL");
 }
 
-std::unique_ptr<mfem::Mesh> Loader::extractMesh(cl_object sim_obj)
+std::unique_ptr<mfem::Mesh> Loader::extractMesh(EclObject sim_obj)
 {
     // Get mesh specification from simulation object
-    cl_object mesh_spec = getProperty(sim_obj, "mesh");
+    EclObject mesh_spec = getProperty(sim_obj, "mesh");
 
     if (Bridge::isNil(mesh_spec)) {
         throw EclException("No mesh specification in simulation");
     }
 
     // Check if it's a generated mesh or loaded mesh
-    cl_object mesh_type = getProperty(mesh_spec, "type");
+    EclObject mesh_type = getProperty(mesh_spec, "type");
     std::string type_str = Bridge::toCppString(mesh_type);
 
     if (type_str == "generated" || type_str == "generate") {
         // Generate mesh from parameters
         int dim = getIntProperty(sim_obj, "dimension", 2);
-        cl_object divisions = getProperty(mesh_spec, "divisions");
+        EclObject divisions = getProperty(mesh_spec, "divisions");
 
         std::vector<int> divs = Bridge::toIntVector(divisions);
 
@@ -178,18 +187,19 @@ std::unique_ptr<mfem::Mesh> Loader::extractMesh(cl_object sim_obj)
     throw EclException("Unknown mesh type: " + type_str);
 }
 
-std::vector<BoundaryCondition> Loader::extractBoundaries(cl_object sim_obj)
+std::vector<BoundaryCondition> Loader::extractBoundaries(EclObject sim_obj)
 {
     std::vector<BoundaryCondition> boundaries;
 
-    cl_object bc_list = getProperty(sim_obj, "boundaries");
+    EclObject bc_list = getProperty(sim_obj, "boundaries");
     if (Bridge::isNil(bc_list)) {
         return boundaries;
     }
 
-    // Iterate over boundary condition list
-    while (!Bridge::isNil(bc_list) && Bridge::isList(bc_list)) {
-        cl_object bc_spec = Bridge::nth(bc_list, 0);
+    // Iterate over boundary condition list using cl_cdr
+    cl_object cl_bc_list = to_cl(bc_list);
+    while (cl_bc_list != ECL_NIL && !Bridge::isNil(to_ecl(cl_consp(cl_bc_list)))) {
+        EclObject bc_spec = to_ecl(cl_car(cl_bc_list));
 
         BoundaryCondition bc;
         bc.name = getStringProperty(bc_spec, "name", "");
@@ -197,7 +207,7 @@ std::vector<BoundaryCondition> Loader::extractBoundaries(cl_object sim_obj)
         bc.type = getStringProperty(bc_spec, "type", "velocity");
 
         // Get the boundary function
-        cl_object func = getProperty(bc_spec, "function");
+        EclObject func = getProperty(bc_spec, "function");
         if (!Bridge::isNil(func) && Bridge::isFunction(func)) {
             bc.function = std::make_unique<LispFunction>(func);
         }
@@ -205,17 +215,17 @@ std::vector<BoundaryCondition> Loader::extractBoundaries(cl_object sim_obj)
         boundaries.push_back(std::move(bc));
 
         // Move to next in list
-        bc_list = ECL_CONS_CDR(bc_list);
+        cl_bc_list = cl_cdr(cl_bc_list);
     }
 
     return boundaries;
 }
 
-DCPSEParams Loader::extractDCPSEParams(cl_object sim_obj)
+DCPSEParams Loader::extractDCPSEParams(EclObject sim_obj)
 {
     DCPSEParams params;
 
-    cl_object dcpse_spec = getProperty(sim_obj, "discretization");
+    EclObject dcpse_spec = getProperty(sim_obj, "discretization");
     if (Bridge::isNil(dcpse_spec)) {
         return params;
     }
@@ -227,11 +237,11 @@ DCPSEParams Loader::extractDCPSEParams(cl_object sim_obj)
     return params;
 }
 
-SolverParams Loader::extractSolverParams(cl_object sim_obj)
+SolverParams Loader::extractSolverParams(EclObject sim_obj)
 {
     SolverParams params;
 
-    cl_object solver_spec = getProperty(sim_obj, "solver");
+    EclObject solver_spec = getProperty(sim_obj, "solver");
     if (Bridge::isNil(solver_spec)) {
         return params;
     }
@@ -245,11 +255,11 @@ SolverParams Loader::extractSolverParams(cl_object sim_obj)
     return params;
 }
 
-PhysicsParams Loader::extractPhysicsParams(cl_object sim_obj)
+PhysicsParams Loader::extractPhysicsParams(EclObject sim_obj)
 {
     PhysicsParams params;
 
-    cl_object physics_spec = getProperty(sim_obj, "physics");
+    EclObject physics_spec = getProperty(sim_obj, "physics");
     if (Bridge::isNil(physics_spec)) {
         return params;
     }
@@ -263,11 +273,11 @@ PhysicsParams Loader::extractPhysicsParams(cl_object sim_obj)
     return params;
 }
 
-OutputParams Loader::extractOutputParams(cl_object sim_obj)
+OutputParams Loader::extractOutputParams(EclObject sim_obj)
 {
     OutputParams params;
 
-    cl_object output_spec = getProperty(sim_obj, "output");
+    EclObject output_spec = getProperty(sim_obj, "output");
     if (Bridge::isNil(output_spec)) {
         return params;
     }
@@ -277,19 +287,20 @@ OutputParams Loader::extractOutputParams(cl_object sim_obj)
     params.directory = getStringProperty(output_spec, "directory", "results/");
 
     // Get fields list
-    cl_object fields = getProperty(output_spec, "fields");
+    EclObject fields = getProperty(output_spec, "fields");
     if (!Bridge::isNil(fields) && Bridge::isList(fields)) {
-        while (!Bridge::isNil(fields)) {
-            cl_object field = Bridge::nth(fields, 0);
+        cl_object cl_fields = to_cl(fields);
+        while (cl_fields != ECL_NIL && !Bridge::isNil(to_ecl(cl_consp(cl_fields)))) {
+            EclObject field = to_ecl(cl_car(cl_fields));
             params.fields.push_back(Bridge::toCppString(field));
-            fields = ECL_CONS_CDR(fields);
+            cl_fields = cl_cdr(cl_fields);
         }
     }
 
     return params;
 }
 
-cl_object Loader::getProperty(cl_object plist, const std::string& key)
+EclObject Loader::getProperty(EclObject plist, const std::string& key)
 {
     // Use Lisp getf to get property from plist
     std::ostringstream expr;
@@ -300,32 +311,32 @@ cl_object Loader::getProperty(cl_object plist, const std::string& key)
     try {
         return Bridge::funcall(accessor, {plist});
     } catch (...) {
-        return ECL_NIL;
+        return to_ecl(ECL_NIL);
     }
 }
 
-int Loader::getIntProperty(cl_object plist, const std::string& key, int default_value)
+int Loader::getIntProperty(EclObject plist, const std::string& key, int default_value)
 {
-    cl_object val = getProperty(plist, key);
+    EclObject val = getProperty(plist, key);
     if (Bridge::isNil(val) || !Bridge::isNumber(val)) {
         return default_value;
     }
     return Bridge::toCppInt(val);
 }
 
-double Loader::getDoubleProperty(cl_object plist, const std::string& key, double default_value)
+double Loader::getDoubleProperty(EclObject plist, const std::string& key, double default_value)
 {
-    cl_object val = getProperty(plist, key);
+    EclObject val = getProperty(plist, key);
     if (Bridge::isNil(val) || !Bridge::isNumber(val)) {
         return default_value;
     }
     return Bridge::toCppDouble(val);
 }
 
-std::string Loader::getStringProperty(cl_object plist, const std::string& key,
+std::string Loader::getStringProperty(EclObject plist, const std::string& key,
                                        const std::string& default_value)
 {
-    cl_object val = getProperty(plist, key);
+    EclObject val = getProperty(plist, key);
     if (Bridge::isNil(val)) {
         return default_value;
     }

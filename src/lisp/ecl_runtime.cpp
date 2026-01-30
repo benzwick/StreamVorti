@@ -22,9 +22,11 @@
  * @brief Implementation of ECL runtime management
  */
 
-#include "StreamVorti/lisp/ecl_runtime.hpp"
-
+// Include ECL header
 #include <ecl/ecl.h>
+
+// Include our header after ECL
+#include "StreamVorti/lisp/ecl_runtime.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -32,6 +34,9 @@
 
 namespace StreamVorti {
 namespace Lisp {
+
+// Helper function for type conversion
+static inline EclObject to_ecl(cl_object x) { return reinterpret_cast<EclObject>(x); }
 
 // Static member definitions
 bool Runtime::initialized_ = false;
@@ -102,7 +107,7 @@ bool Runtime::isInitialized()
     return initialized_;
 }
 
-cl_object Runtime::eval(const std::string& expr)
+EclObject Runtime::eval(const std::string& expr)
 {
     if (!initialized_) {
         throw EclException("ECL runtime not initialized");
@@ -123,10 +128,10 @@ cl_object Runtime::eval(const std::string& expr)
         throw EclException(last_error_);
     }
 
-    return result;
+    return to_ecl(result);
 }
 
-cl_object Runtime::safeEval(const std::string& expr)
+EclObject Runtime::safeEval(const std::string& expr)
 {
     try {
         return eval(expr);

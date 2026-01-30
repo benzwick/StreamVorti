@@ -32,8 +32,11 @@
 #include <vector>
 #include <stdexcept>
 
-// Include ECL header for proper type definitions
-#include <ecl/ecl.h>
+// Forward declare ECL types - actual ECL header included only in .cpp files
+// to avoid ECL macro conflicts with MFEM headers (e.g., ECL defines Ct macro
+// which conflicts with mfem::Hybridization::Ct member variable)
+// Use void* as opaque pointer - type safety enforced in implementation
+typedef void* EclObject;
 
 namespace StreamVorti {
 namespace Lisp {
@@ -91,18 +94,18 @@ public:
      * @brief Evaluate a Lisp expression string
      *
      * @param expr The Lisp expression to evaluate
-     * @return The result as a cl_object (void* for non-ECL code)
+     * @return The result as an opaque ECL object pointer
      * @throws EclException on evaluation error
      */
-    static cl_object eval(const std::string& expr);
+    static EclObject eval(const std::string& expr);
 
     /**
      * @brief Safely evaluate a Lisp expression with error handling
      *
      * @param expr The Lisp expression to evaluate
-     * @return The result as a cl_object, or nullptr on error
+     * @return The result as an opaque ECL object pointer, or nullptr on error
      */
-    static cl_object safeEval(const std::string& expr);
+    static EclObject safeEval(const std::string& expr);
 
     /**
      * @brief Load a Lisp file
