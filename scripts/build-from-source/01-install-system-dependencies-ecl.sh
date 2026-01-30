@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Installing system dependencies..."
+echo "Installing system dependencies (with ECL support)..."
 
 sudo apt-get update
 sudo apt-get install -y \
@@ -15,7 +15,9 @@ sudo apt-get install -y \
   zlib1g-dev \
   libcgal-dev \
   libeigen3-dev \
+  ecl \
+  libecl-dev \
   lcov \
   libgtest-dev
 
-echo "System dependencies installed successfully"
+echo "System dependencies (with ECL) installed successfully"
