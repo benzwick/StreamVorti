@@ -45,7 +45,10 @@ env:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-latest]
 
     steps:
     - name: Checkout repository
@@ -60,7 +63,7 @@ jobs:
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ runner.os }}-ecl-build-ccache
+        key: ${{ matrix.os }}-ecl-build-ccache
         max-size: "2G"
         verbose: 2
 
