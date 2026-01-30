@@ -381,7 +381,17 @@ LispFunction::LispFunction(const std::string& name,
 {
     EclObject sym = Bridge::findSymbol(name, package);
     if (!Bridge::isNil(sym)) {
-        func_ = Bridge::symbolFunction(sym);
+        // Check if symbol has a function binding before trying to get it
+        // ecl_fdefinition will signal an error if function is undefined
+        try {
+            func_ = Bridge::symbolFunction(sym);
+            // Verify it's actually a function
+            if (!Bridge::isFunction(func_)) {
+                func_ = nullptr;
+            }
+        } catch (...) {
+            func_ = nullptr;
+        }
     } else {
         func_ = nullptr;
     }
