@@ -137,3 +137,12 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+
+    - name: Upload StreamVorti binaries (with ECL)
+      uses: actions/upload-artifact@v4
+      with:
+        name: streamvorti-ecl-binaries-${{ matrix.os }}
+        path: |
+          build/StreamVorti
+          build/MfemRun
+        retention-days: 7

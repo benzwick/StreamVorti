@@ -134,3 +134,12 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+
+    - name: Upload StreamVorti binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: streamvorti-binaries-${{ runner.os }}
+        path: |
+          build/StreamVorti
+          build/MfemRun
+        retention-days: 7
