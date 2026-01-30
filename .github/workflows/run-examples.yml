@@ -10,7 +10,6 @@ on:
   workflow_run:
     workflows: ["Build StreamVorti with ECL"]
     types: [completed]
-    branches: [main]
 
 jobs:
   run-cavity-sdl:
@@ -62,6 +61,7 @@ jobs:
         path: |
           results/
           demo/cavity.lisp
+          data/
         retention-days: 90
 
   run-cavity-cli:
