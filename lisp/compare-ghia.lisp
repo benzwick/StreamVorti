@@ -1,7 +1,10 @@
-;;;; compare-ghia.lisp - Compare StreamVorti results with Ghia et al. (1982)
+;;;; compare-ghia.lisp - Compare StreamVorti results with reference data
 ;;;;
-;;;; This script loads centerline data from StreamVorti and compares it
-;;;; against the benchmark data from Ghia et al. (1982).
+;;;; Compares simulation results against:
+;;;; - Ghia, Ghia & Shin (1982) for Re <= 1000
+;;;; - Erturk & Corke (2005) for Re > 1000
+;;;;
+;;;; Reference data is loaded from data/*.txt files (deal.II format).
 ;;;;
 ;;;; Usage from SBCL/ECL REPL:
 ;;;;   (load "lisp/compare-ghia.lisp")
@@ -11,12 +14,11 @@
 ;;;; Or from command line:
 ;;;;   sbcl --load lisp/compare-ghia.lisp \
 ;;;;        --eval '(streamvorti.validation:run-validation)'
-;;;;
 
 (defpackage :streamvorti.validation
   (:use :cl)
   (:export #:load-centerline-data
-           #:load-ghia-data
+           #:load-reference-data
            #:compute-errors
            #:ascii-plot
            #:run-validation))
@@ -24,73 +26,14 @@
 (in-package :streamvorti.validation)
 
 ;;; ============================================================
-;;; Reference data for validation
+;;; Configuration
 ;;; ============================================================
 
-;; Ghia et al. (1982) - u-velocity along vertical centerline (x=0.5)
-;; Format: (y . u-velocity) for Re=100
-(defparameter *ghia-re100-u*
-  '((1.0000 . 1.00000)
-    (0.9766 . 0.84123)
-    (0.9688 . 0.78871)
-    (0.9609 . 0.73722)
-    (0.9531 . 0.68717)
-    (0.8516 . 0.23151)
-    (0.7344 . 0.00332)
-    (0.6172 . -0.13641)
-    (0.5000 . -0.20581)
-    (0.4531 . -0.21090)
-    (0.2813 . -0.15662)
-    (0.1719 . -0.10150)
-    (0.1016 . -0.06434)
-    (0.0703 . -0.04775)
-    (0.0625 . -0.04192)
-    (0.0547 . -0.03717)
-    (0.0000 . 0.00000))
-  "Ghia et al. (1982) u-velocity at x=0.5 for Re=100")
-
-(defparameter *ghia-re400-u*
-  '((1.0000 . 1.00000)
-    (0.9766 . 0.75837)
-    (0.9688 . 0.68439)
-    (0.9609 . 0.61756)
-    (0.9531 . 0.55892)
-    (0.8516 . 0.29093)
-    (0.7344 . 0.16257)
-    (0.6172 . 0.02135)
-    (0.5000 . -0.11477)
-    (0.4531 . -0.17119)
-    (0.2813 . -0.32726)
-    (0.1719 . -0.24299)
-    (0.1016 . -0.14612)
-    (0.0703 . -0.10338)
-    (0.0625 . -0.09266)
-    (0.0547 . -0.08186)
-    (0.0000 . 0.00000))
-  "Ghia et al. (1982) u-velocity at x=0.5 for Re=400")
-
-(defparameter *ghia-re1000-u*
-  '((1.0000 . 1.00000)
-    (0.9766 . 0.65928)
-    (0.9688 . 0.57492)
-    (0.9609 . 0.51117)
-    (0.9531 . 0.46604)
-    (0.8516 . 0.33304)
-    (0.7344 . 0.18719)
-    (0.6172 . 0.05702)
-    (0.5000 . -0.06080)
-    (0.4531 . -0.10648)
-    (0.2813 . -0.27805)
-    (0.1719 . -0.38289)
-    (0.1016 . -0.29730)
-    (0.0703 . -0.22220)
-    (0.0625 . -0.20196)
-    (0.0547 . -0.18109)
-    (0.0000 . 0.00000))
-  "Ghia et al. (1982) u-velocity at x=0.5 for Re=1000")
+(defparameter *data-dir* "data/"
+  "Directory containing reference data files.")
 
 ;;; ============================================================
-;;; Data loading functions
+;;; Parsing utilities
 ;;; ============================================================
 
 (defun parse-float-safe (string)
@@ -116,6 +59,104 @@
         (push (subseq string start (or end len)) result)
         (setf start (or end len))))))
 
+;;; ============================================================
+;;; Loading reference data from files
+;;; ============================================================
+
+(defun parse-reynolds-from-header (header-line)
+  "Parse Reynolds numbers from header line like '# y Re=100 Re=400 Re=1000'.
+   Returns list of Reynolds numbers as integers."
+  (let ((parts (split-whitespace header-line))
+        (reynolds-list nil))
+    (dolist (part parts)
+      (when (and (> (length part) 3)
+                 (string-equal "Re=" (subseq part 0 3)))
+        (let ((re (parse-integer (subseq part 3) :junk-allowed t)))
+          (when re (push re reynolds-list)))))
+    (nreverse reynolds-list)))
+
+(defun load-reference-file (filename)
+  "Load multi-column reference data file.
+   Returns (values reynolds-list data-hash) where data-hash maps Re -> ((y . u) ...)."
+  (let ((filepath (merge-pathnames filename *data-dir*))
+        (reynolds-list nil)
+        (data-hash (make-hash-table)))
+    (with-open-file (stream filepath :direction :input :if-does-not-exist nil)
+      (unless stream
+        (format t "Warning: Cannot open ~A~%" filepath)
+        (return-from load-reference-file (values nil nil)))
+      ;; Read header lines to get Reynolds numbers
+      (loop for line = (read-line stream nil nil)
+            while (and line (> (length line) 0) (char= (char line 0) #\#))
+            do (let ((re-list (parse-reynolds-from-header line)))
+                 (when re-list (setf reynolds-list re-list))))
+      ;; Initialize hash table entries
+      (dolist (re reynolds-list)
+        (setf (gethash re data-hash) nil))
+      ;; Rewind and read data
+      (file-position stream 0)
+      (loop for line = (read-line stream nil nil)
+            while line
+            unless (or (zerop (length line)) (char= (char line 0) #\#))
+              do (let* ((parts (split-whitespace line))
+                        (y (parse-float-safe (first parts))))
+                   (when y
+                     (loop for re in reynolds-list
+                           for u-str in (rest parts)
+                           for u = (parse-float-safe u-str)
+                           when u do (push (cons y u) (gethash re data-hash)))))))
+    ;; Reverse the lists (they were built in reverse order)
+    (dolist (re reynolds-list)
+      (setf (gethash re data-hash) (nreverse (gethash re data-hash))))
+    (values reynolds-list data-hash)))
+
+;;; Cache loaded data
+(defvar *ghia-data* nil)
+(defvar *ghia-reynolds* nil)
+(defvar *erturk-data* nil)
+(defvar *erturk-reynolds* nil)
+
+(defun ensure-reference-data-loaded ()
+  "Load reference data files if not already loaded."
+  (unless *ghia-data*
+    (multiple-value-setq (*ghia-reynolds* *ghia-data*)
+      (load-reference-file "ghia_1982_u.txt")))
+  (unless *erturk-data*
+    (multiple-value-setq (*erturk-reynolds* *erturk-data*)
+      (load-reference-file "erturk_2005_u.txt"))))
+
+(defun load-reference-data (reynolds)
+  "Get reference data for given Reynolds number.
+   Returns data from both Ghia (1982) and Erturk (2005) when available.
+   Returns (values data-list source-names) where data-list and source-names are lists."
+  (ensure-reference-data-loaded)
+  (let ((ghia-data (and *ghia-data* (gethash reynolds *ghia-data*)))
+        (erturk-data (and *erturk-data* (gethash reynolds *erturk-data*)))
+        (data-list nil)
+        (source-names nil))
+    ;; Collect available data from both sources
+    (when ghia-data
+      (push ghia-data data-list)
+      (push "Ghia et al. (1982)" source-names))
+    (when erturk-data
+      (push erturk-data data-list)
+      (push "Erturk & Corke (2005)" source-names))
+    ;; If no data found, fall back to closest available
+    (unless data-list
+      (format t "Warning: No reference data for Re=~A~%" reynolds)
+      (cond
+        ((<= reynolds 1000)
+         (push (gethash 100 *ghia-data*) data-list)
+         (push "Ghia et al. (1982) [Re=100]" source-names))
+        (t
+         (push (gethash 1000 *erturk-data*) data-list)
+         (push "Erturk & Corke (2005) [Re=1000]" source-names))))
+    (values (nreverse data-list) (nreverse source-names))))
+
+;;; ============================================================
+;;; Loading simulation results
+;;; ============================================================
+
 (defun load-centerline-data (filename)
   "Load centerline data from file. Returns list of (y . u) pairs."
   (with-open-file (stream filename :direction :input :if-does-not-exist nil)
@@ -132,18 +173,8 @@
                       (when (and y u)
                         (cons y u))))))
 
-(defun load-ghia-data (reynolds)
-  "Get Ghia reference data for given Reynolds number."
-  (case reynolds
-    (100 *ghia-re100-u*)
-    (400 *ghia-re400-u*)
-    (1000 *ghia-re1000-u*)
-    (otherwise
-     (format t "Warning: No Ghia data for Re=~A, using Re=100~%" reynolds)
-     *ghia-re100-u*)))
-
 ;;; ============================================================
-;;; Error computation functions
+;;; Error computation
 ;;; ============================================================
 
 (defun interpolate (x-target data)
@@ -172,13 +203,12 @@
     (values l2-error linf-error)))
 
 ;;; ============================================================
-;;; ASCII plotting (no dependencies)
+;;; ASCII plotting
 ;;; ============================================================
 
 (defun ascii-plot (computed-data reference-data &key (width 60) (height 20))
   "Simple ASCII plot for terminal output.
    Plots u-velocity (x-axis) vs y (y-axis)."
-  ;; Filter out nil entries
   (setf computed-data (remove-if #'null computed-data))
   (setf reference-data (remove-if #'null reference-data))
 
@@ -205,7 +235,7 @@
             (setf (aref canvas row col) #\*)))))
 
     ;; Print header
-    (format t "~%u-velocity vs y (o=Ghia, *=computed)~%")
+    (format t "~%u-velocity vs y (o=reference, *=computed)~%")
     (format t "u: ~,2f~vT~,2f~%" u-min width u-max)
 
     ;; Print canvas
@@ -228,45 +258,49 @@
 
    Keyword arguments:
      :results-file  Path to StreamVorti centerline data file
-     :reynolds      Reynolds number (100, 400, or 1000 for Ghia data)"
+     :reynolds      Reynolds number (100, 400, 1000 for Ghia; 1000-21000 for Erturk)"
 
-  (format t "~%~A~%" (make-string 70 :initial-element #\=))
-  (format t "StreamVorti Validation vs Ghia et al. (1982)~%")
-  (format t "~A~%~%" (make-string 70 :initial-element #\=))
+  ;; Get reference data (may have multiple sources for same Re)
+  (multiple-value-bind (reference-list source-names) (load-reference-data reynolds)
+    (format t "~%~A~%" (make-string 70 :initial-element #\=))
+    (format t "StreamVorti Validation for Re=~A~%" reynolds)
+    (format t "~A~%~%" (make-string 70 :initial-element #\=))
 
-  (format t "Reynolds number: ~A~%" reynolds)
-  (format t "Results file: ~A~%" results-file)
+    (format t "Reynolds number: ~A~%" reynolds)
+    (format t "Reference sources: ~{~A~^, ~}~%" source-names)
+    (format t "Results file: ~A~%" results-file)
 
-  ;; Load computed results
-  (let ((computed (load-centerline-data results-file)))
-    (unless computed
-      (format t "~%ERROR: Could not load results file~%")
-      (return-from run-validation nil))
+    ;; Load computed results
+    (let ((computed (load-centerline-data results-file)))
+      (unless computed
+        (format t "~%ERROR: Could not load results file~%")
+        (return-from run-validation nil))
 
-    (format t "~%Loaded ~A computed data points~%" (length computed))
+      (format t "~%Loaded ~A computed data points~%" (length computed))
 
-    ;; Get reference data
-    (let ((reference (load-ghia-data reynolds)))
-      (format t "Reference data: ~A points~%" (length reference))
+      ;; Compute and display errors for each reference source
+      (let ((l2-threshold 0.05)
+            (linf-threshold 0.10)
+            (all-pass t))
+        (loop for reference in reference-list
+              for source in source-names
+              do (format t "~%--- ~A ---~%" source)
+                 (format t "Reference data: ~A points~%" (length reference))
+                 (multiple-value-bind (l2 linf) (compute-errors computed reference)
+                   (format t "  L2 error:   ~,6f~%" l2)
+                   (format t "  Linf error: ~,6f~%" linf)
+                   (let ((l2-pass (< l2 l2-threshold))
+                         (linf-pass (< linf linf-threshold)))
+                     (format t "  L2 < ~,0f%: ~A~%" (* 100 l2-threshold) (if l2-pass "PASS" "FAIL"))
+                     (format t "  Linf < ~,0f%: ~A~%" (* 100 linf-threshold) (if linf-pass "PASS" "FAIL"))
+                     (unless (and l2-pass linf-pass)
+                       (setf all-pass nil)))))
 
-      ;; Compute errors
-      (multiple-value-bind (l2 linf) (compute-errors computed reference)
-        (format t "~%Error metrics:~%")
-        (format t "  L2 error:   ~,6f~%" l2)
-        (format t "  Linf error: ~,6f~%" linf)
+        (format t "~%Overall: ~A~%" (if all-pass "PASS" "FAIL")))
 
-        ;; Pass/fail criteria
-        (let ((l2-threshold 0.05)
-              (linf-threshold 0.10))
-          (format t "~%Validation result:~%")
-          (format t "  L2 error < ~,0f%: ~A~%"
-                  (* 100 l2-threshold) (if (< l2 l2-threshold) "PASS" "FAIL"))
-          (format t "  Linf error < ~,0f%: ~A~%"
-                  (* 100 linf-threshold) (if (< linf linf-threshold) "PASS" "FAIL"))))
-
-      ;; Generate ASCII plot
+      ;; Generate ASCII plot using first reference source
       (format t "~%")
-      (ascii-plot computed reference)
+      (ascii-plot computed (first reference-list))
 
       (format t "~%~A~%" (make-string 70 :initial-element #\=))
 
