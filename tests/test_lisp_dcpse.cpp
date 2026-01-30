@@ -10,11 +10,16 @@
 
 #ifdef STREAMVORTI_WITH_ECL
 
+// Include MFEM first before ECL to avoid macro conflicts
+#include "mfem.hpp"
+
 #include <StreamVorti/lisp/ecl_runtime.hpp>
 #include <StreamVorti/lisp/lisp_mesh.hpp>
 #include <StreamVorti/lisp/lisp_dcpse.hpp>
 
-#include "mfem.hpp"
+// Include DCPSE headers for complete type definitions
+#include <StreamVorti/approximants/dcpse_2d.hpp>
+#include <StreamVorti/approximants/dcpse_3d.hpp>
 
 class LispDcpseTest : public ::testing::Test {
 protected:

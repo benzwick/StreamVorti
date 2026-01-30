@@ -10,6 +10,9 @@
 
 #ifdef STREAMVORTI_WITH_ECL
 
+// Include MFEM first to get complete type definitions
+#include "mfem.hpp"
+
 #include <StreamVorti/lisp/ecl_runtime.hpp>
 #include <StreamVorti/lisp/lisp_loader.hpp>
 
