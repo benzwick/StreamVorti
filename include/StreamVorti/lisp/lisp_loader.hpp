@@ -34,11 +34,10 @@
 #include <map>
 #include <functional>
 
-// Forward declare ECL types - actual ECL header included only in .cpp files
-// to avoid ECL macro conflicts with MFEM headers (e.g., ECL defines Ct macro
-// which conflicts with mfem::Hybridization::Ct member variable)
-// Use void* as opaque pointer - type safety enforced in implementation
-typedef void* EclObject;
+// Include lisp_bridge.hpp for LispFunction definition
+// (required because BoundaryCondition uses unique_ptr<LispFunction>
+// which needs complete type for destructor)
+#include "StreamVorti/lisp/lisp_bridge.hpp"
 
 // Forward declarations
 namespace mfem {
@@ -48,8 +47,6 @@ namespace mfem {
 
 namespace StreamVorti {
 namespace Lisp {
-
-class LispFunction;
 
 /**
  * @struct BoundaryCondition
