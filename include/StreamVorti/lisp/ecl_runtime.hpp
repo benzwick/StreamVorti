@@ -32,9 +32,8 @@
 #include <vector>
 #include <stdexcept>
 
-// Forward declare ECL types to avoid including ecl.h in header
-typedef struct cl_env_struct *cl_env_ptr;
-typedef void *cl_object;
+// Include ECL header for proper type definitions
+#include <ecl/ecl.h>
 
 namespace StreamVorti {
 namespace Lisp {

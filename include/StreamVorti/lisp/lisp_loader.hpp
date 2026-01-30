@@ -34,13 +34,14 @@
 #include <map>
 #include <functional>
 
+// Include ECL header for proper type definitions
+#include <ecl/ecl.h>
+
 // Forward declarations
 namespace mfem {
     class Mesh;
     class GridFunction;
 }
-
-typedef void *cl_object;
 
 namespace StreamVorti {
 namespace Lisp {
