@@ -251,22 +251,23 @@
       (let ((ref-y (mapcar #'car (remove-if #'null reference-data)))
             (ref-u (mapcar #'cdr (remove-if #'null reference-data)))
             (comp-y (mapcar #'car (remove-if #'null computed-data)))
-            (comp-u (mapcar #'cdr (remove-if #'null computed-data))))
+            (comp-u (mapcar #'cdr (remove-if #'null computed-data)))
+            (format-plot (intern "FORMAT-PLOT" vgplot)))
 
         ;; Configure terminal for PNG output
-        (funcall (intern "FORMAT-PLOT" vgplot) t
+        (funcall format-plot
                  "set terminal pngcairo size 800,600 enhanced font 'Arial,12'")
-        (funcall (intern "FORMAT-PLOT" vgplot) t "set output '~A'" png-path)
+        (funcall format-plot "set output '~A'" png-path)
 
         ;; Set plot parameters
         (funcall (intern "TITLE" vgplot)
                  (format nil "Lid-Driven Cavity: u-velocity at x=0.5 (Re=~A)" reynolds))
         (funcall (intern "XLABEL" vgplot) "u-velocity")
         (funcall (intern "YLABEL" vgplot) "y")
-        (funcall (intern "GRID" vgplot) t)
-        (funcall (intern "FORMAT-PLOT" vgplot) t "set key top left")
-        (funcall (intern "FORMAT-PLOT" vgplot) t "set xrange [-0.5:1.1]")
-        (funcall (intern "FORMAT-PLOT" vgplot) t "set yrange [0:1]")
+        (funcall format-plot "set grid")
+        (funcall format-plot "set key top left")
+        (funcall format-plot "set xrange [-0.5:1.1]")
+        (funcall format-plot "set yrange [0:1]")
 
         ;; Plot reference data (points) and computed data (line)
         (funcall (intern "PLOT" vgplot)
@@ -275,8 +276,8 @@
                  comp-u comp-y
                  "title 'StreamVorti DCPSE' with lines lw 2 lc rgb '#377EB8'")
 
-        ;; Close output and reset terminal
-        (funcall (intern "FORMAT-PLOT" vgplot) t "set output")
+        ;; Close output file (flush to disk)
+        (funcall format-plot "set output")
         (funcall (intern "CLOSE-ALL-PLOTS" vgplot)))
 
       (format t "Plot saved to: ~A~%" png-path)
