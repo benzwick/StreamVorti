@@ -257,7 +257,7 @@
         ;; Configure terminal for PNG output
         (funcall format-plot "~A"
                  "set terminal pngcairo size 800,600 enhanced font 'Arial,12'")
-        (funcall format-plot "set output '~A'" png-path)
+        (funcall format-plot "~A" (format nil "set output '~A'" png-path))
 
         ;; Set plot parameters
         (funcall (intern "TITLE" vgplot)
