@@ -113,7 +113,7 @@
 ;;; Main Simulation Macro
 ;;; ============================================================
 
-(defmacro simulation (&body clauses &key name version dimension)
+(defmacro simulation (&rest args)
   "Define a simulation.
 
    Usage:
@@ -129,25 +129,43 @@
      (discretization ...)
      (solver ...)
      (output ...))"
-  (let ((sim (gensym "SIM")))
-    ;; Extract keyword args and body clauses
-    (let ((body-clauses (loop for item in clauses
-                              unless (keywordp item)
-                              unless (and (listp item)
-                                          (or (keywordp (car item))
-                                              (eq (car item) :name)
-                                              (eq (car item) :version)
-                                              (eq (car item) :dimension)))
-                              collect item)))
-      `(let ((,sim (make-simulation-data
-                    :name ,(or name "unnamed")
-                    :version ,(or version 1)
-                    :dimension ,(or dimension 2))))
-         (setf *current-simulation* ,sim)
-         ,@(mapcar (lambda (clause)
-                     `(process-clause ,sim ',clause))
-                   body-clauses)
-         ,sim))))
+  (let ((sim (gensym "SIM"))
+        (name "unnamed")
+        (version 1)
+        (dimension 2)
+        (body-clauses nil))
+    ;; Parse args: extract keyword options and collect body clauses
+    (loop with rest = args
+          while rest
+          for item = (car rest)
+          do (cond
+               ;; Keyword argument
+               ((eq item :name)
+                (setf name (cadr rest))
+                (setf rest (cddr rest)))
+               ((eq item :version)
+                (setf version (cadr rest))
+                (setf rest (cddr rest)))
+               ((eq item :dimension)
+                (setf dimension (cadr rest))
+                (setf rest (cddr rest)))
+               ;; Body clause (list starting with symbol)
+               ((and (listp item) (symbolp (car item)))
+                (push item body-clauses)
+                (setf rest (cdr rest)))
+               ;; Skip anything else
+               (t
+                (setf rest (cdr rest)))))
+    (setf body-clauses (nreverse body-clauses))
+    `(let ((,sim (make-simulation-data
+                  :name ,name
+                  :version ,version
+                  :dimension ,dimension)))
+       (setf *current-simulation* ,sim)
+       ,@(mapcar (lambda (clause)
+                   `(process-clause ,sim ',clause))
+                 body-clauses)
+       ,sim)))
 
 (defgeneric process-clause (sim clause)
   (:documentation "Process a simulation clause"))
