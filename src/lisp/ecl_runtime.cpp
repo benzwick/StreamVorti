@@ -68,12 +68,14 @@ void Runtime::init(const std::string& lisp_path)
         std::filesystem::path base_path(lisp_path_);
 
         // Load core SDL files in order
+        // Note: geometry.lisp must load before sdl-macros.lisp because
+        // sdl-macros.lisp references streamvorti.geometry:shape
         std::vector<std::string> core_files = {
             "packages.lisp",
-            "sdl-macros.lisp",
             "geometry.lisp",
             "mesh.lisp",
             "boundaries.lisp",
+            "sdl-macros.lisp",
             "simulation.lisp"
         };
 
