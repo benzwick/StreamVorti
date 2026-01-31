@@ -42,6 +42,7 @@ jobs:
 
     - name: Run with SDL file
       run: |
+        set -o pipefail
         chmod +x bin/StreamVorti
         mkdir -p results
         cd results
@@ -49,6 +50,7 @@ jobs:
 
     - name: Validate against Ghia
       run: |
+        set -o pipefail
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
              --eval '(streamvorti.validation:run-validation :results-file "results/output_dat/mfem_square10x10_u_centerline_x0.5.dat")' \
@@ -94,6 +96,7 @@ jobs:
 
     - name: Run with CLI args
       run: |
+        set -o pipefail
         chmod +x bin/StreamVorti
         mkdir -p results
         cd results
@@ -101,6 +104,7 @@ jobs:
 
     - name: Validate against Ghia
       run: |
+        set -o pipefail
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
              --eval '(streamvorti.validation:run-validation :results-file "results/output_dat/mfem_square10x10_u_centerline_x0.5.dat")' \
@@ -140,6 +144,7 @@ jobs:
 
     - name: Run MfemRun
       run: |
+        set -o pipefail
         chmod +x bin/MfemRun
         mkdir -p results
         cd results
