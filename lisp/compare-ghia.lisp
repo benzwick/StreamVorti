@@ -255,7 +255,7 @@
             (format-plot (intern "FORMAT-PLOT" vgplot)))
 
         ;; Configure terminal for PNG output
-        (funcall format-plot
+        (funcall format-plot "~A"
                  "set terminal pngcairo size 800,600 enhanced font 'Arial,12'")
         (funcall format-plot "set output '~A'" png-path)
 
@@ -264,10 +264,10 @@
                  (format nil "Lid-Driven Cavity: u-velocity at x=0.5 (Re=~A)" reynolds))
         (funcall (intern "XLABEL" vgplot) "u-velocity")
         (funcall (intern "YLABEL" vgplot) "y")
-        (funcall format-plot "set grid")
-        (funcall format-plot "set key top left")
-        (funcall format-plot "set xrange [-0.5:1.1]")
-        (funcall format-plot "set yrange [0:1]")
+        (funcall format-plot "~A" "set grid")
+        (funcall format-plot "~A" "set key top left")
+        (funcall format-plot "~A" "set xrange [-0.5:1.1]")
+        (funcall format-plot "~A" "set yrange [0:1]")
 
         ;; Plot reference data (points) and computed data (line)
         (funcall (intern "PLOT" vgplot)
@@ -277,7 +277,7 @@
                  "title 'StreamVorti DCPSE' with lines lw 2 lc rgb '#377EB8'")
 
         ;; Close output file (flush to disk)
-        (funcall format-plot "set output")
+        (funcall format-plot "~A" "set output")
         (funcall (intern "CLOSE-ALL-PLOTS" vgplot)))
 
       (format t "Plot saved to: ~A~%" png-path)
