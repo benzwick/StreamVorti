@@ -32,6 +32,8 @@
 #include "StreamVorti/lisp/lisp_bridge.hpp"
 #include "StreamVorti/lisp/ecl_runtime.hpp"
 
+#include <cctype>  // for std::toupper
+
 namespace StreamVorti {
 namespace Lisp {
 
@@ -353,13 +355,32 @@ EclObject Bridge::apply(EclObject func, EclObject args_list)
 EclObject Bridge::findSymbol(const std::string& name,
                              const std::string& package)
 {
-    cl_object pkg = ecl_find_package(package.c_str());
+    std::string actual_name = name;
+    std::string actual_package = package;
+
+    // Parse "package:name" format if present
+    size_t colon_pos = name.find(':');
+    if (colon_pos != std::string::npos) {
+        actual_package = name.substr(0, colon_pos);
+        actual_name = name.substr(colon_pos + 1);
+    }
+
+    // Convert to uppercase (Common Lisp default readtable behavior)
+    for (char& c : actual_name) {
+        c = std::toupper(static_cast<unsigned char>(c));
+    }
+    for (char& c : actual_package) {
+        c = std::toupper(static_cast<unsigned char>(c));
+    }
+
+    cl_object pkg = ecl_find_package(actual_package.c_str());
     if (pkg == ECL_NIL) {
         return to_ecl(ECL_NIL);
     }
 
     int intern_flag;
-    cl_object name_str = ecl_make_simple_base_string(name.c_str(), name.length());
+    cl_object name_str = ecl_make_simple_base_string(actual_name.c_str(),
+                                                      actual_name.length());
     return to_ecl(ecl_intern(name_str, pkg, &intern_flag));
 }
 
