@@ -104,3 +104,18 @@ Reference data files in `data/`:
 Each step must be separate commands, not chained.
 
 **Separate commits for unrelated changes:** Always create separate commits for logically unrelated changes. Each commit should be atomic and address a single concern.
+
+**NEVER debug via CI commits.** Do not push speculative fixes to see if they work in CI. This pollutes the git history with garbage commits. Instead:
+1. Test locally first
+2. Read the documentation and source code to understand how things work
+3. If stuck, ask the user for help rather than guessing
+
+## Code Quality
+
+**No hacks or workarounds.** When using a library:
+1. Read the documentation and source code first
+2. Look at working examples (e.g., demo files, tests)
+3. Write clean, idiomatic code that uses the library as intended
+4. If something doesn't work, understand WHY before attempting fixes
+5. Never add sleeps, polling loops, or other band-aids to paper over misunderstanding
+6. Ask for help rather than piling on hacks
