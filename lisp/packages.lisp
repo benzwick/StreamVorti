@@ -101,7 +101,13 @@
    #:generate-mesh
    #:load-mesh-file
    #:save-mesh-file
-   #:refine-mesh))
+   #:refine-mesh
+   ;; Mesh specification (for SDL)
+   #:mesh-spec
+   #:mesh-spec-type
+   #:make-mesh-spec-generate
+   #:make-mesh-spec-load
+   #:realize-mesh-spec))
 
 ;;; ============================================================
 ;;; Boundaries Package
