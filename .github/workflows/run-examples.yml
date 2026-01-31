@@ -48,7 +48,7 @@ jobs:
         chmod +x bin/StreamVorti
         mkdir -p results
         cd results
-        ../bin/StreamVorti -f ../demo/cavity.lisp -pv 2>&1 | tee simulation.log
+        ../bin/StreamVorti -f ../demo/cavity.lisp -lp ../lisp -pv 2>&1 | tee simulation.log
 
     - name: Validate against Ghia
       run: |
