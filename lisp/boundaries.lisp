@@ -80,11 +80,13 @@
                ((and (listp e) (eq (first e) '=))
                 (let ((var (second e))
                       (val (third e)))
-                  (cond
-                    ((eq var 'x) `(x-equals ,val))
-                    ((eq var 'y) `(y-equals ,val))
-                    ((eq var 'z) `(z-equals ,val))
-                    (t (error "Unknown variable in where: ~A" var)))))
+                  ;; Compare symbol names to handle cross-package usage
+                  (let ((var-name (symbol-name var)))
+                    (cond
+                      ((string= var-name "X") `(x-equals ,val))
+                      ((string= var-name "Y") `(y-equals ,val))
+                      ((string= var-name "Z") `(z-equals ,val))
+                      (t (error "Unknown variable in where: ~A" var))))))
                ;; (< x value) etc - not yet implemented
                ((and (listp e) (member (first e) '(< > <= >=)))
                 (error "Comparison ~A not yet implemented in where" (first e)))
