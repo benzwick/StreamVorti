@@ -67,6 +67,149 @@
 (defun get-output (sim)
   (simulation-data-output sim))
 
+;;; Generic property accessors for C++ bridge
+;;; These handle different object types (mesh-spec, physics-data, etc.)
+
+(defun get-type (obj)
+  "Get type property from various objects."
+  (typecase obj
+    (physics-data (physics-data-type obj))
+    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-type obj))
+    (t nil)))
+
+(defun get-path (obj)
+  "Get path property from mesh-spec."
+  (typecase obj
+    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-path obj))
+    (t nil)))
+
+(defun get-divisions (obj)
+  "Get divisions property from mesh-spec."
+  (typecase obj
+    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-divisions obj))
+    (t nil)))
+
+(defun get-element-type (obj)
+  "Get element-type property from mesh-spec."
+  (typecase obj
+    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-element-type obj))
+    (t nil)))
+
+(defun get-sizes (obj)
+  "Get sizes property from mesh-spec."
+  (typecase obj
+    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-sizes obj))
+    (t nil)))
+
+(defun get-formulation (obj)
+  "Get formulation from physics-data."
+  (typecase obj
+    (physics-data (physics-data-formulation obj))
+    (t nil)))
+
+(defun get-reynolds (obj)
+  "Get Reynolds number from physics-data."
+  (typecase obj
+    (physics-data (physics-data-reynolds obj))
+    (t nil)))
+
+(defun get-density (obj)
+  "Get density from physics-data."
+  (typecase obj
+    (physics-data (physics-data-density obj))
+    (t nil)))
+
+(defun get-viscosity (obj)
+  "Get viscosity from physics-data."
+  (typecase obj
+    (physics-data (physics-data-viscosity obj))
+    (t nil)))
+
+(defun get-method (obj)
+  "Get method from discretization-data."
+  (typecase obj
+    (discretization-data (discretization-data-method obj))
+    (t nil)))
+
+(defun get-num-neighbors (obj)
+  "Get num-neighbors from discretization-data."
+  (typecase obj
+    (discretization-data (discretization-data-num-neighbors obj))
+    (t nil)))
+
+(defun get-cutoff-radius (obj)
+  "Get cutoff-radius from discretization-data."
+  (typecase obj
+    (discretization-data (discretization-data-cutoff-radius obj))
+    (t nil)))
+
+(defun get-support-radius (obj)
+  "Get support-radius from discretization-data."
+  (typecase obj
+    (discretization-data (discretization-data-support-radius obj))
+    (t nil)))
+
+(defun get-timestepping (obj)
+  "Get timestepping from solver-data."
+  (typecase obj
+    (solver-data (solver-data-timestepping obj))
+    (t nil)))
+
+(defun get-dt (obj)
+  "Get dt from solver-data."
+  (typecase obj
+    (solver-data (solver-data-dt obj))
+    (t nil)))
+
+(defun get-end-time (obj)
+  "Get end-time from solver-data."
+  (typecase obj
+    (solver-data (solver-data-end-time obj))
+    (t nil)))
+
+(defun get-tolerance (obj)
+  "Get tolerance from solver-data."
+  (typecase obj
+    (solver-data (solver-data-tolerance obj))
+    (t nil)))
+
+(defun get-max-iterations (obj)
+  "Get max-iterations from solver-data."
+  (typecase obj
+    (solver-data (solver-data-max-iterations obj))
+    (t nil)))
+
+;;; Boundary condition accessors
+(defun get-attribute (obj)
+  "Get attribute from boundary-condition."
+  (typecase obj
+    (streamvorti.boundaries:boundary-condition
+     (streamvorti.boundaries:boundary-attribute obj))
+    (t nil)))
+
+(defun get-function (obj)
+  "Get function from boundary-condition or velocity plist."
+  (typecase obj
+    (streamvorti.boundaries:boundary-condition
+     (streamvorti.boundaries:boundary-function obj))
+    (cons (getf obj :function))  ; plist case
+    (t nil)))
+
+(defun get-u-function (obj)
+  "Get u-function from velocity plist."
+  (when (listp obj)
+    (getf obj :u-function)))
+
+(defun get-v-function (obj)
+  "Get v-function from velocity plist."
+  (when (listp obj)
+    (getf obj :v-function)))
+
+(defun get-w-function (obj)
+  "Get w-function from velocity plist."
+  (when (listp obj)
+    (getf obj :w-function)))
+
 ;;; ============================================================
 ;;; Physics Structure
 ;;; ============================================================

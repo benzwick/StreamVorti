@@ -217,4 +217,28 @@
    #:get-physics
    #:get-discretization
    #:get-solver
-   #:get-output))
+   #:get-output
+   ;; Generic property accessors for C++ bridge
+   #:get-type
+   #:get-path
+   #:get-divisions
+   #:get-element-type
+   #:get-sizes
+   #:get-formulation
+   #:get-reynolds
+   #:get-density
+   #:get-viscosity
+   #:get-method
+   #:get-num-neighbors
+   #:get-cutoff-radius
+   #:get-support-radius
+   #:get-timestepping
+   #:get-dt
+   #:get-end-time
+   #:get-tolerance
+   #:get-max-iterations
+   #:get-attribute
+   #:get-function
+   #:get-u-function
+   #:get-v-function
+   #:get-w-function))
