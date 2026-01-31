@@ -230,9 +230,11 @@ Returns (VALUES data source-name) or (VALUES NIL NIL)."
       (vg 'legend :northeast)
       ;; Save to file
       (vg 'print-plot png-path)
+      ;; Give gnuplot time to process and write the file
+      (sleep 1)
       (vg 'close-all-plots))
-    ;; Wait for gnuplot to finish writing the file
-    (if (await-file png-path)
+    ;; Wait for file to appear (gnuplot may still be writing)
+    (if (await-file png-path :timeout 10.0)
         (progn
           (format t "Plot saved: ~A~%" (namestring png-path))
           png-path)
