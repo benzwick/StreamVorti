@@ -116,17 +116,31 @@ EclObject Runtime::eval(const std::string& expr)
 
     clearError();
 
-    // Convert string to Lisp object and evaluate
-    cl_object form = c_string_to_object(expr.c_str());
+    // Wrap expression in handler-case to capture errors
+    // Returns (values result nil) on success, (values nil error-message) on failure
+    std::ostringstream wrapped_expr;
+    wrapped_expr << "(handler-case "
+                 << "  (values " << expr << " nil) "
+                 << "  (error (c) "
+                 << "    (values nil (format nil \"~A\" c))))";
 
-    // Use cl_safe_eval for error handling
+    cl_object form = c_string_to_object(wrapped_expr.str().c_str());
     cl_object result = cl_safe_eval(form, Cnil, Cnil);
 
-    // Check for NIL result which might indicate error
-    // (actual error checking would need condition handling)
     if (result == OBJNULL) {
         last_error_ = "Evaluation returned null object";
         throw EclException(last_error_);
+    }
+
+    // Get the second value (error message if any)
+    cl_object error_val = ecl_nth_value(ecl_process_env(), 1);
+
+    if (error_val != Cnil && ECL_STRINGP(error_val)) {
+        // There was an error - extract the message
+        cl_object str = si_coerce_to_base_string(error_val);
+        last_error_ = std::string(ecl_base_string_pointer_safe(str),
+                                   ecl_length(str));
+        throw EclException("Evaluation error: " + last_error_);
     }
 
     return to_ecl(result);
@@ -154,19 +168,41 @@ void Runtime::loadFile(const std::string& path)
 
     clearError();
 
-    // Build load expression
+    // Build load expression wrapped in handler-case to capture errors
+    // Returns T on success, error message string on failure
     std::ostringstream load_expr;
-    load_expr << "(load \"" << path << "\")";
+    load_expr << "(handler-case "
+              << "  (progn (load \"" << path << "\") t) "
+              << "  (error (c) "
+              << "    (format nil \"~A\" c)))";
 
     cl_object result = cl_safe_eval(
         c_string_to_object(load_expr.str().c_str()),
         Cnil, Cnil
     );
 
-    if (result == Cnil) {
-        last_error_ = "Failed to load file: " + path;
+    // Check if result is a string (error message) or T (success)
+    if (result == OBJNULL) {
+        last_error_ = "ECL evaluation returned null for: " + path;
         throw EclException(last_error_);
     }
+
+    // If result is a string, it's an error message
+    if (ECL_STRINGP(result)) {
+        // Convert ECL string to C++ string
+        cl_object str = si_coerce_to_base_string(result);
+        last_error_ = std::string(ecl_base_string_pointer_safe(str),
+                                   ecl_length(str));
+        throw EclException("Error loading " + path + ": " + last_error_);
+    }
+
+    // If result is NIL (not T), something went wrong
+    if (result == Cnil) {
+        last_error_ = "Load returned NIL for: " + path;
+        throw EclException(last_error_);
+    }
+
+    // Success: result should be T
 }
 
 std::string Runtime::getLastError()
