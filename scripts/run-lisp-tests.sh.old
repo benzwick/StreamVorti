@@ -1,4 +1,6 @@
 #!/bin/bash
+# DEPRECATED: Use lisp/run-tests.lisp instead
+#
 # Run Lisp test suite for StreamVorti validation
 #
 # Usage:
