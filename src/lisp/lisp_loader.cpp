@@ -37,6 +37,8 @@
 #include <iostream>
 #include <sstream>
 #include <filesystem>
+#include <algorithm>  // for std::transform
+#include <cctype>     // for std::tolower
 
 namespace StreamVorti {
 namespace Lisp {
@@ -141,6 +143,10 @@ std::unique_ptr<mfem::Mesh> Loader::extractMesh(EclObject sim_obj)
     // Check if it's a generated mesh or loaded mesh
     EclObject mesh_type = getProperty(mesh_spec, "type");
     std::string type_str = Bridge::toCppString(mesh_type);
+
+    // Convert to lowercase for comparison (Lisp keywords are uppercase)
+    std::transform(type_str.begin(), type_str.end(), type_str.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
 
     if (type_str == "generated" || type_str == "generate") {
         // Generate mesh from parameters
