@@ -249,4 +249,8 @@
    #:get-function
    #:get-u-function
    #:get-v-function
-   #:get-w-function))
+   #:get-w-function
+   #:get-format
+   #:get-interval
+   #:get-directory
+   #:get-fields))

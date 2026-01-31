@@ -278,6 +278,31 @@
   (directory "results/" :type string)
   (fields '(vorticity streamfunction velocity) :type list))
 
+;;; Output data accessors (must be after defstruct)
+(defun get-format (obj)
+  "Get format from output-data."
+  (typecase obj
+    (output-data (output-data-format obj))
+    (t nil)))
+
+(defun get-interval (obj)
+  "Get interval from output-data."
+  (typecase obj
+    (output-data (output-data-interval obj))
+    (t nil)))
+
+(defun get-directory (obj)
+  "Get directory from output-data."
+  (typecase obj
+    (output-data (output-data-directory obj))
+    (t nil)))
+
+(defun get-fields (obj)
+  "Get fields from output-data."
+  (typecase obj
+    (output-data (output-data-fields obj))
+    (t nil)))
+
 ;;; ============================================================
 ;;; Main Simulation Macro
 ;;; ============================================================
