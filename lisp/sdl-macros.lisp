@@ -40,8 +40,13 @@
   (output nil))
 
 ;;; Accessors for C++ loader
-(defun get-name (sim)
-  (simulation-data-name sim))
+(defun get-name (obj)
+  "Get name from simulation-data or boundary-condition."
+  (typecase obj
+    (simulation-data (simulation-data-name obj))
+    (streamvorti.boundaries:boundary-condition
+     (streamvorti.boundaries:boundary-name obj))
+    (t nil)))
 
 (defun get-version (sim)
   (simulation-data-version sim))
