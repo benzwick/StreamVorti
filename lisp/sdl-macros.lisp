@@ -350,7 +350,12 @@
          (let* ((geometry (eval (second form)))
                 (options (cddr form))
                 (type (or (getf options :type) :quad))
-                (divisions (or (getf options :divisions) '(10 10))))
+                ;; Evaluate divisions since it may be quoted '(40 40)
+                (divisions-raw (or (getf options :divisions) '(10 10)))
+                (divisions (if (and (listp divisions-raw)
+                                    (eq (first divisions-raw) 'quote))
+                               (second divisions-raw)
+                               divisions-raw)))
            (setf mesh-spec
                  (streamvorti.mesh:make-mesh-spec-generate
                   geometry :type type :divisions divisions))))
