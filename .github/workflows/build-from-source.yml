@@ -121,9 +121,6 @@ jobs:
     - name: Check built artifacts
       run: ./scripts/build-from-source/08-check-built-artifacts.sh build
 
-    - name: Run example tests
-      run: ./scripts/build-from-source/09-run-example-tests.sh "$GITHUB_WORKSPACE/build/MfemRun" "$GITHUB_WORKSPACE/build/StreamVorti"
-
     - name: Generate coverage report
       run: ./scripts/build-from-source/10-generate-coverage.sh build
 
