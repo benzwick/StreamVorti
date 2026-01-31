@@ -145,13 +145,21 @@
 ;;; Condition Type Constructors
 ;;; ============================================================
 
-(defun velocity (function-or-value)
+(defun velocity (&key u-function v-function w-function function value)
   "Create a velocity boundary condition specification.
-   FUNCTION-OR-VALUE - Either a function (x y [z]) -> value, or a constant."
+
+   Keyword arguments:
+     :u-function - Function for u-velocity component
+     :v-function - Function for v-velocity component
+     :w-function - Function for w-velocity component (3D)
+     :function   - Single function for scalar velocity
+     :value      - Constant velocity value"
   (list :type :velocity
-        :function (if (functionp function-or-value)
-                      function-or-value
-                      (constantly function-or-value))))
+        :u-function u-function
+        :v-function v-function
+        :w-function w-function
+        :function (or function
+                      (when value (constantly value)))))
 
 (defun pressure (function-or-value)
   "Create a pressure boundary condition specification."
