@@ -32,6 +32,7 @@ Dcpse::~Dcpse()
 Dcpse::Dcpse(mfem::GridFunction &gf, int NumNeighbors)
     : SupportDomain(gf)
 {
+    this->num_neighbors_ = NumNeighbors;
     this->ComputeSupportRadiuses(NumNeighbors);
 }
 

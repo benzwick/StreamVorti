@@ -2,10 +2,10 @@
 set -e
 
 MFEM_DIR=${1:-"/opt/mfem/mfem-4.8"}
-BUILD_TYPE=${2:-"Release"}
+BUILD_TYPE=${2:-"Debug"}
 ENABLE_COVERAGE=${3:-"ON"}
 
-echo "Building StreamVorti..."
+echo "Building StreamVorti with ECL support..."
 echo "  MFEM_DIR: ${MFEM_DIR}"
 echo "  BUILD_TYPE: ${BUILD_TYPE}"
 echo "  ENABLE_COVERAGE: ${ENABLE_COVERAGE}"
@@ -14,10 +14,11 @@ echo "  ENABLE_COVERAGE: ${ENABLE_COVERAGE}"
 mkdir -p build
 cd build
 
-# Configure StreamVorti
+# Configure StreamVorti with ECL
 cmake \
   -DMFEM_DIR=${MFEM_DIR} \
   -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+  -DSTREAMVORTI_WITH_ECL=ON \
   -DSTREAMVORTI_BUILD_TESTS=ON \
   -DENABLE_COVERAGE=${ENABLE_COVERAGE} \
   -DCMAKE_CXX_FLAGS="-DOMPI_SKIP_MPICXX" \
@@ -28,4 +29,4 @@ cmake \
 # Build
 make -j$(nproc)
 
-echo "StreamVorti built successfully"
+echo "StreamVorti with ECL built successfully"

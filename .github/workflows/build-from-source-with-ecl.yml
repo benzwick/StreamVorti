@@ -1,6 +1,6 @@
-# GitHub Actions workflow for building StreamVorti with MFEM
+# GitHub Actions workflow for building StreamVorti with MFEM with ECL (Common Lisp) support
 #
-# This workflow builds StreamVorti with MFEM and dependencies from source.
+# This workflow builds StreamVorti with MFEM, ECL, and all dependencies from source.
 # It includes unit tests and code coverage reporting.
 #
 # WHAT IS CACHED:
@@ -25,7 +25,7 @@
 # - https://github.com/mfem/github-actions/blob/master/build-metis/action.yml
 # - https://github.com/mfem/mfem/blob/master/INSTALL
 
-name: Build StreamVorti
+name: Build StreamVorti with ECL
 
 on:
   workflow_dispatch:
@@ -45,14 +45,17 @@ env:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-latest]
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install system dependencies
-      run: ./scripts/build-from-source/01-install-system-dependencies.sh
+    - name: Install system dependencies (with ECL)
+      run: ./scripts/build-from-source/01-install-system-dependencies-ecl.sh
 
     - name: Setup ccache and create Eigen symlinks
       run: ./scripts/build-from-source/02-setup-ccache.sh
@@ -60,7 +63,7 @@ jobs:
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ runner.os }}-build-ccache
+        key: ${{ matrix.os }}-ecl-build-ccache
         max-size: "2G"
         verbose: 2
 
@@ -106,8 +109,8 @@ jobs:
     - name: Install Google Test
       run: ./scripts/build-from-source/11-install-gtest.sh
 
-    - name: Build StreamVorti
-      run: ./scripts/build-from-source/06-build-streamvorti.sh "/opt/mfem/${{ env.MFEM_TOP_DIR }}" "Release"
+    - name: Build StreamVorti with ECL
+      run: ./scripts/build-from-source/06-build-streamvorti-ecl.sh "/opt/mfem/${{ env.MFEM_TOP_DIR }}" "Debug" "ON"
 
     - name: Display ccache statistics
       run: |
@@ -121,6 +124,9 @@ jobs:
     - name: Check built artifacts
       run: ./scripts/build-from-source/08-check-built-artifacts.sh build
 
+    - name: Run example tests
+      run: ./scripts/build-from-source/09-run-example-tests.sh "$GITHUB_WORKSPACE/build/MfemRun" "$GITHUB_WORKSPACE/build/StreamVorti"
+
     - name: Generate coverage report
       run: ./scripts/build-from-source/10-generate-coverage.sh build
 
@@ -132,10 +138,10 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
 
-    - name: Upload StreamVorti binaries
+    - name: Upload StreamVorti binaries (with ECL)
       uses: actions/upload-artifact@v4
       with:
-        name: streamvorti-binaries-${{ runner.os }}
+        name: streamvorti-ecl-binaries-${{ matrix.os }}
         path: |
           build/StreamVorti
           build/MfemRun

@@ -1,0 +1,42 @@
+# C++ unit tests and integration tests
+#
+# Downloads pre-built binaries and runs:
+# - C++ unit tests (GTest)
+# - Example simulations
+# - Coverage reporting
+#
+# Depends on build-from-source.yml completing successfully.
+
+name: C++ Tests
+
+on:
+  workflow_run:
+    workflows: ["Build StreamVorti"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  test-cpp:
+    runs-on: ubuntu-22.04
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: ./scripts/build-from-source/01-install-system-dependencies.sh
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: streamvorti-binaries-Linux
+        path: build/
+        run-id: ${{ github.event.workflow_run.id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Make binaries executable
+      run: chmod +x build/StreamVorti build/MfemRun
+
+    - name: Run example tests
+      run: ./scripts/build-from-source/09-run-example-tests.sh "$GITHUB_WORKSPACE/build/MfemRun" "$GITHUB_WORKSPACE/build/StreamVorti"

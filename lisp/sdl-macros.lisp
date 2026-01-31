@@ -1,0 +1,322 @@
+;;;; sdl-macros.lisp - SDL macros for simulation definition
+;;;;
+;;;; StreamVorti - Software for solving PDEs using explicit methods.
+;;;; Copyright (C) 2026 Benjamin F. Zwick
+;;;;
+;;;; This program is free software: you can redistribute it and/or modify
+;;;; it under the terms of the GNU General Public License as published by
+;;;; the Free Software Foundation, either version 3 of the License, or
+;;;; (at your option) any later version.
+
+(in-package :sdl)
+
+;;; ============================================================
+;;; Global State
+;;; ============================================================
+
+(defvar *current-simulation* nil
+  "The current simulation being defined")
+
+(defun get-current-simulation ()
+  "Get the current simulation object."
+  *current-simulation*)
+
+;;; ============================================================
+;;; Simulation Structure
+;;; ============================================================
+
+(defstruct simulation-data
+  "Internal structure holding simulation data"
+  (name "unnamed" :type string)
+  (version 1 :type integer)
+  (dimension 2 :type integer)
+  (geometry-shapes nil :type list)
+  (mesh-spec nil)
+  (mesh nil)
+  (boundaries nil :type list)
+  (physics nil)
+  (discretization nil)
+  (solver nil)
+  (output nil))
+
+;;; Accessors for C++ loader
+(defun get-name (sim)
+  (simulation-data-name sim))
+
+(defun get-version (sim)
+  (simulation-data-version sim))
+
+(defun get-dimension (sim)
+  (simulation-data-dimension sim))
+
+(defun get-mesh (sim)
+  (simulation-data-mesh-spec sim))
+
+(defun get-boundaries (sim)
+  (simulation-data-boundaries sim))
+
+(defun get-physics (sim)
+  (simulation-data-physics sim))
+
+(defun get-discretization (sim)
+  (simulation-data-discretization sim))
+
+(defun get-solver (sim)
+  (simulation-data-solver sim))
+
+(defun get-output (sim)
+  (simulation-data-output sim))
+
+;;; ============================================================
+;;; Physics Structure
+;;; ============================================================
+
+(defstruct physics-data
+  (type :incompressible-navier-stokes)
+  (formulation :stream-vorticity)
+  (reynolds 100.0d0 :type double-float)
+  (density 1.0d0 :type double-float)
+  (viscosity 0.01d0 :type double-float))
+
+;;; ============================================================
+;;; Discretization Structure
+;;; ============================================================
+
+(defstruct discretization-data
+  (method :dcpse)
+  (num-neighbors 25 :type integer)
+  (cutoff-radius 30.0d0 :type double-float)
+  (support-radius 5.0d0 :type double-float))
+
+;;; ============================================================
+;;; Solver Structure
+;;; ============================================================
+
+(defstruct solver-data
+  (timestepping :explicit-euler)
+  (dt 0.001d0 :type double-float)
+  (end-time 1.0d0 :type double-float)
+  (tolerance 1.0d-6 :type double-float)
+  (max-iterations 10000 :type integer))
+
+;;; ============================================================
+;;; Output Structure
+;;; ============================================================
+
+(defstruct output-data
+  (format :vtk)
+  (interval 0.1d0 :type double-float)
+  (directory "results/" :type string)
+  (fields '(vorticity streamfunction velocity) :type list))
+
+;;; ============================================================
+;;; Main Simulation Macro
+;;; ============================================================
+
+(defmacro simulation (&body clauses &key name version dimension)
+  "Define a simulation.
+
+   Usage:
+   (simulation
+     :name \"cavity-flow\"
+     :version 1
+     :dimension 2
+
+     (geometry ...)
+     (mesh ...)
+     (boundaries ...)
+     (physics ...)
+     (discretization ...)
+     (solver ...)
+     (output ...))"
+  (let ((sim (gensym "SIM")))
+    ;; Extract keyword args and body clauses
+    (let ((body-clauses (loop for item in clauses
+                              unless (keywordp item)
+                              unless (and (listp item)
+                                          (or (keywordp (car item))
+                                              (eq (car item) :name)
+                                              (eq (car item) :version)
+                                              (eq (car item) :dimension)))
+                              collect item)))
+      `(let ((,sim (make-simulation-data
+                    :name ,(or name "unnamed")
+                    :version ,(or version 1)
+                    :dimension ,(or dimension 2))))
+         (setf *current-simulation* ,sim)
+         ,@(mapcar (lambda (clause)
+                     `(process-clause ,sim ',clause))
+                   body-clauses)
+         ,sim))))
+
+(defgeneric process-clause (sim clause)
+  (:documentation "Process a simulation clause"))
+
+(defmethod process-clause (sim (clause list))
+  "Process a clause based on its first element."
+  (case (first clause)
+    (geometry (process-geometry-clause sim (rest clause)))
+    (mesh (process-mesh-clause sim (rest clause)))
+    (boundaries (process-boundaries-clause sim (rest clause)))
+    (physics (process-physics-clause sim (rest clause)))
+    (discretization (process-discretization-clause sim (rest clause)))
+    (solver (process-solver-clause sim (rest clause)))
+    (output (process-output-clause sim (rest clause)))
+    (otherwise
+     (warn "Unknown clause type: ~A" (first clause)))))
+
+;;; ============================================================
+;;; Clause Processors
+;;; ============================================================
+
+(defun process-geometry-clause (sim body)
+  "Process geometry definitions."
+  ;; Execute body forms and collect defined shapes
+  (dolist (form body)
+    (when (and (listp form) (eq (first form) 'defparameter))
+      (eval form)
+      (let ((shape (symbol-value (second form))))
+        (when (typep shape 'streamvorti.geometry:shape)
+          (push shape (simulation-data-geometry-shapes sim)))))))
+
+(defun process-mesh-clause (sim body)
+  "Process mesh specification."
+  (let ((mesh-spec nil))
+    (dolist (form body)
+      (cond
+        ;; (generate shape ...)
+        ((and (listp form) (eq (first form) 'generate))
+         (let* ((geometry (eval (second form)))
+                (options (cddr form))
+                (type (or (getf options :type) :quad))
+                (divisions (or (getf options :divisions) '(10 10))))
+           (setf mesh-spec
+                 (streamvorti.mesh:make-mesh-spec-generate
+                  geometry :type type :divisions divisions))))
+        ;; (load path ...)
+        ((and (listp form) (eq (first form) 'load-mesh))
+         (let* ((path (second form))
+                (format (or (getf (cddr form) :format) :auto)))
+           (setf mesh-spec
+                 (streamvorti.mesh:make-mesh-spec-load path :format format))))))
+    (setf (simulation-data-mesh-spec sim) mesh-spec)))
+
+(defun process-boundaries-clause (sim body)
+  "Process boundary conditions."
+  (let ((boundaries nil))
+    (dolist (form body)
+      (cond
+        ;; (defun ...) - define BC function
+        ((and (listp form) (eq (first form) 'defun))
+         (eval form))
+        ;; (region ...) - define BC region
+        ((and (listp form) (eq (first form) 'region))
+         (push (eval form) boundaries))))
+    (setf (simulation-data-boundaries sim) (nreverse boundaries))))
+
+(defun process-physics-clause (sim body)
+  "Process physics parameters."
+  (let ((physics (make-physics-data)))
+    (loop for (key value) on body by #'cddr do
+      (case key
+        (:type (setf (physics-data-type physics) value))
+        (:formulation (setf (physics-data-formulation physics) value))
+        (:reynolds (setf (physics-data-reynolds physics) (coerce value 'double-float)))
+        (:density (setf (physics-data-density physics) (coerce value 'double-float)))
+        (:viscosity (setf (physics-data-viscosity physics) (coerce value 'double-float)))))
+    (setf (simulation-data-physics sim) physics)))
+
+(defun process-discretization-clause (sim body)
+  "Process discretization parameters."
+  (let ((disc (make-discretization-data)))
+    (loop for (key value) on body by #'cddr do
+      (case key
+        (:method (setf (discretization-data-method disc) value))
+        (:num-neighbors (setf (discretization-data-num-neighbors disc) value))
+        (:cutoff-radius (setf (discretization-data-cutoff-radius disc)
+                              (coerce value 'double-float)))
+        (:support-radius (setf (discretization-data-support-radius disc)
+                               (coerce value 'double-float)))))
+    (setf (simulation-data-discretization sim) disc)))
+
+(defun process-solver-clause (sim body)
+  "Process solver parameters."
+  (let ((solver (make-solver-data)))
+    (loop for (key value) on body by #'cddr do
+      (case key
+        (:timestepping (setf (solver-data-timestepping solver) value))
+        (:dt (setf (solver-data-dt solver) (coerce value 'double-float)))
+        (:end-time (setf (solver-data-end-time solver) (coerce value 'double-float)))
+        (:tolerance (setf (solver-data-tolerance solver) (coerce value 'double-float)))
+        (:max-iterations (setf (solver-data-max-iterations solver) value))))
+    (setf (simulation-data-solver sim) solver)))
+
+(defun process-output-clause (sim body)
+  "Process output configuration."
+  (let ((output (make-output-data)))
+    (loop for (key value) on body by #'cddr do
+      (case key
+        (:format (setf (output-data-format output) value))
+        (:interval (setf (output-data-interval output) (coerce value 'double-float)))
+        (:directory (setf (output-data-directory output) value))
+        (:fields (setf (output-data-fields output) value))))
+    (setf (simulation-data-output sim) output)))
+
+;;; ============================================================
+;;; Convenience Macros for SDL
+;;; ============================================================
+
+(defmacro geometry (&body body)
+  "Define geometry shapes.
+   This macro is used within simulation definition."
+  `(progn ,@body))
+
+(defmacro mesh (&body body)
+  "Define mesh generation/loading.
+   This macro is used within simulation definition."
+  `(progn ,@body))
+
+(defmacro boundaries (&body body)
+  "Define boundary conditions.
+   This macro is used within simulation definition."
+  `(progn ,@body))
+
+(defmacro physics (&body options)
+  "Define physics parameters.
+   This macro is used within simulation definition."
+  (declare (ignore options))
+  nil)
+
+(defmacro discretization (&body options)
+  "Define discretization parameters.
+   This macro is used within simulation definition."
+  (declare (ignore options))
+  nil)
+
+(defmacro solver (&body options)
+  "Define solver parameters.
+   This macro is used within simulation definition."
+  (declare (ignore options))
+  nil)
+
+(defmacro output (&body options)
+  "Define output configuration.
+   This macro is used within simulation definition."
+  (declare (ignore options))
+  nil)
+
+(defmacro generate (geometry &rest options)
+  "Generate a mesh from geometry."
+  `(streamvorti.mesh:generate-mesh ,geometry ,@options))
+
+;;; ============================================================
+;;; Simulation Loading
+;;; ============================================================
+
+(defun load-simulation (path)
+  "Load a simulation definition from file."
+  (setf *current-simulation* nil)
+  (load path)
+  (unless *current-simulation*
+    (error "No simulation defined in ~A" path))
+  *current-simulation*)

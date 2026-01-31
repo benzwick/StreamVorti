@@ -46,9 +46,11 @@
 #include "StreamVorti/support_domain/support_domain.hpp"
 
 // Standard library includes for struct definitions
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -405,6 +407,43 @@ void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& strea
  * @return String in format "YYYY-MM-DD HH:MM:SS"
  */
 std::string GetCurrentDateTime();
+
+/**
+ * @brief General-purpose boundary node identification using MFEM boundary attributes
+ *
+ * Instead of hardcoding x=0, x=1, y=0, y=1, this uses the boundary attributes
+ * assigned by the mesh generator or SDL file. Works with any geometry.
+ *
+ * @param mesh The MFEM mesh
+ * @param boundary_nodes Output: Map from boundary attribute to list of node indices
+ * @param interior_nodes Output: List of interior node indices
+ */
+void IdentifyBoundaryNodesByAttribute(
+    mfem::Mesh* mesh,
+    std::map<int, std::vector<int>>& boundary_nodes,
+    std::vector<int>& interior_nodes);
+
+/**
+ * @brief Extract velocity along a centerline for validation
+ *
+ * Used to compare simulation results against Ghia et al. (1982) or
+ * Erturk & Corke (2005) benchmark data.
+ *
+ * @param u_velocity U-velocity field
+ * @param v_velocity V-velocity field
+ * @param mesh The MFEM mesh
+ * @param filename Output file path
+ * @param axis Fixed coordinate ('x' or 'y')
+ * @param position Value of the fixed coordinate (e.g., 0.5 for x=0.5)
+ * @param tol Tolerance for "on the line" detection
+ */
+void ExtractCenterline(const mfem::Vector& u_velocity,
+                       const mfem::Vector& v_velocity,
+                       mfem::Mesh* mesh,
+                       const std::string& filename,
+                       char axis,
+                       double position,
+                       double tol = 0.01);
 
 
 #endif //STREAMVORTI_STREAM_VORTI_SIM_HPP_

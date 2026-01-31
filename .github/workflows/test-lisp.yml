@@ -1,0 +1,41 @@
+# Lightweight workflow for Lisp validation tests
+#
+# Runs pure Lisp unit tests (no C++ build required).
+# Tests the compare-ghia.lisp validation script:
+# - Parsing utilities
+# - Interpolation
+# - Error computation
+# - Reference data loading
+#
+# Fast feedback on every push/PR.
+
+name: Lisp Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'lisp/**'
+      - 'data/**'
+      - '.github/workflows/test-lisp.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'lisp/**'
+      - 'data/**'
+      - '.github/workflows/test-lisp.yml'
+
+jobs:
+  test-lisp:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install SBCL
+      run: sudo apt-get update && sudo apt-get install -y sbcl
+
+    - name: Run Lisp tests
+      run: ./lisp/run-tests.lisp

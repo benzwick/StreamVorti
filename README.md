@@ -1,9 +1,13 @@
 # StreamVorti
 
 [![Build](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source.yml)
-[![Build with Spack](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-spack.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-spack.yml)
+[![Build with ECL](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source-with-ecl.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source-with-ecl.yml)
+[![Lisp Tests](https://github.com/benzwick/StreamVorti/actions/workflows/test-lisp.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/test-lisp.yml)
+[![Validation](https://github.com/benzwick/StreamVorti/actions/workflows/test-validation.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/test-validation.yml)
+[![codecov](https://codecov.io/gh/benzwick/StreamVorti/branch/main/graph/badge.svg)](https://codecov.io/gh/benzwick/StreamVorti)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![C++](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B17)
+[![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B17)
+[![Common Lisp](https://img.shields.io/badge/Common%20Lisp-SBCL%20%7C%20ECL-blue.svg)](https://common-lisp.net/)
 [![MFEM](https://img.shields.io/badge/MFEM-4.8-green.svg)](https://mfem.org/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/benzwick/StreamVorti)
 

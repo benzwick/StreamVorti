@@ -1,0 +1,55 @@
+#!/bin/bash
+# DEPRECATED: Use lisp/run-tests.lisp instead
+#
+# Run Lisp test suite for StreamVorti validation
+#
+# Usage:
+#   ./scripts/run-lisp-tests.sh [sbcl|ecl]
+#
+# If no argument given, uses SBCL if available, otherwise ECL.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+LISP_DIR="$PROJECT_DIR/lisp"
+
+# Determine which Lisp to use
+LISP_IMPL="${1:-}"
+
+if [ -z "$LISP_IMPL" ]; then
+    if command -v sbcl &> /dev/null; then
+        LISP_IMPL="sbcl"
+    elif command -v ecl &> /dev/null; then
+        LISP_IMPL="ecl"
+    else
+        echo "ERROR: No Lisp implementation found. Install sbcl or ecl."
+        exit 1
+    fi
+fi
+
+echo "Running Lisp tests with: $LISP_IMPL"
+echo "Project directory: $PROJECT_DIR"
+echo ""
+
+cd "$PROJECT_DIR"
+
+case "$LISP_IMPL" in
+    sbcl)
+        sbcl --non-interactive \
+             --load "$LISP_DIR/compare-ghia.lisp" \
+             --load "$LISP_DIR/test-compare-ghia.lisp" \
+             --eval '(if (zerop streamvorti.validation.tests::*fail-count*) (sb-ext:exit :code 0) (sb-ext:exit :code 1))'
+        ;;
+    ecl)
+        ecl -norc \
+            -load "$LISP_DIR/compare-ghia.lisp" \
+            -load "$LISP_DIR/test-compare-ghia.lisp" \
+            -eval '(if (zerop streamvorti.validation.tests::*fail-count*) (ext:quit 0) (ext:quit 1))'
+        ;;
+    *)
+        echo "ERROR: Unknown Lisp implementation: $LISP_IMPL"
+        echo "Supported: sbcl, ecl"
+        exit 1
+        ;;
+esac

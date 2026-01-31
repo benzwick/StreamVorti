@@ -6,6 +6,9 @@
  * Generates or loads a mesh, computes support domains and DCPSE operators,
  * and optionally saves derivative matrices and neighbor information.
  *
+ * Supports loading simulations from SDL (Simulation Definition Language) files
+ * when compiled with ECL support (-DSTREAMVORTI_WITH_ECL=ON).
+ *
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
  * Copyright (C) 2020-2025 Benjamin F. Zwick
@@ -30,11 +33,17 @@
  *
  * @section usage Usage
  * @code
- * MfemRun -sd -sn
+ * MfemRun -sd -sn                    # Traditional mode
+ * MfemRun -f simulation.lisp         # SDL mode (requires ECL)
  * @endcode
  */
 
 #include <StreamVorti/mfem_main.hpp>
+
+#ifdef STREAMVORTI_WITH_ECL
+#include <StreamVorti/lisp/ecl_runtime.hpp>
+#include <StreamVorti/lisp/lisp_loader.hpp>
+#endif
 
 #include <cstddef>
 #include <filesystem>
@@ -48,6 +57,8 @@ int main(int argc, char *argv[])
 {
     // Options
     const char *mesh_file = "";
+    const char *sdl_file = "";  // SDL file for Lisp-based configuration
+    const char *lisp_path = ""; // Path to SDL Lisp source files
     int order = 1;
     bool static_cond = false;
     bool visualization = 1;
@@ -85,6 +96,12 @@ int main(int argc, char *argv[])
 
     // Parse command-line options
     mfem::OptionsParser args(argc, argv);
+#ifdef STREAMVORTI_WITH_ECL
+    args.AddOption(&sdl_file, "-f", "--sdl-file",
+                   "SDL (Simulation Definition Language) file to load.");
+    args.AddOption(&lisp_path, "-lp", "--lisp-path",
+                   "Path to SDL Lisp source files.");
+#endif
     args.AddOption(&mesh_file, "-m", "--mesh",
                    "Mesh file to use.");
     args.AddOption(&order, "-o", "--order",
@@ -136,6 +153,99 @@ int main(int argc, char *argv[])
     {
         save_dxx = save_dxy = save_dxz = save_dyy = save_dyz = save_dzz = save_dd;
     }
+
+#ifdef STREAMVORTI_WITH_ECL
+    // ===== SDL Mode =====
+    // If an SDL file is specified, use the Lisp-based configuration
+    if (sdl_file[0] != '\0')
+    {
+        std::cout << "main: SDL mode - loading simulation from: " << sdl_file << std::endl;
+
+        try {
+            // Initialize ECL runtime
+            std::string lpath = lisp_path[0] != '\0' ? lisp_path : "lisp";
+            StreamVorti::Lisp::Runtime::init(lpath);
+
+            // Load simulation from SDL file
+            auto config = StreamVorti::Lisp::Loader::load(sdl_file);
+
+            std::cout << "main: Loaded simulation: " << config.name << std::endl;
+            std::cout << "main: Dimension: " << config.dimension << std::endl;
+            std::cout << "main: Mesh vertices: " << config.mesh->GetNV() << std::endl;
+            std::cout << "main: Mesh elements: " << config.mesh->GetNE() << std::endl;
+            std::cout << "main: DCPSE neighbors: " << config.dcpse.num_neighbors << std::endl;
+
+            // Create DCPSE operator
+            mfem::StopWatch timer;
+            timer.Start();
+
+            mfem::H1_FECollection fec(order, config.dimension);
+            mfem::FiniteElementSpace fes(config.mesh.get(), &fec, 1);
+            mfem::GridFunction gf(&fes);
+
+            StreamVorti::Dcpse *derivs;
+            if (config.dimension == 2)
+            {
+                derivs = new StreamVorti::Dcpse2d(gf, config.dcpse.num_neighbors);
+            }
+            else if (config.dimension == 3)
+            {
+                derivs = new StreamVorti::Dcpse3d(gf, config.dcpse.num_neighbors);
+            }
+            else
+            {
+                MFEM_ABORT("Unsupported dimension: " << config.dimension);
+            }
+
+            std::cout << "main: Execution time for DCPSE initialization: "
+                      << timer.RealTime() << " s" << std::endl;
+
+            timer.Clear();
+            derivs->Update();
+            std::cout << "main: Execution time for DCPSE calculation: "
+                      << timer.RealTime() << " s" << std::endl;
+
+            // Save outputs if requested
+            if (save_neighbors)
+            {
+                derivs->SaveNeighsToFile(derivs->NeighborIndices(),
+                                         config.name + ".neighbors.dat");
+            }
+
+            if (save_dx)
+            {
+                derivs->SaveDerivToFile("dx", config.name + ".dx.dat");
+            }
+            if (save_dy)
+            {
+                derivs->SaveDerivToFile("dy", config.name + ".dy.dat");
+            }
+            if (config.dimension > 2 && save_dz)
+            {
+                derivs->SaveDerivToFile("dz", config.name + ".dz.dat");
+            }
+
+            delete derivs;
+
+            // Shutdown ECL
+            StreamVorti::Lisp::Runtime::shutdown();
+
+            std::cout << "main: SDL simulation complete!" << std::endl;
+            return EXIT_SUCCESS;
+
+        } catch (const StreamVorti::Lisp::EclException& e) {
+            std::cerr << "ECL Error: " << e.what() << std::endl;
+            StreamVorti::Lisp::Runtime::shutdown();
+            return EXIT_FAILURE;
+        } catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << std::endl;
+            StreamVorti::Lisp::Runtime::shutdown();
+            return EXIT_FAILURE;
+        }
+    }
+#endif // STREAMVORTI_WITH_ECL
+
+    // ===== Traditional Mode =====
 
     // mesh_file and save_mesh are mutually exclusive options
     if (mesh_file[0] != '\0' && save_mesh)
@@ -232,6 +342,7 @@ int main(int argc, char *argv[])
     std::cout << "done." << std::endl;
 
     // Free the used memory
+    delete derivs;
     delete mesh;
 
     std::cout << "main: success!" << std::endl;

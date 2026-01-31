@@ -1,0 +1,50 @@
+# Validation tests against benchmark data
+#
+# Downloads pre-built binaries and runs:
+# - Lid-driven cavity simulation
+# - Validation against Ghia et al. (1982) reference data
+#
+# Depends on build-from-source.yml completing successfully.
+
+name: Validation Tests
+
+on:
+  workflow_run:
+    workflows: ["Build StreamVorti"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  validate-cavity:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install SBCL
+      run: sudo apt-get update && sudo apt-get install -y sbcl
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: streamvorti-binaries-Linux
+        path: build/
+        run-id: ${{ github.event.workflow_run.id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Make binaries executable
+      run: chmod +x build/StreamVorti build/MfemRun
+
+    - name: Run lid-driven cavity (Re=100, 20x20)
+      run: |
+        cd build
+        ./StreamVorti -nx 20 -ny 20 -Re 100 -dt 0.001 -ft 5.0
+        ls -la output_dat/
+
+    - name: Validate against Ghia et al. (1982)
+      run: |
+        sbcl --non-interactive \
+          --load lisp/compare-ghia.lisp \
+          --eval '(streamvorti.validation:run-validation :results-file "build/output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100)'

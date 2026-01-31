@@ -32,6 +32,8 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules")
 OPTION(STREAMVORTI_BUILD_SHARED_LIBS "Build as shared library" OFF )
 OPTION(STREAMVORTI_BUILD_STATIC_LIBS "Build as static library" ON )
 OPTION(ENABLE_PROFILING "Enable gprof profiling" OFF )
+OPTION(STREAMVORTI_WITH_ECL "Enable ECL (Embeddable Common Lisp) for SDL support" OFF )
+OPTION(STREAMVORTI_BUILD_TESTS "Build unit tests" OFF )
 
 # Set the version of C++.
 SET(CMAKE_CXX_STANDARD 17)
@@ -104,6 +106,49 @@ find_package(MFEM REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MFEM_CXX_FLAGS}")
 INCLUDE_DIRECTORIES(${MFEM_INCLUDE_DIRS})
 
+# Find ECL (Embeddable Common Lisp) for SDL support
+IF(STREAMVORTI_WITH_ECL)
+    # Try pkg-config first, fall back to manual detection
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(ECL QUIET ecl)
+    endif()
+
+    if(NOT ECL_FOUND)
+        # Manual detection for systems without pkg-config file (e.g., Ubuntu)
+        find_path(ECL_INCLUDE_DIRS ecl/ecl.h
+            PATHS /usr/include /usr/local/include
+        )
+        find_library(ECL_LIBRARIES ecl
+            PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib
+        )
+        if(ECL_INCLUDE_DIRS AND ECL_LIBRARIES)
+            set(ECL_FOUND TRUE)
+            # Try to get version from ecl-config or header
+            execute_process(
+                COMMAND ecl-config --version
+                OUTPUT_VARIABLE ECL_VERSION
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            if(NOT ECL_VERSION)
+                set(ECL_VERSION "unknown")
+            endif()
+        endif()
+    endif()
+
+    if(NOT ECL_FOUND)
+        message(FATAL_ERROR "ECL (Embeddable Common Lisp) not found. "
+            "Install with: apt install ecl libecl-dev")
+    endif()
+
+    message(STATUS "Found ECL version ${ECL_VERSION}")
+    message(STATUS "  ECL include dirs: ${ECL_INCLUDE_DIRS}")
+    message(STATUS "  ECL libraries: ${ECL_LIBRARIES}")
+    INCLUDE_DIRECTORIES(${ECL_INCLUDE_DIRS})
+    add_compile_definitions(STREAMVORTI_WITH_ECL)
+ENDIF()
+
 # Print compiler information for all components
 message(STATUS "========================================")
 message(STATUS "Compiler Configuration:")
@@ -111,6 +156,12 @@ message(STATUS "  StreamVorti C++ compiler: ${CMAKE_CXX_COMPILER}")
 message(STATUS "  MFEM was built with:      ${MFEM_CXX_COMPILER}")
 message(STATUS "  CGAL version:             ${CGAL_VERSION}")
 message(STATUS "  Eigen3 include dir:       ${EIGEN3_INCLUDE_DIRS}")
+IF(STREAMVORTI_WITH_ECL)
+message(STATUS "  ECL version:              ${ECL_VERSION}")
+message(STATUS "  SDL support:              ENABLED")
+ELSE()
+message(STATUS "  SDL support:              DISABLED (use -DSTREAMVORTI_WITH_ECL=ON)")
+ENDIF()
 message(STATUS "========================================")
 
 # -------------------------
@@ -120,15 +171,30 @@ ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/support_domain)
 
+# Add Lisp integration module if ECL is enabled
+IF(STREAMVORTI_WITH_ECL)
+    ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/lisp)
+ENDIF()
+
 
 # Compilation of the shared library.
 IF( STREAMVORTI_BUILD_SHARED_LIBS )
-    ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
-        $<TARGET_OBJECTS:Approximants>
-        $<TARGET_OBJECTS:SupportDomain>)
+    IF(STREAMVORTI_WITH_ECL)
+        ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
+            $<TARGET_OBJECTS:Approximants>
+            $<TARGET_OBJECTS:SupportDomain>
+            $<TARGET_OBJECTS:LispIntegration>)
+    ELSE()
+        ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
+            $<TARGET_OBJECTS:Approximants>
+            $<TARGET_OBJECTS:SupportDomain>)
+    ENDIF()
 
     # Link with dependencies
     TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${CGAL_LIBRARIES} ${MFEM_LIBRARIES})
+    IF(STREAMVORTI_WITH_ECL)
+        TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${ECL_LIBRARIES})
+    ENDIF()
 
     # Set build folders.
     SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES
@@ -146,12 +212,22 @@ ENDIF()
 
 # Compilation of the static library.
 IF( STREAMVORTI_BUILD_STATIC_LIBS )
-    ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
-        $<TARGET_OBJECTS:Approximants>
-        $<TARGET_OBJECTS:SupportDomain>)
+    IF(STREAMVORTI_WITH_ECL)
+        ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
+            $<TARGET_OBJECTS:Approximants>
+            $<TARGET_OBJECTS:SupportDomain>
+            $<TARGET_OBJECTS:LispIntegration>)
+    ELSE()
+        ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
+            $<TARGET_OBJECTS:Approximants>
+            $<TARGET_OBJECTS:SupportDomain>)
+    ENDIF()
 
     # Link with dependencies
     TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static ${CGAL_LIBRARIES} ${MFEM_LIBRARIES})
+    IF(STREAMVORTI_WITH_ECL)
+        TARGET_LINK_LIBRARIES(${PROJECT_NAME}_static ${ECL_LIBRARIES})
+    ENDIF()
 
     # Set build folders
     SET_TARGET_PROPERTIES(${PROJECT_NAME}_static PROPERTIES
@@ -203,6 +279,88 @@ INSTALL(TARGETS StreamVorti RUNTIME DESTINATION bin/StreamVorti)
 
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
 INSTALL(FILES ${HEADERS} DESTINATION include/StreamVorti)
+
+# Install Lisp headers if ECL is enabled
+IF(STREAMVORTI_WITH_ECL)
+    INSTALL(FILES
+        ${CMAKE_SOURCE_DIR}/include/StreamVorti/lisp/ecl_runtime.hpp
+        ${CMAKE_SOURCE_DIR}/include/StreamVorti/lisp/lisp_bridge.hpp
+        ${CMAKE_SOURCE_DIR}/include/StreamVorti/lisp/lisp_mesh.hpp
+        ${CMAKE_SOURCE_DIR}/include/StreamVorti/lisp/lisp_dcpse.hpp
+        ${CMAKE_SOURCE_DIR}/include/StreamVorti/lisp/lisp_loader.hpp
+        DESTINATION include/StreamVorti/lisp)
+
+    # Install SDL Lisp source files
+    INSTALL(FILES
+        ${CMAKE_SOURCE_DIR}/lisp/packages.lisp
+        ${CMAKE_SOURCE_DIR}/lisp/geometry.lisp
+        ${CMAKE_SOURCE_DIR}/lisp/mesh.lisp
+        ${CMAKE_SOURCE_DIR}/lisp/boundaries.lisp
+        ${CMAKE_SOURCE_DIR}/lisp/sdl-macros.lisp
+        ${CMAKE_SOURCE_DIR}/lisp/simulation.lisp
+        DESTINATION share/streamvorti/lisp)
+
+    # Install demo SDL files
+    INSTALL(FILES
+        ${CMAKE_SOURCE_DIR}/demo/cavity.lisp
+        ${CMAKE_SOURCE_DIR}/demo/channel.lisp
+        DESTINATION share/streamvorti/demo)
+ENDIF()
+
+# -------------------------
+# Testing
+# -------------------------
+IF(STREAMVORTI_BUILD_TESTS)
+    enable_testing()
+    find_package(GTest REQUIRED)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/tests)
+ENDIF()
+
+# -------------------------
+# Lisp Tests (requires SBCL or ECL)
+# -------------------------
+find_program(SBCL_EXECUTABLE sbcl)
+find_program(ECL_EXECUTABLE ecl)
+
+if(SBCL_EXECUTABLE OR ECL_EXECUTABLE)
+    add_custom_target(test-lisp
+        COMMAND ${CMAKE_SOURCE_DIR}/lisp/run-tests.lisp
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running Lisp validation tests"
+        VERBATIM
+    )
+    if(SBCL_EXECUTABLE)
+        message(STATUS "Found SBCL: ${SBCL_EXECUTABLE} - 'make test-lisp' available")
+    elseif(ECL_EXECUTABLE)
+        message(STATUS "Found ECL: ${ECL_EXECUTABLE} - 'make test-lisp' available")
+    endif()
+else()
+    message(STATUS "Neither SBCL nor ECL found - 'make test-lisp' not available")
+endif()
+
+# -------------------------
+# Unified test target
+# -------------------------
+# 'make test-all' runs all available tests
+add_custom_target(test-all
+    COMMENT "Running all tests"
+)
+
+# Add Lisp tests to test-all if available
+if(SBCL_EXECUTABLE OR ECL_EXECUTABLE)
+    add_dependencies(test-all test-lisp)
+endif()
+
+# Add C++ tests to test-all if GTest is available
+if(STREAMVORTI_BUILD_TESTS)
+    add_custom_target(test-cpp
+        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Running C++ unit tests"
+        DEPENDS streamvorti_tests
+    )
+    add_dependencies(test-all test-cpp)
+endif()
 
 # Install the StreamVorti finding module in the cmake folder under the installation directory.
 #INSTALL(FILES cmake/FindStreamVorti.cmake DESTINATION cmake)

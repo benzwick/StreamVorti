@@ -26,11 +26,21 @@
 
 // Demo usage: (save everything)
 //     ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -Re 1000 -sm -sn -sd -sdd -ss -pv -cr
+//
+// SDL usage (requires ECL):
+//     ./StreamVorti -f demo/cavity.lisp -pv
 
 // Related header
 #include <StreamVorti/streamvorti.hpp>
 
+// SDL/Lisp support (conditional)
+#ifdef STREAMVORTI_WITH_ECL
+#include <StreamVorti/lisp/ecl_runtime.hpp>
+#include <StreamVorti/lisp/lisp_loader.hpp>
+#endif
+
 // C++ standard library headers (alphabetically sorted)
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <ctime>
@@ -38,8 +48,10 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 // Other libraries' headers
@@ -83,6 +95,8 @@ int main(int argc, char *argv[])
 {
     // Options
     const char *mesh_file = "";
+    const char *sdl_file = "";  // SDL file for Lisp-based configuration
+    const char *lisp_path = ""; // Path to SDL Lisp source files
     int order = 1;
 
     // Output filename prefix and extension
@@ -115,7 +129,13 @@ int main(int argc, char *argv[])
 
     // Parse command-line options
     mfem::OptionsParser args(argc, argv);
-    // Similation options
+#ifdef STREAMVORTI_WITH_ECL
+    args.AddOption(&sdl_file, "-f", "--sdl-file",
+                   "SDL (Simulation Definition Language) file to load.");
+    args.AddOption(&lisp_path, "-lp", "--lisp-path",
+                   "Path to SDL Lisp source files.");
+#endif
+    // Simulation options
     args.AddOption(&mesh_file, "-m", "--mesh",
                    "Mesh file to use.");
     args.AddOption(&order, "-o", "--order",
@@ -193,8 +213,111 @@ int main(int argc, char *argv[])
     }
     args.PrintOptions(std::cout);
 
-    // Create or load mesh
-    mfem::Mesh* mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
+    // Mesh pointer - will be set by SDL mode or traditional mode
+    mfem::Mesh* mesh = nullptr;
+#ifdef STREAMVORTI_WITH_ECL
+    bool sdl_mode = false;
+    // Store SDL boundary conditions for runtime evaluation
+    std::vector<StreamVorti::Lisp::BoundaryCondition> sdl_boundaries;
+    bool use_sdl_bcs = false;
+#endif
+
+#ifdef STREAMVORTI_WITH_ECL
+    // ===== SDL Mode =====
+    // If an SDL file is specified, use the Lisp-based configuration
+    if (sdl_file[0] != '\0')
+    {
+        sdl_mode = true;
+        std::cout << "\n" << std::string(70, '=') << std::endl;
+        std::cout << "SDL MODE - Loading simulation from: " << sdl_file << std::endl;
+        std::cout << std::string(70, '=') << "\n" << std::endl;
+
+        try {
+            // Initialize ECL runtime
+            std::string lpath = lisp_path[0] != '\0' ? lisp_path : "lisp";
+            StreamVorti::Lisp::Runtime::init(lpath);
+
+            // Load simulation from SDL file
+            auto config = StreamVorti::Lisp::Loader::load(sdl_file);
+
+            std::cout << "Loaded simulation: " << config.name << std::endl;
+            std::cout << "  Dimension: " << config.dimension << std::endl;
+            std::cout << "  Mesh vertices: " << config.mesh->GetNV() << std::endl;
+            std::cout << "  Mesh elements: " << config.mesh->GetNE() << std::endl;
+            std::cout << "  Boundaries defined: " << config.boundaries.size() << std::endl;
+
+            // Store SDL boundary conditions for runtime evaluation
+            if (!config.boundaries.empty()) {
+                sdl_boundaries = std::move(config.boundaries);
+                use_sdl_bcs = true;
+                std::cout << "  Using SDL boundary conditions (" << sdl_boundaries.size() << " regions):\n";
+                for (const auto& bc : sdl_boundaries) {
+                    std::cout << "    - " << bc.name << " (attr=" << bc.attribute
+                              << ", type=" << bc.type;
+                    if (bc.u_function) std::cout << ", u-func";
+                    if (bc.v_function) std::cout << ", v-func";
+                    if (bc.function && !bc.u_function) std::cout << ", scalar-func";
+                    std::cout << ")\n";
+                }
+            } else {
+                std::cout << "  No SDL boundary conditions defined, using hardcoded lid-driven cavity BCs.\n";
+            }
+
+            // Map SDL config to SimulationParams
+            params.num_neighbors = config.dcpse.num_neighbors;
+            params.reynolds_number = static_cast<int>(config.physics.reynolds);
+            params.dt = config.solver.dt;
+            params.final_time = config.solver.end_time;
+            params.output_prefix = config.name;
+
+            // Map solver tolerance and iterations
+            params.solver_rel_tol = config.solver.tolerance;
+            params.solver_max_iter = config.solver.max_iterations;
+
+            // Map output settings
+            if (config.output.format == "vtk") {
+                paraview_output = true;
+            }
+            // Map output interval to paraview frequency (convert time to steps)
+            if (config.output.interval > 0 && params.dt > 0) {
+                params.paraview_output_frequency = static_cast<int>(config.output.interval / params.dt);
+            }
+
+            std::cout << "\nMapped SDL parameters:" << std::endl;
+            std::cout << "  Reynolds number: " << params.reynolds_number << std::endl;
+            std::cout << "  Timestep: " << params.dt << std::endl;
+            std::cout << "  Final time: " << params.final_time << std::endl;
+            std::cout << "  DCPSE neighbors: " << params.num_neighbors << std::endl;
+            std::cout << "  Solver tolerance: " << params.solver_rel_tol << std::endl;
+            std::cout << "  ParaView output frequency: " << params.paraview_output_frequency << std::endl;
+
+            // Get mesh dimensions from SDL config (for grid_size reporting)
+            // Note: GetNV() = (nx+1)*(ny+1) for a structured mesh, so sqrt gives nx+1
+            int nv = config.mesh->GetNV();
+            nx = ny = static_cast<int>(std::sqrt(static_cast<double>(nv))) - 1;
+            dim = config.dimension;
+
+            // Transfer ownership of mesh
+            mesh = config.mesh.release();
+
+            std::cout << "\nContinuing with SDL-configured simulation...\n" << std::endl;
+
+        } catch (const StreamVorti::Lisp::EclException& e) {
+            std::cerr << "ECL Error: " << e.what() << std::endl;
+            StreamVorti::Lisp::Runtime::shutdown();
+            return EXIT_FAILURE;
+        } catch (const std::exception& e) {
+            std::cerr << "Error loading SDL file: " << e.what() << std::endl;
+            StreamVorti::Lisp::Runtime::shutdown();
+            return EXIT_FAILURE;
+        }
+    }
+#endif // STREAMVORTI_WITH_ECL
+
+    // Create or load mesh (traditional mode - only if not in SDL mode)
+    if (mesh == nullptr) {
+        mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
+    }
     perf_metrics.grid_size = nx;
 
     // dat files for Matlab
@@ -262,6 +385,11 @@ int main(int argc, char *argv[])
     // Identify boundary and interior nodes
     std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
     IdentifyBoundaryNodes(mesh, bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes);
+
+    // Also identify boundary nodes by MFEM boundary attributes (for SDL BC integration)
+    std::map<int, std::vector<int>> boundary_nodes_by_attr;
+    std::vector<int> interior_nodes_by_attr;
+    IdentifyBoundaryNodesByAttribute(mesh, boundary_nodes_by_attr, interior_nodes_by_attr);
 
     // Combine all boundary nodes for streamfunction boundary conditions
     std::vector<int> all_boundary_nodes;
@@ -450,18 +578,52 @@ int main(int argc, char *argv[])
         linear_solver->Mult(rhs, streamfunction);
 
         // ================================================================
-        // STEP 4: APPLY BOUNDARY CONDITIONS (lid-driven cavity)
+        // STEP 4: APPLY BOUNDARY CONDITIONS
         // ================================================================
         // Compute velocities from updated streamfunction
         dy_matrix.Mult(streamfunction, u_velocity);  // u = ∂ψ/∂y
         dx_matrix.Mult(streamfunction, v_velocity);  // temp = ∂ψ/∂x
         v_velocity *= -1.0;                          // v = -∂ψ/∂x
 
-        // Apply velocity boundary conditions for lid-driven cavity
-        for (int idx : bottom_nodes) { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
-        for (int idx : right_nodes)  { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
-        for (int idx : left_nodes)   { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
-        for (int idx : top_nodes)    { u_velocity[idx] = 1.0; v_velocity[idx] = 0.0; }  // u=1, v=0 (moving lid)
+#ifdef STREAMVORTI_WITH_ECL
+        if (use_sdl_bcs) {
+            // Apply boundary conditions from SDL
+            for (const auto& bc : sdl_boundaries) {
+                if (bc.type == "velocity") {
+                    // Find nodes with this boundary attribute
+                    auto it = boundary_nodes_by_attr.find(bc.attribute);
+                    if (it != boundary_nodes_by_attr.end()) {
+                        for (int vi : it->second) {
+                            const double* vertex = mesh->GetVertex(vi);
+                            double x = vertex[0];
+                            double y = vertex[1];
+                            double z = (dim > 2) ? vertex[2] : 0.0;
+
+                            // Evaluate BC functions for both components
+                            if (bc.u_function) {
+                                u_velocity[vi] = bc.u_function->evaluateAt(x, y, z);
+                            }
+                            if (bc.v_function) {
+                                v_velocity[vi] = bc.v_function->evaluateAt(x, y, z);
+                            }
+                            // If only legacy single function provided, use for u
+                            else if (bc.function && !bc.u_function) {
+                                u_velocity[vi] = bc.function->evaluateAt(x, y, z);
+                                v_velocity[vi] = 0.0;
+                            }
+                        }
+                    }
+                }
+            }
+        } else
+#endif
+        {
+            // Fallback: hardcoded lid-driven cavity BCs
+            for (int idx : bottom_nodes) { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
+            for (int idx : right_nodes)  { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
+            for (int idx : left_nodes)   { u_velocity[idx] = 0.0; v_velocity[idx] = 0.0; }  // u=0, v=0
+            for (int idx : top_nodes)    { u_velocity[idx] = 1.0; v_velocity[idx] = 0.0; }  // u=1, v=0 (moving lid)
+        }
 
         // Compute boundary vorticity: ω = ∂v/∂x - ∂u/∂y
         dy_matrix.Mult(u_velocity, du_dy);  // ∂u/∂y (u has BCs applied)
@@ -751,6 +913,15 @@ int main(int argc, char *argv[])
 // ====================================================================
 // PART 3: POST-PROCESSING
 // ====================================================================
+
+    // Extract centerlines for validation against Ghia et al. (1982)
+    ExtractCenterline(u_velocity, v_velocity, mesh,
+                      dat_dir + "/" + params.output_prefix + "_u_centerline_x0.5.dat",
+                      'x', 0.5);
+    ExtractCenterline(u_velocity, v_velocity, mesh,
+                      dat_dir + "/" + params.output_prefix + "_v_centerline_y0.5.dat",
+                      'y', 0.5);
+
     // Save residual history if enabled and data exists
     if (params.check_residuals && !residual_history.timesteps.empty()) {
         std::string residual_file = dat_dir + "/residual_history.csv";
@@ -781,6 +952,13 @@ int main(int argc, char *argv[])
     delete mesh;
     delete solver_package;  // delete both solver and preconditioner
     delete laplacian_matrix;
+
+#ifdef STREAMVORTI_WITH_ECL
+    // Shutdown ECL if it was initialized
+    if (sdl_mode) {
+        StreamVorti::Lisp::Runtime::shutdown();
+    }
+#endif
 
     std::cout << "main: success!" << std::endl;
     return EXIT_SUCCESS;
@@ -1126,4 +1304,101 @@ std::string GetCurrentDateTime() {
     std::stringstream ss;
     ss << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S");
     return ss.str();
+}
+
+void IdentifyBoundaryNodesByAttribute(
+    mfem::Mesh* mesh,
+    std::map<int, std::vector<int>>& boundary_nodes,
+    std::vector<int>& interior_nodes)
+{
+    const int num_vertices = mesh->GetNV();
+    std::vector<bool> is_boundary(num_vertices, false);
+
+    boundary_nodes.clear();
+    interior_nodes.clear();
+
+    // Mark all vertices on boundary elements with their attribute
+    int num_bdr_elements = mesh->GetNBE();
+    for (int be = 0; be < num_bdr_elements; ++be) {
+        int attr = mesh->GetBdrAttribute(be);
+        mfem::Array<int> vertices;
+        mesh->GetBdrElementVertices(be, vertices);
+
+        for (int v = 0; v < vertices.Size(); ++v) {
+            int vi = vertices[v];
+            is_boundary[vi] = true;
+            // Add to the attribute's list (avoid duplicates)
+            auto& nodes = boundary_nodes[attr];
+            if (std::find(nodes.begin(), nodes.end(), vi) == nodes.end()) {
+                nodes.push_back(vi);
+            }
+        }
+    }
+
+    // Collect interior nodes
+    for (int i = 0; i < num_vertices; ++i) {
+        if (!is_boundary[i]) {
+            interior_nodes.push_back(i);
+        }
+    }
+
+    // Diagnostic output
+    std::cout << "IdentifyBoundaryNodesByAttribute:" << std::endl;
+    int total_boundary = 0;
+    for (const auto& [attr, nodes] : boundary_nodes) {
+        std::cout << "  Attribute " << attr << ": " << nodes.size() << " nodes" << std::endl;
+        total_boundary += nodes.size();
+    }
+    std::cout << "  Total boundary: " << total_boundary << " nodes" << std::endl;
+    std::cout << "  Interior: " << interior_nodes.size() << " nodes" << std::endl;
+}
+
+void ExtractCenterline(const mfem::Vector& u_velocity,
+                       const mfem::Vector& v_velocity,
+                       mfem::Mesh* mesh,
+                       const std::string& filename,
+                       char axis,
+                       double position,
+                       double tol)
+{
+    std::ofstream out(filename);
+    out << "# StreamVorti Centerline Data\n";
+    out << "# Axis: " << axis << " = " << position << "\n";
+
+    const int num_vertices = mesh->GetNV();
+
+    // Collect nodes along the line: (varying_coord, u, v)
+    std::vector<std::tuple<double, double, double>> line_data;
+
+    for (int i = 0; i < num_vertices; ++i) {
+        const double* vertex = mesh->GetVertex(i);
+        double x = vertex[0];
+        double y = vertex[1];
+
+        double fixed_val = (axis == 'x') ? x : y;
+        double vary_val = (axis == 'x') ? y : x;
+
+        if (std::abs(fixed_val - position) < tol) {
+            line_data.push_back({vary_val, u_velocity[i], v_velocity[i]});
+        }
+    }
+
+    // Sort by varying coordinate
+    std::sort(line_data.begin(), line_data.end());
+
+    // Output header
+    if (axis == 'x') {
+        out << "# y  u  v\n";
+    } else {
+        out << "# x  u  v\n";
+    }
+
+    // Output data
+    out.precision(8);
+    for (const auto& [coord, u, v] : line_data) {
+        out << coord << " " << u << " " << v << "\n";
+    }
+
+    std::cout << "Saved centerline data to: " << filename
+              << " (" << line_data.size() << " points)" << std::endl;
 }
