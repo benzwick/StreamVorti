@@ -210,36 +210,47 @@ Returns (VALUES data source-name) or (VALUES NIL NIL)."
                       &key (output-dir "plots/") (filename "validation_plot.png"))
   "Generate PNG plot using vgplot. Returns pathname on success, NIL on failure."
   (unless (ensure-vgplot)
+    (format *error-output* "vgplot not available~%")
     (return-from generate-plot nil))
   (let ((png-path (merge-pathnames filename output-dir)))
     (ensure-directories-exist png-path)
+    (format t "Generating plot: ~A~%" (namestring png-path))
     ;; Extract data as vectors (vgplot expects vectors)
     (let ((ref-u (list-to-vector (mapcar #'cdr reference)))
           (ref-y (list-to-vector (mapcar #'car reference)))
           (comp-u (list-to-vector (mapcar #'cdr computed)))
           (comp-y (list-to-vector (mapcar #'car computed))))
       ;; Plot: reference points and computed line
-      (vg 'plot
-          ref-u ref-y (format nil "og;~A;" source)
-          comp-u comp-y "b;StreamVorti DCPSE;")
-      ;; Labels and formatting
-      (vg 'title (format nil "Lid-Driven Cavity: u-velocity at x=0.5 (Re=~A)" reynolds))
-      (vg 'xlabel "u-velocity")
-      (vg 'ylabel "y")
-      (vg 'axis '(-0.5 1.1 0 1))
-      (vg 'legend :northeast)
-      ;; Save to file
-      (vg 'print-plot png-path)
-      ;; Give gnuplot time to process and write the file
-      (sleep 1)
-      (vg 'close-all-plots))
-    ;; Wait for file to appear (gnuplot may still be writing)
+      (handler-case
+          (progn
+            (vg 'plot
+                ref-u ref-y (format nil "og;~A;" source)
+                comp-u comp-y "b;StreamVorti DCPSE;")
+            (format t "Plot created~%")
+            ;; Labels and formatting
+            (vg 'title (format nil "Lid-Driven Cavity: u-velocity at x=0.5 (Re=~A)" reynolds))
+            (vg 'xlabel "u-velocity")
+            (vg 'ylabel "y")
+            (vg 'axis '(-0.5 1.1 0 1))
+            (vg 'legend :northeast)
+            ;; Save to file - use pathname object as vgplot expects
+            (format t "Saving to file...~%")
+            (vg 'print-plot (pathname png-path))
+            (format t "print-plot called~%")
+            ;; Give gnuplot time to process and write the file
+            (sleep 2)
+            (vg 'close-all-plots)
+            (format t "Plots closed~%"))
+        (error (e)
+          (format *error-output* "Error during plotting: ~A~%" e)
+          (return-from generate-plot nil))))
+    ;; Wait for file to appear
     (if (await-file png-path :timeout 10.0)
         (progn
           (format t "Plot saved: ~A~%" (namestring png-path))
           png-path)
         (progn
-          (format *error-output* "Failed to generate plot~%")
+          (format *error-output* "Failed to generate plot (file not created)~%")
           nil))))
 
 ;;; ============================================================
