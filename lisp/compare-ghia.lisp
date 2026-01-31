@@ -246,18 +246,13 @@
     (ensure-directories-exist (make-pathname :directory (pathname-directory
                                                           (merge-pathnames output-file output-dir))))
 
-    (let ((png-path (namestring (merge-pathnames output-file output-dir))))
+    (let ((png-path (merge-pathnames output-file output-dir)))
       ;; Extract data as lists
       (let ((ref-y (mapcar #'car (remove-if #'null reference-data)))
             (ref-u (mapcar #'cdr (remove-if #'null reference-data)))
             (comp-y (mapcar #'car (remove-if #'null computed-data)))
             (comp-u (mapcar #'cdr (remove-if #'null computed-data)))
             (format-plot (intern "FORMAT-PLOT" vgplot)))
-
-        ;; Configure terminal for PNG output
-        (funcall format-plot "~A"
-                 "set terminal pngcairo size 800,600 enhanced font 'Arial,12'")
-        (funcall format-plot "~A" (format nil "set output '~A'" png-path))
 
         ;; Set plot parameters
         (funcall (intern "TITLE" vgplot)
@@ -276,12 +271,13 @@
                  comp-u comp-y
                  "title 'StreamVorti DCPSE' with lines lw 2 lc rgb '#377EB8'")
 
-        ;; Close output file (flush to disk)
-        (funcall format-plot "~A" "set output")
+        ;; Save plot to file using vgplot:print-plot
+        (funcall (intern "PRINT-PLOT" vgplot) png-path)
+
         (funcall (intern "CLOSE-ALL-PLOTS" vgplot)))
 
-      (format t "Plot saved to: ~A~%" png-path)
-      png-path)))
+      (format t "Plot saved to: ~A~%" (namestring png-path))
+      (namestring png-path))))
 
 ;;; ============================================================
 ;;; ASCII plotting (fallback)
