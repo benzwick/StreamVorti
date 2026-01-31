@@ -20,6 +20,7 @@
   (:export #:load-centerline-data
            #:load-reference-data
            #:compute-errors
+           #:generate-plot
            #:ascii-plot
            #:run-validation))
 
@@ -203,7 +204,86 @@
     (values l2-error linf-error)))
 
 ;;; ============================================================
-;;; ASCII plotting
+;;; Plotting with vgplot
+;;; ============================================================
+
+(defvar *vgplot-available* nil
+  "Flag indicating if vgplot is loaded and available.")
+
+(defun ensure-vgplot ()
+  "Load vgplot via quicklisp if available. Returns T if successful."
+  (when *vgplot-available*
+    (return-from ensure-vgplot t))
+  (handler-case
+      (progn
+        ;; Load quicklisp if not already loaded
+        (unless (find-package :ql)
+          (let ((quicklisp-init (merge-pathnames "quicklisp/setup.lisp"
+                                                  (user-homedir-pathname))))
+            (when (probe-file quicklisp-init)
+              (load quicklisp-init))))
+        ;; Load vgplot via quicklisp
+        (when (find-package :ql)
+          (funcall (intern "QUICKLOAD" :ql) :vgplot :silent t)
+          (setf *vgplot-available* t)
+          t))
+    (error (e)
+      (format t "Note: vgplot not available (~A)~%" e)
+      nil)))
+
+(defun generate-plot (computed-data reference-data reynolds source-name
+                      &key (output-dir "plots/") (output-file "validation_plot.png"))
+  "Generate publication-quality plot using vgplot (Common Lisp gnuplot interface).
+   Returns path to generated PNG file, or NIL if vgplot not available."
+  (unless (ensure-vgplot)
+    (return-from generate-plot nil))
+
+  (let ((vgplot (find-package :vgplot)))
+    (unless vgplot
+      (return-from generate-plot nil))
+
+    ;; Ensure output directory exists
+    (ensure-directories-exist (make-pathname :directory (pathname-directory
+                                                          (merge-pathnames output-file output-dir))))
+
+    (let ((png-path (namestring (merge-pathnames output-file output-dir))))
+      ;; Extract data as lists
+      (let ((ref-y (mapcar #'car (remove-if #'null reference-data)))
+            (ref-u (mapcar #'cdr (remove-if #'null reference-data)))
+            (comp-y (mapcar #'car (remove-if #'null computed-data)))
+            (comp-u (mapcar #'cdr (remove-if #'null computed-data))))
+
+        ;; Configure terminal for PNG output
+        (funcall (intern "FORMAT-PLOT" vgplot) t
+                 "set terminal pngcairo size 800,600 enhanced font 'Arial,12'")
+        (funcall (intern "FORMAT-PLOT" vgplot) t "set output '~A'" png-path)
+
+        ;; Set plot parameters
+        (funcall (intern "TITLE" vgplot)
+                 (format nil "Lid-Driven Cavity: u-velocity at x=0.5 (Re=~A)" reynolds))
+        (funcall (intern "XLABEL" vgplot) "u-velocity")
+        (funcall (intern "YLABEL" vgplot) "y")
+        (funcall (intern "GRID" vgplot) t)
+        (funcall (intern "FORMAT-PLOT" vgplot) t "set key top left")
+        (funcall (intern "FORMAT-PLOT" vgplot) t "set xrange [-0.5:1.1]")
+        (funcall (intern "FORMAT-PLOT" vgplot) t "set yrange [0:1]")
+
+        ;; Plot reference data (points) and computed data (line)
+        (funcall (intern "PLOT" vgplot)
+                 ref-u ref-y
+                 (format nil "title '~A' with points pt 7 ps 1.5 lc rgb '#E41A1C'" source-name)
+                 comp-u comp-y
+                 "title 'StreamVorti DCPSE' with lines lw 2 lc rgb '#377EB8'")
+
+        ;; Close output and reset terminal
+        (funcall (intern "FORMAT-PLOT" vgplot) t "set output")
+        (funcall (intern "CLOSE-ALL-PLOTS" vgplot)))
+
+      (format t "Plot saved to: ~A~%" png-path)
+      png-path)))
+
+;;; ============================================================
+;;; ASCII plotting (fallback)
 ;;; ============================================================
 
 (defun ascii-plot (computed-data reference-data &key (width 60) (height 20))
@@ -253,12 +333,16 @@
 
 (defun run-validation (&key
                          (results-file "output_dat/mfem_square10x10_u_centerline_x0.5.dat")
-                         (reynolds 100))
-  "Run full validation: load data, compute errors, generate ASCII plot.
+                         (reynolds 100)
+                         (output-dir "plots/")
+                         (generate-plots t))
+  "Run full validation: load data, compute errors, generate plots.
 
    Keyword arguments:
-     :results-file  Path to StreamVorti centerline data file
-     :reynolds      Reynolds number (100, 400, 1000 for Ghia; 1000-21000 for Erturk)"
+     :results-file    Path to StreamVorti centerline data file
+     :reynolds        Reynolds number (100, 400, 1000 for Ghia; 1000-21000 for Erturk)
+     :output-dir      Directory for output plots (default: plots/)
+     :generate-plots  If T, generate PNG plots using vgplot (default: T)"
 
   ;; Get reference data (may have multiple sources for same Re)
   (multiple-value-bind (reference-list source-names) (load-reference-data reynolds)
@@ -298,7 +382,13 @@
 
         (format t "~%Overall: ~A~%" (if all-pass "PASS" "FAIL")))
 
-      ;; Generate ASCII plot using first reference source
+      ;; Generate PNG plot if vgplot available
+      (when generate-plots
+        (generate-plot computed (first reference-list)
+                       reynolds (first source-names)
+                       :output-dir output-dir))
+
+      ;; Always generate ASCII plot for terminal/logs
       (format t "~%")
       (ascii-plot computed (first reference-list))
 
