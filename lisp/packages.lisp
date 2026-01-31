@@ -105,6 +105,11 @@
    ;; Mesh specification (for SDL)
    #:mesh-spec
    #:mesh-spec-type
+   #:mesh-spec-path
+   #:mesh-spec-geometry
+   #:mesh-spec-element-type
+   #:mesh-spec-divisions
+   #:mesh-spec-sizes
    #:make-mesh-spec-generate
    #:make-mesh-spec-load
    #:realize-mesh-spec))
