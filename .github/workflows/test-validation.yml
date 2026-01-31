@@ -29,8 +29,16 @@ jobs:
     - name: Install system dependencies
       run: ./scripts/build-from-source/01-install-system-dependencies.sh
 
-    - name: Install SBCL
-      run: sudo apt-get install -y sbcl
+    - name: Install SBCL and gnuplot
+      run: sudo apt-get install -y sbcl gnuplot
+
+    - name: Install Quicklisp and vgplot
+      run: |
+        curl -O https://beta.quicklisp.org/quicklisp.lisp
+        sbcl --non-interactive \
+          --load quicklisp.lisp \
+          --eval '(quicklisp-quickstart:install)' \
+          --eval '(ql:quickload :vgplot)'
 
     - name: Download build artifacts
       uses: actions/download-artifact@v4
@@ -51,6 +59,16 @@ jobs:
 
     - name: Validate against Ghia et al. (1982)
       run: |
+        mkdir -p plots
         sbcl --non-interactive \
+          --load ~/quicklisp/setup.lisp \
           --load lisp/compare-ghia.lisp \
-          --eval '(streamvorti.validation:run-validation :results-file "build/output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100)'
+          --eval '(streamvorti.validation:run-validation :results-file "build/output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100 :output-dir "plots/")'
+        ls -la plots/
+
+    - name: Upload validation plots
+      uses: actions/upload-artifact@v4
+      with:
+        name: validation-plots-${{ matrix.os }}
+        path: plots/
+        retention-days: 30
