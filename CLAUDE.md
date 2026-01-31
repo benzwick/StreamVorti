@@ -92,3 +92,15 @@ Reference data files in `data/`:
 - `ghia_1982_u.txt` - u-velocity along x=0.5 (Re=100-10000)
 - `ghia_1982_v.txt` - v-velocity along y=0.5
 - `erturk_2005_u.txt` - u-velocity for high Re (1000-21000)
+
+## Git Workflow
+
+**CRITICAL:** Never use `git add -A` or `git add .`. Always follow these steps:
+
+1. `git diff` - Review changes first
+2. `git add <specific-files>` - Stage specific files
+3. `git commit -m "message"` - Commit with descriptive message
+
+Each step must be separate commands, not chained.
+
+**Separate commits for unrelated changes:** Always create separate commits for logically unrelated changes. Each commit should be atomic and address a single concern.
