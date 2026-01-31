@@ -316,5 +316,51 @@ IF(STREAMVORTI_BUILD_TESTS)
     add_subdirectory(${CMAKE_SOURCE_DIR}/tests)
 ENDIF()
 
+# -------------------------
+# Lisp Tests (requires SBCL or ECL)
+# -------------------------
+find_program(SBCL_EXECUTABLE sbcl)
+find_program(ECL_EXECUTABLE ecl)
+
+if(SBCL_EXECUTABLE OR ECL_EXECUTABLE)
+    add_custom_target(test-lisp
+        COMMAND ${CMAKE_SOURCE_DIR}/lisp/run-tests.lisp
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running Lisp validation tests"
+        VERBATIM
+    )
+    if(SBCL_EXECUTABLE)
+        message(STATUS "Found SBCL: ${SBCL_EXECUTABLE} - 'make test-lisp' available")
+    elseif(ECL_EXECUTABLE)
+        message(STATUS "Found ECL: ${ECL_EXECUTABLE} - 'make test-lisp' available")
+    endif()
+else()
+    message(STATUS "Neither SBCL nor ECL found - 'make test-lisp' not available")
+endif()
+
+# -------------------------
+# Unified test target
+# -------------------------
+# 'make test-all' runs all available tests
+add_custom_target(test-all
+    COMMENT "Running all tests"
+)
+
+# Add Lisp tests to test-all if available
+if(SBCL_EXECUTABLE OR ECL_EXECUTABLE)
+    add_dependencies(test-all test-lisp)
+endif()
+
+# Add C++ tests to test-all if GTest is available
+if(STREAMVORTI_BUILD_TESTS)
+    add_custom_target(test-cpp
+        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Running C++ unit tests"
+        DEPENDS streamvorti_tests
+    )
+    add_dependencies(test-all test-cpp)
+endif()
+
 # Install the StreamVorti finding module in the cmake folder under the installation directory.
 #INSTALL(FILES cmake/FindStreamVorti.cmake DESTINATION cmake)
