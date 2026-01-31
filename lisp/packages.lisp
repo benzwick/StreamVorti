@@ -137,7 +137,9 @@
    ;; Common BCs
    #:no-slip
    #:inlet
-   #:outlet))
+   #:outlet
+   ;; Region macro for SDL
+   #:region))
 
 ;;; ============================================================
 ;;; DCPSE Package
