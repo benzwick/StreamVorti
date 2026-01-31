@@ -229,6 +229,9 @@
    #:get-divisions
    #:get-element-type
    #:get-sizes
+   #:get-size-x
+   #:get-size-y
+   #:get-size-z
    #:get-formulation
    #:get-reynolds
    #:get-density

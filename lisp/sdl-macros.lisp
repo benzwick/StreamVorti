@@ -101,6 +101,27 @@
     (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-sizes obj))
     (t nil)))
 
+(defun get-size-x (obj)
+  "Get size-x from mesh-spec (first element of sizes)."
+  (typecase obj
+    (streamvorti.mesh:mesh-spec
+     (first (streamvorti.mesh:mesh-spec-sizes obj)))
+    (t nil)))
+
+(defun get-size-y (obj)
+  "Get size-y from mesh-spec (second element of sizes)."
+  (typecase obj
+    (streamvorti.mesh:mesh-spec
+     (second (streamvorti.mesh:mesh-spec-sizes obj)))
+    (t nil)))
+
+(defun get-size-z (obj)
+  "Get size-z from mesh-spec (third element of sizes)."
+  (typecase obj
+    (streamvorti.mesh:mesh-spec
+     (third (streamvorti.mesh:mesh-spec-sizes obj)))
+    (t nil)))
+
 (defun get-formulation (obj)
   "Get formulation from physics-data."
   (typecase obj
