@@ -40,7 +40,7 @@ jobs:
     - name: Install runtime dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y sbcl gnuplot libsuitesparse-dev libopenmpi-dev
+        sudo apt-get install -y sbcl gnuplot libsuitesparse-dev libopenmpi-dev ecl
 
     - name: Run with SDL file
       run: |
@@ -96,7 +96,7 @@ jobs:
     - name: Install runtime dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y sbcl gnuplot libsuitesparse-dev libopenmpi-dev
+        sudo apt-get install -y sbcl gnuplot libsuitesparse-dev libopenmpi-dev ecl
 
     - name: Run with CLI args
       run: |
@@ -149,7 +149,7 @@ jobs:
     - name: Install runtime dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsuitesparse-dev libopenmpi-dev
+        sudo apt-get install -y libsuitesparse-dev libopenmpi-dev ecl
 
     - name: Run MfemRun
       run: |
