@@ -37,8 +37,10 @@ jobs:
         name: streamvorti-ecl-binaries-ubuntu-22.04
         path: bin
 
-    - name: Install SBCL
-      run: sudo apt-get update && sudo apt-get install -y sbcl
+    - name: Install runtime dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sbcl gnuplot libsuitesparse-dev libopenmpi-dev
 
     - name: Run with SDL file
       run: |
@@ -91,8 +93,10 @@ jobs:
         name: streamvorti-ecl-binaries-ubuntu-22.04
         path: bin
 
-    - name: Install SBCL
-      run: sudo apt-get update && sudo apt-get install -y sbcl
+    - name: Install runtime dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sbcl gnuplot libsuitesparse-dev libopenmpi-dev
 
     - name: Run with CLI args
       run: |
@@ -141,6 +145,11 @@ jobs:
         workflow: build-from-source-with-ecl.yml
         name: streamvorti-ecl-binaries-ubuntu-22.04
         path: bin
+
+    - name: Install runtime dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libsuitesparse-dev libopenmpi-dev
 
     - name: Run MfemRun
       run: |
