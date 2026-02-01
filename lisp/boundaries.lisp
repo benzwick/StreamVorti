@@ -123,7 +123,20 @@
               :documentation "Predicate for selecting boundary elements")
    (function :initarg :function
              :accessor boundary-function
-             :documentation "Function (x y [z]) -> value"))
+             :initform nil
+             :documentation "Function (x y [z]) -> value (for scalar BCs)")
+   (u-function :initarg :u-function
+               :accessor boundary-u-function
+               :initform nil
+               :documentation "Function (x y [z]) -> u-velocity")
+   (v-function :initarg :v-function
+               :accessor boundary-v-function
+               :initform nil
+               :documentation "Function (x y [z]) -> v-velocity")
+   (w-function :initarg :w-function
+               :accessor boundary-w-function
+               :initform nil
+               :documentation "Function (x y [z]) -> w-velocity"))
   (:documentation "Boundary condition specification"))
 
 (defmethod print-object ((obj boundary-condition) stream)
@@ -204,8 +217,13 @@
 
    Example:
    (region \"lid\" (where (= y 1.0)) (velocity #'lid-velocity))"
-  `(make-boundary-condition
-    ,name
-    ,predicate
-    (getf ,condition :type)
-    (getf ,condition :function)))
+  (let ((cond-var (gensym "COND")))
+    `(let ((,cond-var ,condition))
+       (make-instance 'boundary-condition
+                      :name ,name
+                      :predicate ,predicate
+                      :type (getf ,cond-var :type)
+                      :function (getf ,cond-var :function)
+                      :u-function (getf ,cond-var :u-function)
+                      :v-function (getf ,cond-var :v-function)
+                      :w-function (getf ,cond-var :w-function)))))

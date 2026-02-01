@@ -587,31 +587,30 @@ int main(int argc, char *argv[])
 
 #ifdef STREAMVORTI_WITH_ECL
         if (use_sdl_bcs) {
-            // Apply boundary conditions from SDL
-            for (const auto& bc : sdl_boundaries) {
-                if (bc.type == "velocity") {
-                    // Find nodes with this boundary attribute
-                    auto it = boundary_nodes_by_attr.find(bc.attribute);
-                    if (it != boundary_nodes_by_attr.end()) {
-                        for (int vi : it->second) {
-                            const double* vertex = mesh->GetVertex(vi);
-                            double x = vertex[0];
-                            double y = vertex[1];
-                            double z = (dim > 2) ? vertex[2] : 0.0;
+            // Apply boundary conditions from SDL using predicate matching
+            // Iterate over all boundary nodes and find which BC matches
+            for (int vi : all_boundary_nodes) {
+                const double* vertex = mesh->GetVertex(vi);
+                double x = vertex[0];
+                double y = vertex[1];
+                double z = (dim > 2) ? vertex[2] : 0.0;
 
-                            // Evaluate BC functions for both components
-                            if (bc.u_function) {
-                                u_velocity[vi] = bc.u_function->evaluateAt(x, y, z);
-                            }
-                            if (bc.v_function) {
-                                v_velocity[vi] = bc.v_function->evaluateAt(x, y, z);
-                            }
-                            // If only legacy single function provided, use for u
-                            else if (bc.function && !bc.u_function) {
-                                u_velocity[vi] = bc.function->evaluateAt(x, y, z);
-                                v_velocity[vi] = 0.0;
-                            }
+                // Find the matching BC by evaluating predicates
+                for (const auto& bc : sdl_boundaries) {
+                    if (bc.type == "velocity" && bc.matchesPredicate(x, y, z)) {
+                        // Apply this BC's velocity functions
+                        if (bc.u_function) {
+                            u_velocity[vi] = bc.u_function->evaluateAt(x, y, z);
                         }
+                        if (bc.v_function) {
+                            v_velocity[vi] = bc.v_function->evaluateAt(x, y, z);
+                        }
+                        // If only legacy single function provided, use for u
+                        else if (bc.function && !bc.u_function) {
+                            u_velocity[vi] = bc.function->evaluateAt(x, y, z);
+                            v_velocity[vi] = 0.0;
+                        }
+                        break;  // Use first matching BC
                     }
                 }
             }

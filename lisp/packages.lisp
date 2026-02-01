@@ -127,6 +127,11 @@
    #:boundary-attribute
    #:boundary-type
    #:boundary-function
+   #:boundary-u-function
+   #:boundary-v-function
+   #:boundary-w-function
+   #:boundary-predicate
+   #:predicate-test-function
    ;; Predicates
    #:where
    #:x-equals
@@ -253,4 +258,6 @@
    #:get-format
    #:get-interval
    #:get-directory
-   #:get-fields))
+   #:get-fields
+   #:get-predicate
+   #:evaluate-predicate))

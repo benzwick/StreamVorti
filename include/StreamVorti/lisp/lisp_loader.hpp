@@ -64,6 +64,12 @@ struct BoundaryCondition {
     std::unique_ptr<LispFunction> v_function;  ///< v-velocity (y-direction)
     std::unique_ptr<LispFunction> w_function;  ///< w-velocity (z-direction, 3D only)
 
+    /// Predicate for location matching (stored as Lisp object)
+    EclObject bc_object = nullptr;  ///< The Lisp boundary-condition object (for predicate evaluation)
+
+    /// Evaluate whether point (x,y,z) matches this BC's predicate
+    bool matchesPredicate(double x, double y, double z = 0.0) const;
+
     BoundaryCondition() = default;
     BoundaryCondition(BoundaryCondition&&) = default;
     BoundaryCondition& operator=(BoundaryCondition&&) = default;

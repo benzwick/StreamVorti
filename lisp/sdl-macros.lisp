@@ -80,6 +80,8 @@
   (typecase obj
     (physics-data (physics-data-type obj))
     (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-type obj))
+    (streamvorti.boundaries:boundary-condition
+     (streamvorti.boundaries:boundary-type obj))
     (t nil)))
 
 (defun get-path (obj)
@@ -222,19 +224,43 @@
     (t nil)))
 
 (defun get-u-function (obj)
-  "Get u-function from velocity plist."
-  (when (listp obj)
-    (getf obj :u-function)))
+  "Get u-function from boundary-condition or velocity plist."
+  (typecase obj
+    (streamvorti.boundaries:boundary-condition
+     (streamvorti.boundaries:boundary-u-function obj))
+    (cons (getf obj :u-function))
+    (t nil)))
 
 (defun get-v-function (obj)
-  "Get v-function from velocity plist."
-  (when (listp obj)
-    (getf obj :v-function)))
+  "Get v-function from boundary-condition or velocity plist."
+  (typecase obj
+    (streamvorti.boundaries:boundary-condition
+     (streamvorti.boundaries:boundary-v-function obj))
+    (cons (getf obj :v-function))
+    (t nil)))
 
 (defun get-w-function (obj)
-  "Get w-function from velocity plist."
-  (when (listp obj)
-    (getf obj :w-function)))
+  "Get w-function from boundary-condition or velocity plist."
+  (typecase obj
+    (streamvorti.boundaries:boundary-condition
+     (streamvorti.boundaries:boundary-w-function obj))
+    (cons (getf obj :w-function))
+    (t nil)))
+
+(defun get-predicate (obj)
+  "Get predicate from boundary-condition."
+  (typecase obj
+    (streamvorti.boundaries:boundary-condition
+     (streamvorti.boundaries:boundary-predicate obj))
+    (t nil)))
+
+(defun evaluate-predicate (bc x y &optional (z 0.0d0))
+  "Evaluate whether point (x,y,z) satisfies the boundary condition's predicate.
+   Returns T if the predicate matches, NIL otherwise."
+  (let ((pred (get-predicate bc)))
+    (when pred
+      (funcall (streamvorti.boundaries:predicate-test-function pred)
+               x y z))))
 
 ;;; ============================================================
 ;;; Physics Structure
