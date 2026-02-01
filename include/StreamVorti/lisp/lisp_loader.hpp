@@ -32,6 +32,7 @@
 #include <vector>
 #include <map>
 #include <functional>
+#include <cmath>
 
 // Include lisp_bridge.hpp for LispFunction definition
 // (required because BoundaryCondition uses unique_ptr<LispFunction>
@@ -64,11 +65,23 @@ struct BoundaryCondition {
     std::unique_ptr<LispFunction> v_function;  ///< v-velocity (y-direction)
     std::unique_ptr<LispFunction> w_function;  ///< w-velocity (z-direction, 3D only)
 
-    /// Predicate for location matching (stored as Lisp object)
-    EclObject bc_object = nullptr;  ///< The Lisp boundary-condition object (for predicate evaluation)
+    /// Predicate for location matching (C++ evaluation)
+    /// predicate_axis: 'x', 'y', 'z', or '\0' for no predicate
+    /// predicate_value: the coordinate value to match
+    /// predicate_tolerance: tolerance for floating point comparison
+    char predicate_axis = '\0';
+    double predicate_value = 0.0;
+    double predicate_tolerance = 1e-10;
 
     /// Evaluate whether point (x,y,z) matches this BC's predicate
-    bool matchesPredicate(double x, double y, double z = 0.0) const;
+    bool matchesPredicate(double x, double y, double z = 0.0) const {
+        switch (predicate_axis) {
+            case 'x': return std::abs(x - predicate_value) < predicate_tolerance;
+            case 'y': return std::abs(y - predicate_value) < predicate_tolerance;
+            case 'z': return std::abs(z - predicate_value) < predicate_tolerance;
+            default: return false;
+        }
+    }
 
     BoundaryCondition() = default;
     BoundaryCondition(BoundaryCondition&&) = default;

@@ -254,6 +254,33 @@
      (streamvorti.boundaries:boundary-predicate obj))
     (t nil)))
 
+(defun get-predicate-axis (obj)
+  "Get the axis ('x', 'y', or 'z') from a simple coordinate predicate.
+   Returns the axis string or empty string if not a simple predicate."
+  (let ((pred (get-predicate obj)))
+    (when pred
+      (let ((axis (streamvorti.boundaries:predicate-axis pred)))
+        (case axis
+          (:x "x")
+          (:y "y")
+          (:z "z")
+          (t ""))))))
+
+(defun get-predicate-value (obj)
+  "Get the coordinate value from a simple coordinate predicate.
+   Returns the value or 0.0 if not determinable."
+  (let ((pred (get-predicate obj)))
+    (if pred
+        (streamvorti.boundaries:predicate-value pred)
+        0.0d0)))
+
+(defun get-predicate-tolerance (obj)
+  "Get the tolerance from a simple coordinate predicate."
+  (let ((pred (get-predicate obj)))
+    (if pred
+        (streamvorti.boundaries:predicate-tolerance pred)
+        1.0d-10)))
+
 (defun evaluate-predicate (bc x y &optional (z 0.0d0))
   "Evaluate whether point (x,y,z) satisfies the boundary condition's predicate.
    Returns T if the predicate matches, NIL otherwise."

@@ -42,25 +42,25 @@
   ;;; --------------------------------------------------------
   (boundaries
     ;; Lid: u=1, v=0 (moving in x-direction)
-    (defun lid-u-velocity (x y)
+    (defun lid-u-velocity (x y &optional z)
       "Lid moves with unit velocity in x-direction"
-      (declare (ignore x y))
+      (declare (ignore x y z))
       1.0d0)
 
-    (defun lid-v-velocity (x y)
+    (defun lid-v-velocity (x y &optional z)
       "Lid has zero velocity in y-direction"
-      (declare (ignore x y))
+      (declare (ignore x y z))
       0.0d0)
 
     ;; Walls: u=0, v=0 (no-slip)
-    (defun wall-u-velocity (x y)
+    (defun wall-u-velocity (x y &optional z)
       "Walls have zero u-velocity"
-      (declare (ignore x y))
+      (declare (ignore x y z))
       0.0d0)
 
-    (defun wall-v-velocity (x y)
+    (defun wall-v-velocity (x y &optional z)
       "Walls have zero v-velocity"
-      (declare (ignore x y))
+      (declare (ignore x y z))
       0.0d0)
 
     ;; Apply BCs to each boundary with separate u and v functions

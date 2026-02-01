@@ -17,12 +17,27 @@
 (defclass boundary-predicate ()
   ((test-function :initarg :test-function
                   :accessor predicate-test-function
-                  :documentation "Function (x y z) -> boolean"))
+                  :documentation "Function (x y z) -> boolean")
+   (axis :initarg :axis
+         :accessor predicate-axis
+         :initform nil
+         :documentation "Axis for simple predicates: :x, :y, :z, or nil")
+   (value :initarg :value
+          :accessor predicate-value
+          :initform 0.0d0
+          :documentation "Coordinate value for simple predicates")
+   (tolerance :initarg :tolerance
+              :accessor predicate-tolerance
+              :initform 1.0d-10
+              :documentation "Tolerance for coordinate comparison"))
   (:documentation "Predicate for selecting boundary elements"))
 
 (defun x-equals (value &optional (tolerance 1e-10))
   "Create predicate for x = value."
   (make-instance 'boundary-predicate
+                 :axis :x
+                 :value (coerce value 'double-float)
+                 :tolerance (coerce tolerance 'double-float)
                  :test-function (lambda (x y z)
                                   (declare (ignore y z))
                                   (< (abs (- x value)) tolerance))))
@@ -30,6 +45,9 @@
 (defun y-equals (value &optional (tolerance 1e-10))
   "Create predicate for y = value."
   (make-instance 'boundary-predicate
+                 :axis :y
+                 :value (coerce value 'double-float)
+                 :tolerance (coerce tolerance 'double-float)
                  :test-function (lambda (x y z)
                                   (declare (ignore x z))
                                   (< (abs (- y value)) tolerance))))
@@ -37,6 +55,9 @@
 (defun z-equals (value &optional (tolerance 1e-10))
   "Create predicate for z = value."
   (make-instance 'boundary-predicate
+                 :axis :z
+                 :value (coerce value 'double-float)
+                 :tolerance (coerce tolerance 'double-float)
                  :test-function (lambda (x y z)
                                   (declare (ignore x y))
                                   (< (abs (- z value)) tolerance))))

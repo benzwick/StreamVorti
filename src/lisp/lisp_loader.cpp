@@ -47,26 +47,7 @@ namespace Lisp {
 static inline cl_object to_cl(EclObject x) { return reinterpret_cast<cl_object>(x); }
 static inline EclObject to_ecl(cl_object x) { return reinterpret_cast<EclObject>(x); }
 
-// Implementation of BoundaryCondition::matchesPredicate
-bool BoundaryCondition::matchesPredicate(double x, double y, double z) const
-{
-    if (bc_object == nullptr || Bridge::isNil(bc_object)) {
-        return false;
-    }
-
-    try {
-        // Call (sdl:evaluate-predicate bc x y z)
-        EclObject result = Bridge::funcall("sdl:evaluate-predicate", {
-            bc_object,
-            Bridge::toDouble(x),
-            Bridge::toDouble(y),
-            Bridge::toDouble(z)
-        });
-        return Bridge::toCppBool(result);
-    } catch (...) {
-        return false;
-    }
-}
+// matchesPredicate is now inline in the header using predicate_axis/value
 
 SimulationConfig Loader::load(const std::string& path)
 {
@@ -232,8 +213,13 @@ std::vector<BoundaryCondition> Loader::extractBoundaries(EclObject sim_obj)
         bc.attribute = getIntProperty(bc_spec, "attribute", 1);
         bc.type = getStringProperty(bc_spec, "type", "velocity");
 
-        // Store the Lisp BC object for predicate evaluation
-        bc.bc_object = bc_spec;
+        // Extract predicate info for C++ evaluation
+        std::string pred_axis = getStringProperty(bc_spec, "predicate-axis", "");
+        if (!pred_axis.empty()) {
+            bc.predicate_axis = pred_axis[0];  // 'x', 'y', or 'z'
+            bc.predicate_value = getDoubleProperty(bc_spec, "predicate-value", 0.0);
+            bc.predicate_tolerance = getDoubleProperty(bc_spec, "predicate-tolerance", 1e-10);
+        }
 
         // Convert type to lowercase for comparison (Lisp keywords are uppercase)
         std::transform(bc.type.begin(), bc.type.end(), bc.type.begin(),

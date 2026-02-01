@@ -132,6 +132,9 @@
    #:boundary-w-function
    #:boundary-predicate
    #:predicate-test-function
+   #:predicate-axis
+   #:predicate-value
+   #:predicate-tolerance
    ;; Predicates
    #:where
    #:x-equals
@@ -260,4 +263,7 @@
    #:get-directory
    #:get-fields
    #:get-predicate
+   #:get-predicate-axis
+   #:get-predicate-value
+   #:get-predicate-tolerance
    #:evaluate-predicate))
