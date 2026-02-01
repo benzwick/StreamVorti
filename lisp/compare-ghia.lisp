@@ -244,7 +244,8 @@ Returns (VALUES data source-name) or (VALUES NIL NIL)."
 ;;; ============================================================
 
 (defun ascii-plot (computed reference &key (width 60) (height 20))
-  "Print ASCII plot to *standard-output*."
+  "Print ASCII plot to *standard-output*.
+   Legend: o=reference only, *=computed only, @=both (overlapping)"
   (let* ((all-u (append (mapcar #'cdr computed) (mapcar #'cdr reference)))
          (u-min (reduce #'min all-u))
          (u-max (reduce #'max all-u))
@@ -255,13 +256,14 @@ Returns (VALUES data source-name) or (VALUES NIL NIL)."
           for row = (min (1- height) (max 0 (floor (* (- 1.0 y) (1- height)))))
           for col = (min (1- width) (max 0 (floor (* (/ (- u u-min) u-range) (1- width)))))
           do (setf (aref canvas row col) #\o))
-    ;; Computed as '*'
+    ;; Computed as '*', or '@' if overlapping with reference
     (loop for (y . u) in computed
           for row = (min (1- height) (max 0 (floor (* (- 1.0 y) (1- height)))))
           for col = (min (1- width) (max 0 (floor (* (/ (- u u-min) u-range) (1- width)))))
-          do (setf (aref canvas row col) #\*))
+          do (setf (aref canvas row col)
+                   (if (char= (aref canvas row col) #\o) #\@ #\*)))
     ;; Print
-    (format t "~%u-velocity vs y (o=reference, *=computed)~%")
+    (format t "~%u-velocity vs y (o=reference, *=computed, @=both)~%")
     (format t "u: ~,2F~VT~,2F~%" u-min width u-max)
     (dotimes (row height)
       (format t "|")
