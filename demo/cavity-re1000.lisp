@@ -1,49 +1,45 @@
-;;;; demo/cavity.lisp - Lid-Driven Cavity Flow
+;;;; demo/cavity-re1000.lisp - Lid-Driven Cavity at Re=1000
 ;;;;
 ;;;; StreamVorti SDL Example
 ;;;;
-;;;; Classic lid-driven cavity benchmark for Re=100.
+;;;; Higher Reynolds number with prominent secondary corner vortices.
 ;;;; Reference: Ghia, Ghia & Shin (1982)
 ;;;;
-;;;; Run with: StreamVorti demo/cavity.lisp
+;;;; Run with: StreamVorti demo/cavity-re1000.lisp
 
 (in-package :sdl)
 
-(simulation "lid-driven-cavity" :dim 2
+(simulation "lid-driven-cavity-re1000" :dim 2
 
-  ;; Domain: structured mesh on unit square
-  (domain (box (0 0) (1 1)) :mesh :n (40 40))
+  ;; Finer mesh for higher Re
+  (domain (box (0 0) (1 1)) :mesh :n (60 60))
 
-  ;; Named parts of ∂Ω
   (boundaries
     (lid    (= y 1))
     (bottom (= y 0))
     (left   (= x 0))
     (right  (= x 1)))
 
-  ;; Navier-Stokes with stream-vorticity formulation
   (physics :navier-stokes
     :formulation :stream-vorticity
-    :Re 100
+    :Re 1000
 
     (bc lid    :velocity (1 0))
     (bc bottom :no-slip)
     (bc left   :no-slip)
     (bc right  :no-slip))
 
-  ;; DCPSE meshless discretization
   (method :dcpse
     :neighbors 25
     :support-radius 5.0)
 
-  ;; Time integration
+  ;; Smaller timestep for stability
   (time :method :explicit-euler
-    :dt 0.001
-    :end 10.0
+    :dt 0.0005
+    :end 30.0
     :tolerance 1e-6)
 
-  ;; VTK output for ParaView
   (output :vtk
-    :directory "results/cavity/"
-    :every 0.1
+    :directory "results/cavity-re1000/"
+    :every 1.0
     :fields (vorticity streamfunction velocity)))

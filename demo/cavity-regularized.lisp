@@ -1,49 +1,46 @@
-;;;; demo/cavity.lisp - Lid-Driven Cavity Flow
+;;;; demo/cavity-regularized.lisp - Regularized Lid-Driven Cavity
 ;;;;
 ;;;; StreamVorti SDL Example
 ;;;;
-;;;; Classic lid-driven cavity benchmark for Re=100.
-;;;; Reference: Ghia, Ghia & Shin (1982)
+;;;; Smooth lid velocity profile: u(x) = 16*x²*(1-x)²
+;;;; Zero at corners, maximum 1.0 at x=0.5.
+;;;; Avoids corner singularities for better convergence.
 ;;;;
-;;;; Run with: StreamVorti demo/cavity.lisp
+;;;; Run with: StreamVorti demo/cavity-regularized.lisp
 
 (in-package :sdl)
 
-(simulation "lid-driven-cavity" :dim 2
+(simulation "regularized-cavity" :dim 2
 
-  ;; Domain: structured mesh on unit square
   (domain (box (0 0) (1 1)) :mesh :n (40 40))
 
-  ;; Named parts of ∂Ω
   (boundaries
     (lid    (= y 1))
     (bottom (= y 0))
     (left   (= x 0))
     (right  (= x 1)))
 
-  ;; Navier-Stokes with stream-vorticity formulation
   (physics :navier-stokes
     :formulation :stream-vorticity
     :Re 100
 
-    (bc lid    :velocity (1 0))
+    ;; Regularized lid: smooth velocity profile
+    (bc lid :velocity
+      :u (fn (x y) (* 16 x x (- 1 x) (- 1 x)))
+      :v 0)
     (bc bottom :no-slip)
     (bc left   :no-slip)
     (bc right  :no-slip))
 
-  ;; DCPSE meshless discretization
   (method :dcpse
     :neighbors 25
     :support-radius 5.0)
 
-  ;; Time integration
   (time :method :explicit-euler
     :dt 0.001
-    :end 10.0
-    :tolerance 1e-6)
+    :end 10.0)
 
-  ;; VTK output for ParaView
   (output :vtk
-    :directory "results/cavity/"
+    :directory "results/regularized/"
     :every 0.1
     :fields (vorticity streamfunction velocity)))
