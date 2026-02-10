@@ -386,6 +386,10 @@
           while rest
           for item = (car rest)
           do (cond
+               ;; SDL v2: positional string argument as name
+               ((stringp item)
+                (setf name item)
+                (setf rest (cdr rest)))
                ;; Keyword argument
                ((eq item :name)
                 (setf name (cadr rest))
@@ -394,6 +398,10 @@
                 (setf version (cadr rest))
                 (setf rest (cddr rest)))
                ((eq item :dimension)
+                (setf dimension (cadr rest))
+                (setf rest (cddr rest)))
+               ;; SDL v2: :dim as alias for :dimension
+               ((eq item :dim)
                 (setf dimension (cadr rest))
                 (setf rest (cddr rest)))
                ;; Body clause (list starting with symbol)
@@ -420,6 +428,7 @@
 (defmethod process-clause (sim (clause list))
   "Process a clause based on its first element."
   (case (first clause)
+    ;; SDL v1 clauses
     (geometry (process-geometry-clause sim (rest clause)))
     (mesh (process-mesh-clause sim (rest clause)))
     (boundaries (process-boundaries-clause sim (rest clause)))
@@ -427,11 +436,164 @@
     (discretization (process-discretization-clause sim (rest clause)))
     (solver (process-solver-clause sim (rest clause)))
     (output (process-output-clause sim (rest clause)))
+    ;; SDL v2 clauses
+    (domain (process-domain-clause sim (rest clause)))
+    (method (process-method-clause sim (rest clause)))
+    (time (process-time-clause sim (rest clause)))
     (otherwise
      (warn "Unknown clause type: ~A" (first clause)))))
 
 ;;; ============================================================
 ;;; Clause Processors
+;;; ============================================================
+
+;;; ============================================================
+;;; SDL v2 Helper Functions
+;;; ============================================================
+
+(defun eval-geometry-form (form)
+  "Evaluate a geometry form from SDL v2 quoted data.
+   Handles (box corners) and (rectangle corners) syntax where corners
+   are literal lists, not function calls.
+   For (box (x y) (x y)): uses make-rectangle for 2D corners (length 2),
+   make-box for 3D corners (length 3).
+   For (circle center radius) and (sphere center radius)."
+  (unless (and (listp form) (first form))
+    (error "Invalid geometry form: ~A" form))
+  (let* ((type-name (symbol-name (first form)))
+         (args (rest form)))
+    (cond
+      ;; box/rectangle: dispatch on corner dimension
+      ((or (string= type-name "BOX") (string= type-name "RECTANGLE"))
+       (let ((min-corner (first args))
+             (max-corner (second args)))
+         (if (and (listp min-corner) (= (length min-corner) 3))
+             (streamvorti.geometry:make-box min-corner max-corner)
+             (streamvorti.geometry:make-rectangle min-corner max-corner))))
+      ;; circle: center (list) and radius (number)
+      ((string= type-name "CIRCLE")
+       (streamvorti.geometry:make-circle (first args) (second args)))
+      ;; sphere: center (list) and radius (number)
+      ((string= type-name "SPHERE")
+       (streamvorti.geometry:make-sphere (first args) (second args)))
+      (t
+       (error "Unknown geometry type in domain clause: ~A" (first form))))))
+
+(defun parse-predicate-expr (expr)
+  "Parse a predicate expression from SDL v2 boundaries clause.
+   Supports (= x val), (= y val), (= z val) forms."
+  (if (and (listp expr) (= (length expr) 3)
+           (string= (symbol-name (first expr)) "="))
+      (let ((var-name (symbol-name (second expr)))
+            (val (third expr)))
+        (cond
+          ((string= var-name "X") (streamvorti.boundaries:x-equals val))
+          ((string= var-name "Y") (streamvorti.boundaries:y-equals val))
+          ((string= var-name "Z") (streamvorti.boundaries:z-equals val))
+          (t (error "Unknown variable in predicate expression: ~A" (second expr)))))
+      (error "Unsupported predicate expression: ~A" expr)))
+
+;;; ============================================================
+;;; SDL v2 Clause Processors
+;;; ============================================================
+
+(defun process-domain-clause (sim body)
+  "Process SDL v2 domain clause.
+   Format: (domain geometry-form :mesh :n (nx ny))
+   The geometry-form is literal data (e.g. (box (0 0) (1 1))).
+   :mesh is a standalone flag; :n specifies the number of divisions.
+   Note: :mesh is a standalone indicator (no value), so we cannot use getf
+   directly - we scan for :n using position instead."
+  (let* ((geometry-form (first body))
+         (options (rest body))
+         ;; :mesh is a standalone flag, :n is followed by its value
+         ;; Use position to find :n, then take the next element as value
+         (n-pos (position :n options))
+         (divisions (if n-pos
+                        (nth (1+ n-pos) options)
+                        '(10 10)))
+         (geometry (eval-geometry-form geometry-form)))
+    (setf (simulation-data-mesh-spec sim)
+          (streamvorti.mesh:make-mesh-spec-generate
+           geometry
+           :type :quad
+           :divisions divisions))))
+
+(defun process-bc-subform (sim bc-form)
+  "Process a (bc name :type ...) sub-form within a SDL v2 physics clause.
+   Looks up the named boundary condition and sets its type and functions."
+  (let* ((bc-name (symbol-name (second bc-form)))
+         (bc-type-kw (third bc-form))
+         (bc-value (fourth bc-form))
+         (bc (find bc-name
+                   (simulation-data-boundaries sim)
+                   :key #'streamvorti.boundaries:boundary-name
+                   :test #'string=)))
+    (unless bc
+      (warn "BC '~A' not found in boundaries list" bc-name)
+      (return-from process-bc-subform nil))
+    (cond
+      ;; :velocity (u v) - constant velocity vector
+      ((eq bc-type-kw :velocity)
+       (setf (streamvorti.boundaries:boundary-type bc) :velocity)
+       (let ((u-val (coerce (or (first bc-value) 0) 'double-float))
+             (v-val (coerce (or (second bc-value) 0) 'double-float)))
+         (setf (streamvorti.boundaries:boundary-u-function bc)
+               (let ((u u-val)) (lambda (x y &optional z) (declare (ignore x y z)) u)))
+         (setf (streamvorti.boundaries:boundary-v-function bc)
+               (let ((v v-val)) (lambda (x y &optional z) (declare (ignore x y z)) v)))))
+      ;; :no-slip - zero velocity on all components
+      ((eq bc-type-kw :no-slip)
+       (setf (streamvorti.boundaries:boundary-type bc) :velocity)
+       (setf (streamvorti.boundaries:boundary-u-function bc)
+             (lambda (x y &optional z) (declare (ignore x y z)) 0.0d0))
+       (setf (streamvorti.boundaries:boundary-v-function bc)
+             (lambda (x y &optional z) (declare (ignore x y z)) 0.0d0)))
+      ;; :pressure - constant pressure value
+      ((eq bc-type-kw :pressure)
+       (setf (streamvorti.boundaries:boundary-type bc) :pressure)
+       (let ((p-val (coerce (or bc-value 0) 'double-float)))
+         (setf (streamvorti.boundaries:boundary-function bc)
+               (let ((p p-val)) (lambda (x y &optional z) (declare (ignore x y z)) p)))))
+      (t
+       (warn "Unknown BC type in physics clause: ~A" bc-type-kw)))))
+
+(defun process-method-clause (sim body)
+  "Process SDL v2 method clause.
+   Format: (method :dcpse :neighbors 25 :support-radius 5.0)"
+  (let ((disc (make-discretization-data)))
+    ;; First element is the method type
+    (when body
+      (setf (discretization-data-method disc) (first body)))
+    ;; Parse remaining keyword-value pairs
+    (loop for (key val) on (rest body) by #'cddr do
+      (case key
+        (:neighbors (setf (discretization-data-num-neighbors disc) val))
+        (:num-neighbors (setf (discretization-data-num-neighbors disc) val))
+        (:cutoff-radius (setf (discretization-data-cutoff-radius disc)
+                              (coerce val 'double-float)))
+        (:support-radius (setf (discretization-data-support-radius disc)
+                               (coerce val 'double-float)))))
+    (setf (simulation-data-discretization sim) disc)))
+
+(defun process-time-clause (sim body)
+  "Process SDL v2 time clause.
+   Format: (time :method :explicit-euler :dt 0.001 :end 10.0 :tolerance 1e-6)"
+  (let ((solver (make-solver-data)))
+    (loop for (key val) on body by #'cddr do
+      (case key
+        (:method (setf (solver-data-timestepping solver) val))
+        (:timestepping (setf (solver-data-timestepping solver) val))
+        (:dt (setf (solver-data-dt solver) (coerce val 'double-float)))
+        ;; :end is the SDL v2 name for end-time
+        (:end (setf (solver-data-end-time solver) (coerce val 'double-float)))
+        (:end-time (setf (solver-data-end-time solver) (coerce val 'double-float)))
+        (:tolerance (setf (solver-data-tolerance solver) (coerce val 'double-float)))
+        (:max-iterations (setf (solver-data-max-iterations solver) val))))
+    (setf (simulation-data-solver sim) solver)))
+
+;;; ============================================================
+;;; SDL v1 + v2 Clause Processors
 ;;; ============================================================
 
 (defun process-geometry-clause (sim body)
@@ -472,28 +634,102 @@
     (setf (simulation-data-mesh-spec sim) mesh-spec)))
 
 (defun process-boundaries-clause (sim body)
-  "Process boundary conditions."
+  "Process boundary conditions. Handles SDL v1 and v2 formats.
+   SDL v1: (defun ...) and (region name predicate condition) forms.
+   SDL v2: (name predicate-expr) pairs like (lid (= y 1))."
   (let ((boundaries nil))
-    (dolist (form body)
-      (cond
-        ;; (defun ...) - define BC function
-        ((and (listp form) (eq (first form) 'defun))
-         (eval form))
-        ;; (region ...) - define BC region
-        ((and (listp form) (eq (first form) 'region))
-         (push (eval form) boundaries))))
+    ;; Detect SDL v2 format: first form is (symbol expr) where symbol is
+    ;; not 'defun or 'region
+    (let* ((first-form (first body))
+           (v2-format (and first-form
+                           (listp first-form)
+                           (symbolp (first first-form))
+                           (not (member (first first-form)
+                                        (list 'defun
+                                              'streamvorti.boundaries:region))))))
+      (if v2-format
+          ;; SDL v2: (name predicate-expr) pairs
+          (let ((attr 1))
+            (dolist (form body)
+              (when (and (listp form)
+                         (= (length form) 2)
+                         (symbolp (first form)))
+                (let* ((name (symbol-name (first form)))
+                       (predicate (parse-predicate-expr (second form)))
+                       (bc (make-instance 'streamvorti.boundaries:boundary-condition
+                                          :name name
+                                          :predicate predicate
+                                          :attribute attr
+                                          :type :unknown)))
+                  (push bc boundaries)
+                  (incf attr)))))
+          ;; SDL v1: defun and region forms
+          (dolist (form body)
+            (cond
+              ((and (listp form) (eq (first form) 'defun))
+               (eval form))
+              ((and (listp form) (eq (first form) 'region))
+               (push (eval form) boundaries))))))
     (setf (simulation-data-boundaries sim) (nreverse boundaries))))
 
 (defun process-physics-clause (sim body)
-  "Process physics parameters."
+  "Process physics parameters. Handles SDL v1 and v2 formats.
+   SDL v1: (:type :name :key val ...) - type is explicit keyword argument.
+   SDL v2: (:navier-stokes :key val ... (bc name :type ...) ...) - type is
+           first positional keyword, followed by options and bc sub-forms."
   (let ((physics (make-physics-data)))
-    (loop for (key value) on body by #'cddr do
-      (case key
-        (:type (setf (physics-data-type physics) value))
-        (:formulation (setf (physics-data-formulation physics) value))
-        (:reynolds (setf (physics-data-reynolds physics) (coerce value 'double-float)))
-        (:density (setf (physics-data-density physics) (coerce value 'double-float)))
-        (:viscosity (setf (physics-data-viscosity physics) (coerce value 'double-float)))))
+    ;; Detect SDL v2: first element is a keyword and it is not :type
+    ;; (meaning it IS the type value, not the :type key)
+    (if (and body (keywordp (first body)) (not (eq (first body) :type)))
+        ;; SDL v2: first element is the physics type keyword
+        (let ((rest body))
+          ;; Map the type keyword to the internal type symbol
+          (setf (physics-data-type physics)
+                (let ((type-kw (first rest)))
+                  (cond
+                    ((eq type-kw :navier-stokes) :incompressible-navier-stokes)
+                    (t type-kw))))
+          (setf rest (cdr rest))
+          ;; Parse remaining: keyword-value pairs and (bc ...) sub-forms
+          (loop while rest
+                for item = (first rest)
+                do (cond
+                     ;; (bc ...) sub-form
+                     ((and (listp item)
+                           (symbolp (first item))
+                           (string= (symbol-name (first item)) "BC"))
+                      (process-bc-subform sim item)
+                      (setf rest (cdr rest)))
+                     ;; keyword-value pair
+                     ((keywordp item)
+                      (let ((key item)
+                            (val (second rest)))
+                        (case key
+                          (:formulation
+                           (setf (physics-data-formulation physics) val))
+                          ;; :Re (uppercased to :RE) and :reynolds both accepted
+                          (:re
+                           (setf (physics-data-reynolds physics)
+                                 (coerce val 'double-float)))
+                          (:reynolds
+                           (setf (physics-data-reynolds physics)
+                                 (coerce val 'double-float)))
+                          (:density
+                           (setf (physics-data-density physics)
+                                 (coerce val 'double-float)))
+                          (:viscosity
+                           (setf (physics-data-viscosity physics)
+                                 (coerce val 'double-float)))))
+                      (setf rest (cddr rest)))
+                     (t (setf rest (cdr rest))))))
+        ;; SDL v1: keyword-value pairs starting with :type
+        (loop for (key value) on body by #'cddr do
+          (case key
+            (:type (setf (physics-data-type physics) value))
+            (:formulation (setf (physics-data-formulation physics) value))
+            (:reynolds (setf (physics-data-reynolds physics) (coerce value 'double-float)))
+            (:density (setf (physics-data-density physics) (coerce value 'double-float)))
+            (:viscosity (setf (physics-data-viscosity physics) (coerce value 'double-float))))))
     (setf (simulation-data-physics sim) physics)))
 
 (defun process-discretization-clause (sim body)
@@ -522,14 +758,44 @@
     (setf (simulation-data-solver sim) solver)))
 
 (defun process-output-clause (sim body)
-  "Process output configuration."
-  (let ((output (make-output-data)))
-    (loop for (key value) on body by #'cddr do
-      (case key
-        (:format (setf (output-data-format output) value))
-        (:interval (setf (output-data-interval output) (coerce value 'double-float)))
-        (:directory (setf (output-data-directory output) value))
-        (:fields (setf (output-data-fields output) value))))
+  "Process output configuration. Handles SDL v1 and v2 formats.
+   SDL v1: (:format :vtk :interval 0.1 :directory ... :fields ...)
+   SDL v2: (:vtk :directory ... :every 0.1 :fields ...)
+           Format is the first positional keyword; :every maps to interval."
+  (let ((output (make-output-data))
+        ;; SDL v1 option keywords
+        (v1-keys '(:format :interval :directory :fields)))
+    ;; Detect SDL v2: first element is a keyword NOT in the v1 option list
+    (if (and body (keywordp (first body)) (not (member (first body) v1-keys)))
+        ;; SDL v2: first element is the format keyword
+        (let ((rest body))
+          (setf (output-data-format output) (first rest))
+          (setf rest (cdr rest))
+          (loop while rest
+                for key = (first rest)
+                for val = (second rest)
+                do (when (keywordp key)
+                     (case key
+                       (:directory
+                        (setf (output-data-directory output) val))
+                       ;; :every is the SDL v2 name for output interval
+                       (:every
+                        (setf (output-data-interval output)
+                              (coerce val 'double-float)))
+                       (:interval
+                        (setf (output-data-interval output)
+                              (coerce val 'double-float)))
+                       (:fields
+                        (setf (output-data-fields output) val))))
+                   (setf rest (cddr rest))))
+        ;; SDL v1: keyword-value pairs
+        (loop for (key value) on body by #'cddr do
+          (case key
+            (:format (setf (output-data-format output) value))
+            (:interval (setf (output-data-interval output)
+                             (coerce value 'double-float)))
+            (:directory (setf (output-data-directory output) value))
+            (:fields (setf (output-data-fields output) value)))))
     (setf (simulation-data-output sim) output)))
 
 ;;; ============================================================
