@@ -12,10 +12,33 @@ on:
     types: [completed]
 
 jobs:
-  run-cavity-sdl:
-    name: "Cavity (SDL)"
+  run-demo:
+    name: "Demo: ${{ matrix.name }}"
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cavity
+            file: demo/cavity.lisp
+            validate: true
+          - name: cavity-quick
+            file: demo/cavity-quick.lisp
+          - name: cavity-re1000
+            file: demo/cavity-re1000.lisp
+          - name: cavity-regularized
+            file: demo/cavity-regularized.lisp
+          - name: double-lid-cavity
+            file: demo/double-lid-cavity.lisp
+          - name: poiseuille
+            file: demo/poiseuille.lisp
+          - name: backward-step
+            file: demo/backward-step.lisp
+          - name: cylinder
+            file: demo/cylinder.lisp
 
     steps:
     - uses: actions/checkout@v4
@@ -42,30 +65,30 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y sbcl gnuplot libsuitesparse-dev libopenmpi-dev ecl
 
-    - name: Run with SDL file
+    - name: Run demo
       run: |
         set -o pipefail
         chmod +x bin/StreamVorti
         mkdir -p results
         cd results
-        ../bin/StreamVorti -f ../demo/cavity.lisp -lp ../lisp -pv 2>&1 | tee simulation.log
+        ../bin/StreamVorti -f ../${{ matrix.file }} -lp ../lisp -pv 2>&1 | tee simulation.log
 
     - name: Validate against Ghia
+      if: ${{ matrix.validate }}
       run: |
         set -o pipefail
-        # SDL uses simulation name for output files
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
              --eval '(streamvorti.validation:run-validation :results-file "results/output_dat/lid-driven-cavity-2d_u_centerline_x0.5.dat")' \
              2>&1 | tee results/validation.log
 
-    - name: Upload all results
+    - name: Upload results
       uses: actions/upload-artifact@v4
       with:
-        name: cavity-sdl-results
+        name: demo-${{ matrix.name }}-results
         path: |
           results/
-          demo/cavity.lisp
+          ${{ matrix.file }}
           data/
         retention-days: 90
 
