@@ -221,7 +221,7 @@
 
 (defstruct (boundary-def (:constructor %make-boundary-def)
                          (:conc-name boundary-))
-  name predicate)
+  name predicate predicate-expr)
 
 (defstruct (boundary-set (:constructor %make-boundary-set))
   defs)
@@ -235,7 +235,8 @@
   (mapcar (lambda (spec)
             (%make-boundary-def
              :name (first spec)
-             :predicate (make-predicate (second spec))))
+             :predicate (make-predicate (second spec))
+             :predicate-expr (second spec)))
           specs))
 
 ;;; ============================================================

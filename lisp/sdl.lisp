@@ -17,3 +17,4 @@
 (load "lisp/boundaries.lisp")
 (load "lisp/sdl-macros.lisp")
 (load "lisp/simulation.lisp")
+(load "lisp/cpp-bridge.lisp")

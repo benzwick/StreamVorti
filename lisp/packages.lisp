@@ -310,4 +310,45 @@
    #:simulation-physics-list
    #:simulation-spatial
    #:simulation-temporal
-   #:simulation-coupling))
+   #:simulation-coupling
+   ;; C++ bridge accessors (used by Loader::getProperty)
+   #:get-name
+   #:get-version
+   #:get-dimension
+   #:get-mesh
+   #:get-boundaries
+   #:get-physics
+   #:get-discretization
+   #:get-solver
+   #:get-output
+   #:get-type
+   #:get-divisions
+   #:get-size-x
+   #:get-size-y
+   #:get-size-z
+   #:get-element-type
+   #:get-path
+   #:get-attribute
+   #:get-predicate-axis
+   #:get-predicate-value
+   #:get-predicate-tolerance
+   #:get-function
+   #:get-u-function
+   #:get-v-function
+   #:get-w-function
+   #:get-formulation
+   #:get-reynolds
+   #:get-density
+   #:get-viscosity
+   #:get-num-neighbors
+   #:get-cutoff-radius
+   #:get-support-radius
+   #:get-timestepping
+   #:get-dt
+   #:get-end-time
+   #:get-tolerance
+   #:get-max-iterations
+   #:get-format
+   #:get-interval
+   #:get-directory
+   #:get-fields))

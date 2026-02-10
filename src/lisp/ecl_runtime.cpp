@@ -76,7 +76,8 @@ void Runtime::init(const std::string& lisp_path)
             "mesh.lisp",
             "boundaries.lisp",
             "sdl-macros.lisp",
-            "simulation.lisp"
+            "simulation.lisp",
+            "cpp-bridge.lisp"
         };
 
         for (const auto& file : core_files) {
