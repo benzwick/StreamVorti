@@ -11,6 +11,19 @@
 (in-package :sdl)
 
 ;;; ============================================================
+;;; Current Simulation
+;;; ============================================================
+
+(defvar *current-simulation* nil
+  "The most recently defined simulation object.
+   Set automatically by the SIMULATION macro so that the C++ loader
+   can retrieve it via GET-CURRENT-SIMULATION.")
+
+(defun get-current-simulation ()
+  "Return the most recently defined simulation object."
+  *current-simulation*)
+
+;;; ============================================================
 ;;; Simulation Structure
 ;;; ============================================================
 
@@ -457,6 +470,8 @@
          ;; Reverse physics list to preserve definition order
          (setf (sim-physics-list ,sim-var)
                (nreverse (sim-physics-list ,sim-var)))
+         ;; Store as current simulation for C++ retrieval
+         (setf *current-simulation* ,sim-var)
          ,sim-var))))
 
 ;;; ============================================================

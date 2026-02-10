@@ -299,6 +299,8 @@
    #:coupling-interface
    ;; Simulation
    #:simulation
+   #:*current-simulation*
+   #:get-current-simulation
    #:simulation-name
    #:simulation-dim
    #:simulation-domain
