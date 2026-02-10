@@ -431,23 +431,23 @@
 (define-test test-simulation-lid-driven-cavity
   "Test complete lid-driven cavity simulation definition."
   (let ((sim (sdl:simulation "lid-driven-cavity" :dim 2
-               (sdl:domain (sdl:box '(0 0) '(1 1)) :mesh :n '(40 40))
+               (domain (box (0 0) (1 1)) :mesh :n (40 40))
 
-               (sdl:boundaries
-                 '((lid    (= y 1))
-                   (bottom (= y 0))
-                   (left   (= x 0))
-                   (right  (= x 1))))
+               (boundaries
+                 (lid    (= y 1))
+                 (bottom (= y 0))
+                 (left   (= x 0))
+                 (right  (= x 1)))
 
-               (sdl:physics :navier-stokes :Re 100
-                 '((lid :velocity (1 0))
-                   (bottom :no-slip)
-                   (left :no-slip)
-                   (right :no-slip)))
+               (physics :navier-stokes :Re 100
+                 (bc lid    :velocity (1 0))
+                 (bc bottom :no-slip)
+                 (bc left   :no-slip)
+                 (bc right  :no-slip))
 
-               (sdl:time :dt 0.001 :end 10.0)
+               (time :dt 0.001 :end 10.0)
 
-               (sdl:output :vtk :every 0.1))))
+               (output :vtk :every 0.1))))
     (check-not-null sim "Simulation created")
     (check-equal (sdl:simulation-name sim) "lid-driven-cavity" "Simulation name")
     (check-equal (sdl:simulation-dim sim) 2 "Simulation dimension")
@@ -458,31 +458,31 @@
 (define-test test-simulation-multiphysics
   "Test multiphysics simulation definition."
   (let ((sim (sdl:simulation "conjugate-heat" :dim 2
-               (sdl:domain (sdl:box '(0 0) '(2 1)) :mesh :n '(80 40))
+               (domain (box (0 0) (2 1)) :mesh :n (80 40))
 
-               (sdl:subdomains
-                 '((fluid (< x 1))
-                   (solid (>= x 1))))
+               (subdomains
+                 (fluid (< x 1))
+                 (solid (>= x 1)))
 
-               (sdl:boundaries
-                 '((inlet (= x 0))
-                   (outlet (= x 2))
-                   (walls (or (= y 0) (= y 1)))))
+               (boundaries
+                 (inlet  (= x 0))
+                 (outlet (= x 2))
+                 (walls  (or (= y 0) (= y 1))))
 
-               (sdl:physics :flow :navier-stokes
-                 :subdomain 'fluid
+               (physics :flow :navier-stokes
+                 :subdomain fluid
                  :Re 100
-                 '((inlet :velocity (0.1 0))
-                   (outlet :pressure 0)
-                   (walls :no-slip)))
+                 (bc inlet  :velocity (0.1 0))
+                 (bc outlet :pressure 0)
+                 (bc walls  :no-slip))
 
-               (sdl:physics :thermal :heat-conduction
-                 '((inlet :temperature 20)
-                   (outlet :outflow)
-                   (walls :insulated)))
+               (physics :thermal :heat-conduction
+                 (bc inlet  :temperature 20)
+                 (bc outlet :outflow)
+                 (bc walls  :insulated))
 
-               (sdl:coupling :flow-thermal
-                 :physics '(flow thermal)
+               (coupling :flow-thermal
+                 :physics (flow thermal)
                  :type :sequential))))
     (check-not-null sim "Multiphysics simulation created")
     (check-equal (length (sdl:simulation-subdomains sim)) 2 "Two subdomains")

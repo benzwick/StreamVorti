@@ -202,7 +202,7 @@
 
 (defpackage :sdl
   (:use :cl :streamvorti.geometry)
-  (:shadow #:time #:box #:method)
+  (:shadow #:box #:method)
   (:documentation "Simulation Definition Language v2 for StreamVorti")
   (:export
    ;; Geometry wrappers
@@ -240,6 +240,7 @@
    #:physics-type
    #:physics-Re
    #:physics-conductivity
+   #:physics-formulation
    #:physics-bcs
    ;; Boundary conditions
    #:make-bc
@@ -289,13 +290,6 @@
    #:coupling-physics
    #:coupling-iterations
    #:coupling-interface
-   ;; Simulation helpers (used inside simulation macro)
-   #:boundaries
-   #:physics
-   #:time
-   #:output
-   #:subdomains
-   #:coupling
    ;; Simulation
    #:simulation
    #:simulation-name
@@ -305,4 +299,5 @@
    #:simulation-physics
    #:simulation-subdomains
    #:simulation-physics-list
+   #:simulation-method
    #:simulation-coupling))

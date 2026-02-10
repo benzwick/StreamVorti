@@ -313,7 +313,7 @@
 
 (defstruct (physics-data (:constructor %make-physics)
                          (:conc-name physics-))
-  name type (Re nil) (conductivity nil) subdomain bcs)
+  name type (Re nil) (conductivity nil) (formulation nil) subdomain bcs)
 
 (defun parse-bc-spec (spec)
   "Parse a boundary condition specification like (lid :velocity (1 0))."
