@@ -27,6 +27,36 @@
   (:documentation "Test if shape contains point"))
 
 ;;; ============================================================
+;;; 1D Shapes
+;;; ============================================================
+
+(defclass interval (shape)
+  ((min-corner :initarg :min-corner
+               :accessor interval-min-corner
+               :documentation "Minimum point (x)")
+   (max-corner :initarg :max-corner
+               :accessor interval-max-corner
+               :documentation "Maximum point (x)"))
+  (:default-initargs :dimension 1)
+  (:documentation "1D interval region"))
+
+(defmethod shape-bounds ((shape interval))
+  (list (interval-min-corner shape)
+        (interval-max-corner shape)))
+
+(defmethod shape-contains-p ((shape interval) point)
+  (let ((x (if (listp point) (first point) point))
+        (min-x (first (interval-min-corner shape)))
+        (max-x (first (interval-max-corner shape))))
+    (and (>= x min-x) (<= x max-x))))
+
+(defmethod print-object ((obj interval) stream)
+  (print-unreadable-object (obj stream :type t)
+    (format stream "~A to ~A"
+            (interval-min-corner obj)
+            (interval-max-corner obj))))
+
+;;; ============================================================
 ;;; 2D Shapes
 ;;; ============================================================
 

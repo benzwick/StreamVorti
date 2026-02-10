@@ -62,6 +62,128 @@
                                   (declare (ignore x y))
                                   (< (abs (- z value)) tolerance))))
 
+;;; Comparison predicates
+
+(defun x-greater-than (value &optional (tolerance 0))
+  "Create predicate for x > value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :x
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore y z))
+                                  (> x value))))
+
+(defun y-greater-than (value &optional (tolerance 0))
+  "Create predicate for y > value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :y
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore x z))
+                                  (> y value))))
+
+(defun z-greater-than (value &optional (tolerance 0))
+  "Create predicate for z > value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :z
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore x y))
+                                  (> z value))))
+
+(defun x-less-than (value &optional (tolerance 0))
+  "Create predicate for x < value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :x
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore y z))
+                                  (< x value))))
+
+(defun y-less-than (value &optional (tolerance 0))
+  "Create predicate for y < value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :y
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore x z))
+                                  (< y value))))
+
+(defun z-less-than (value &optional (tolerance 0))
+  "Create predicate for z < value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :z
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore x y))
+                                  (< z value))))
+
+(defun x-greater-equal (value &optional (tolerance 0))
+  "Create predicate for x >= value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :x
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore y z))
+                                  (>= x value))))
+
+(defun y-greater-equal (value &optional (tolerance 0))
+  "Create predicate for y >= value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :y
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore x z))
+                                  (>= y value))))
+
+(defun z-greater-equal (value &optional (tolerance 0))
+  "Create predicate for z >= value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :z
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore x y))
+                                  (>= z value))))
+
+(defun x-less-equal (value &optional (tolerance 0))
+  "Create predicate for x <= value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :x
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore y z))
+                                  (<= x value))))
+
+(defun y-less-equal (value &optional (tolerance 0))
+  "Create predicate for y <= value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :y
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore x z))
+                                  (<= y value))))
+
+(defun z-less-equal (value &optional (tolerance 0))
+  "Create predicate for z <= value."
+  (declare (ignore tolerance))
+  (make-instance 'boundary-predicate
+                 :axis :z
+                 :value (coerce value 'double-float)
+                 :test-function (lambda (x y z)
+                                  (declare (ignore x y))
+                                  (<= z value))))
+
 (defun and-predicate (&rest predicates)
   "Create predicate that is true when all sub-predicates are true."
   (make-instance 'boundary-predicate
@@ -108,9 +230,46 @@
                       ((string= var-name "Y") `(y-equals ,val))
                       ((string= var-name "Z") `(z-equals ,val))
                       (t (error "Unknown variable in where: ~A" var))))))
-               ;; (< x value) etc - not yet implemented
-               ((and (listp e) (member (first e) '(< > <= >=)))
-                (error "Comparison ~A not yet implemented in where" (first e)))
+               ;; (> x value)
+               ((and (listp e) (eq (first e) '>))
+                (let ((var (second e))
+                      (val (third e)))
+                  (let ((var-name (symbol-name var)))
+                    (cond
+                      ((string= var-name "X") `(x-greater-than ,val))
+                      ((string= var-name "Y") `(y-greater-than ,val))
+                      ((string= var-name "Z") `(z-greater-than ,val))
+                      (t (error "Unknown variable in where: ~A" var))))))
+               ;; (< x value)
+               ((and (listp e) (eq (first e) '<))
+                (let ((var (second e))
+                      (val (third e)))
+                  (let ((var-name (symbol-name var)))
+                    (cond
+                      ((string= var-name "X") `(x-less-than ,val))
+                      ((string= var-name "Y") `(y-less-than ,val))
+                      ((string= var-name "Z") `(z-less-than ,val))
+                      (t (error "Unknown variable in where: ~A" var))))))
+               ;; (>= x value)
+               ((and (listp e) (eq (first e) '>=))
+                (let ((var (second e))
+                      (val (third e)))
+                  (let ((var-name (symbol-name var)))
+                    (cond
+                      ((string= var-name "X") `(x-greater-equal ,val))
+                      ((string= var-name "Y") `(y-greater-equal ,val))
+                      ((string= var-name "Z") `(z-greater-equal ,val))
+                      (t (error "Unknown variable in where: ~A" var))))))
+               ;; (<= x value)
+               ((and (listp e) (eq (first e) '<=))
+                (let ((var (second e))
+                      (val (third e)))
+                  (let ((var-name (symbol-name var)))
+                    (cond
+                      ((string= var-name "X") `(x-less-equal ,val))
+                      ((string= var-name "Y") `(y-less-equal ,val))
+                      ((string= var-name "Z") `(z-less-equal ,val))
+                      (t (error "Unknown variable in where: ~A" var))))))
                ;; (and ...)
                ((and (listp e) (eq (first e) 'and))
                 `(and-predicate ,@(mapcar #'transform (rest e))))

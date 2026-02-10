@@ -1,4 +1,4 @@
-;;;; sdl-macros.lisp - SDL macros for simulation definition
+;;;; sdl-macros.lisp - SDL v2 API implementation
 ;;;;
 ;;;; StreamVorti - Software for solving PDEs using explicit methods.
 ;;;; Copyright (C) 2026 Benjamin F. Zwick
@@ -10,583 +10,459 @@
 
 (in-package :sdl)
 
-;;; ============================================================
-;;; Global State
-;;; ============================================================
-
-(defvar *current-simulation* nil
-  "The current simulation being defined")
-
-(defun get-current-simulation ()
-  "Get the current simulation object."
-  *current-simulation*)
+;; SBCL considers make-method a reserved CL name (method is a standard class).
+;; Unlock the CL package to allow defining it.
+#+sbcl (sb-ext:unlock-package :common-lisp)
 
 ;;; ============================================================
-;;; Simulation Structure
+;;; Geometry Wrappers
 ;;; ============================================================
 
-(defstruct simulation-data
-  "Internal structure holding simulation data"
-  (name "unnamed" :type string)
-  (version 1 :type integer)
-  (dimension 2 :type integer)
-  (geometry-shapes nil :type list)
-  (mesh-spec nil)
-  (mesh nil)
-  (boundaries nil :type list)
-  (physics nil)
-  (discretization nil)
-  (solver nil)
-  (output nil))
+(defun box (min-corner max-corner)
+  "Create a box geometry, dispatching by dimension.
+   1D (single-element lists) -> interval
+   2D (two-element lists)    -> rectangle
+   3D (three-element lists)  -> box"
+  (ecase (length min-corner)
+    (1 (make-instance 'interval
+                      :min-corner (coerce min-corner 'list)
+                      :max-corner (coerce max-corner 'list)))
+    (2 (make-rectangle min-corner max-corner))
+    (3 (make-box min-corner max-corner))))
 
-;;; Accessors for C++ loader
-(defun get-name (obj)
-  "Get name from simulation-data or boundary-condition."
-  (typecase obj
-    (simulation-data (simulation-data-name obj))
-    (streamvorti.boundaries:boundary-condition
-     (streamvorti.boundaries:boundary-name obj))
-    (t nil)))
+(defun ball (center radius)
+  "Create a ball geometry, dispatching by dimension.
+   2D (two-element center) -> circle
+   3D (three-element center) -> sphere"
+  (ecase (length center)
+    (2 (make-circle center radius))
+    (3 (make-sphere center radius))))
 
-(defun get-version (sim)
-  (simulation-data-version sim))
+(defun geometry-dimension (geom)
+  "Return the spatial dimension of a geometry."
+  (shape-dimension geom))
 
-(defun get-dimension (sim)
-  (simulation-data-dimension sim))
+(defun geometry-min (geom)
+  "Return the minimum corner of a geometry as a list."
+  (typecase geom
+    (interval (interval-min-corner geom))
+    (rectangle (rectangle-min-corner geom))
+    (streamvorti.geometry:box (streamvorti.geometry:box-min-corner geom))))
 
-(defun get-mesh (sim)
-  (simulation-data-mesh-spec sim))
+(defun geometry-max (geom)
+  "Return the maximum corner of a geometry as a list."
+  (typecase geom
+    (interval (interval-max-corner geom))
+    (rectangle (rectangle-max-corner geom))
+    (streamvorti.geometry:box (streamvorti.geometry:box-max-corner geom))))
 
-(defun get-boundaries (sim)
-  (simulation-data-boundaries sim))
+(defun geometry-contains-p (geom point)
+  "Test if a geometry contains a point."
+  (shape-contains-p geom point))
 
-(defun get-physics (sim)
-  (simulation-data-physics sim))
+(defun ball-center (ball)
+  "Return the center of a ball geometry."
+  (typecase ball
+    (circle (circle-center ball))
+    (sphere (sphere-center ball))))
 
-(defun get-discretization (sim)
-  (simulation-data-discretization sim))
-
-(defun get-solver (sim)
-  (simulation-data-solver sim))
-
-(defun get-output (sim)
-  (simulation-data-output sim))
-
-;;; Generic property accessors for C++ bridge
-;;; These handle different object types (mesh-spec, physics-data, etc.)
-
-(defun get-type (obj)
-  "Get type property from various objects."
-  (typecase obj
-    (physics-data (physics-data-type obj))
-    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-type obj))
-    (streamvorti.boundaries:boundary-condition
-     (streamvorti.boundaries:boundary-type obj))
-    (t nil)))
-
-(defun get-path (obj)
-  "Get path property from mesh-spec."
-  (typecase obj
-    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-path obj))
-    (t nil)))
-
-(defun get-divisions (obj)
-  "Get divisions property from mesh-spec."
-  (typecase obj
-    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-divisions obj))
-    (t nil)))
-
-(defun get-element-type (obj)
-  "Get element-type property from mesh-spec."
-  (typecase obj
-    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-element-type obj))
-    (t nil)))
-
-(defun get-sizes (obj)
-  "Get sizes property from mesh-spec."
-  (typecase obj
-    (streamvorti.mesh:mesh-spec (streamvorti.mesh:mesh-spec-sizes obj))
-    (t nil)))
-
-(defun get-size-x (obj)
-  "Get size-x from mesh-spec (first element of sizes)."
-  (typecase obj
-    (streamvorti.mesh:mesh-spec
-     (first (streamvorti.mesh:mesh-spec-sizes obj)))
-    (t nil)))
-
-(defun get-size-y (obj)
-  "Get size-y from mesh-spec (second element of sizes)."
-  (typecase obj
-    (streamvorti.mesh:mesh-spec
-     (second (streamvorti.mesh:mesh-spec-sizes obj)))
-    (t nil)))
-
-(defun get-size-z (obj)
-  "Get size-z from mesh-spec (third element of sizes)."
-  (typecase obj
-    (streamvorti.mesh:mesh-spec
-     (third (streamvorti.mesh:mesh-spec-sizes obj)))
-    (t nil)))
-
-(defun get-formulation (obj)
-  "Get formulation from physics-data."
-  (typecase obj
-    (physics-data (physics-data-formulation obj))
-    (t nil)))
-
-(defun get-reynolds (obj)
-  "Get Reynolds number from physics-data."
-  (typecase obj
-    (physics-data (physics-data-reynolds obj))
-    (t nil)))
-
-(defun get-density (obj)
-  "Get density from physics-data."
-  (typecase obj
-    (physics-data (physics-data-density obj))
-    (t nil)))
-
-(defun get-viscosity (obj)
-  "Get viscosity from physics-data."
-  (typecase obj
-    (physics-data (physics-data-viscosity obj))
-    (t nil)))
-
-(defun get-method (obj)
-  "Get method from discretization-data."
-  (typecase obj
-    (discretization-data (discretization-data-method obj))
-    (t nil)))
-
-(defun get-num-neighbors (obj)
-  "Get num-neighbors from discretization-data."
-  (typecase obj
-    (discretization-data (discretization-data-num-neighbors obj))
-    (t nil)))
-
-(defun get-cutoff-radius (obj)
-  "Get cutoff-radius from discretization-data."
-  (typecase obj
-    (discretization-data (discretization-data-cutoff-radius obj))
-    (t nil)))
-
-(defun get-support-radius (obj)
-  "Get support-radius from discretization-data."
-  (typecase obj
-    (discretization-data (discretization-data-support-radius obj))
-    (t nil)))
-
-(defun get-timestepping (obj)
-  "Get timestepping from solver-data."
-  (typecase obj
-    (solver-data (solver-data-timestepping obj))
-    (t nil)))
-
-(defun get-dt (obj)
-  "Get dt from solver-data."
-  (typecase obj
-    (solver-data (solver-data-dt obj))
-    (t nil)))
-
-(defun get-end-time (obj)
-  "Get end-time from solver-data."
-  (typecase obj
-    (solver-data (solver-data-end-time obj))
-    (t nil)))
-
-(defun get-tolerance (obj)
-  "Get tolerance from solver-data."
-  (typecase obj
-    (solver-data (solver-data-tolerance obj))
-    (t nil)))
-
-(defun get-max-iterations (obj)
-  "Get max-iterations from solver-data."
-  (typecase obj
-    (solver-data (solver-data-max-iterations obj))
-    (t nil)))
-
-;;; Boundary condition accessors
-(defun get-attribute (obj)
-  "Get attribute from boundary-condition."
-  (typecase obj
-    (streamvorti.boundaries:boundary-condition
-     (streamvorti.boundaries:boundary-attribute obj))
-    (t nil)))
-
-(defun get-function (obj)
-  "Get function from boundary-condition or velocity plist."
-  (typecase obj
-    (streamvorti.boundaries:boundary-condition
-     (streamvorti.boundaries:boundary-function obj))
-    (cons (getf obj :function))  ; plist case
-    (t nil)))
-
-(defun get-u-function (obj)
-  "Get u-function from boundary-condition or velocity plist."
-  (typecase obj
-    (streamvorti.boundaries:boundary-condition
-     (streamvorti.boundaries:boundary-u-function obj))
-    (cons (getf obj :u-function))
-    (t nil)))
-
-(defun get-v-function (obj)
-  "Get v-function from boundary-condition or velocity plist."
-  (typecase obj
-    (streamvorti.boundaries:boundary-condition
-     (streamvorti.boundaries:boundary-v-function obj))
-    (cons (getf obj :v-function))
-    (t nil)))
-
-(defun get-w-function (obj)
-  "Get w-function from boundary-condition or velocity plist."
-  (typecase obj
-    (streamvorti.boundaries:boundary-condition
-     (streamvorti.boundaries:boundary-w-function obj))
-    (cons (getf obj :w-function))
-    (t nil)))
-
-(defun get-predicate (obj)
-  "Get predicate from boundary-condition."
-  (typecase obj
-    (streamvorti.boundaries:boundary-condition
-     (streamvorti.boundaries:boundary-predicate obj))
-    (t nil)))
-
-(defun get-predicate-axis (obj)
-  "Get the axis ('x', 'y', or 'z') from a simple coordinate predicate.
-   Returns the axis string or empty string if not a simple predicate."
-  (let ((pred (get-predicate obj)))
-    (when pred
-      (let ((axis (streamvorti.boundaries:predicate-axis pred)))
-        (case axis
-          (:x "x")
-          (:y "y")
-          (:z "z")
-          (t ""))))))
-
-(defun get-predicate-value (obj)
-  "Get the coordinate value from a simple coordinate predicate.
-   Returns the value or 0.0 if not determinable."
-  (let ((pred (get-predicate obj)))
-    (if pred
-        (streamvorti.boundaries:predicate-value pred)
-        0.0d0)))
-
-(defun get-predicate-tolerance (obj)
-  "Get the tolerance from a simple coordinate predicate."
-  (let ((pred (get-predicate obj)))
-    (if pred
-        (streamvorti.boundaries:predicate-tolerance pred)
-        1.0d-10)))
-
-(defun evaluate-predicate (bc x y &optional (z 0.0d0))
-  "Evaluate whether point (x,y,z) satisfies the boundary condition's predicate.
-   Returns T if the predicate matches, NIL otherwise."
-  (let ((pred (get-predicate bc)))
-    (when pred
-      (funcall (streamvorti.boundaries:predicate-test-function pred)
-               x y z))))
+(defun ball-radius (ball)
+  "Return the radius of a ball geometry."
+  (typecase ball
+    (circle (circle-radius ball))
+    (sphere (sphere-radius ball))))
 
 ;;; ============================================================
-;;; Physics Structure
+;;; Domain
 ;;; ============================================================
 
-(defstruct physics-data
-  (type :incompressible-navier-stokes)
-  (formulation :stream-vorticity)
-  (reynolds 100.0d0 :type double-float)
-  (density 1.0d0 :type double-float)
-  (viscosity 0.01d0 :type double-float))
+(defstruct (domain-data (:constructor %make-domain)
+                        (:conc-name domain-))
+  type dimension geometry n h file particle-count)
 
-;;; ============================================================
-;;; Discretization Structure
-;;; ============================================================
-
-(defstruct discretization-data
-  (method :dcpse)
-  (num-neighbors 25 :type integer)
-  (cutoff-radius 30.0d0 :type double-float)
-  (support-radius 5.0d0 :type double-float))
-
-;;; ============================================================
-;;; Solver Structure
-;;; ============================================================
-
-(defstruct solver-data
-  (timestepping :explicit-euler)
-  (dt 0.001d0 :type double-float)
-  (end-time 1.0d0 :type double-float)
-  (tolerance 1.0d-6 :type double-float)
-  (max-iterations 10000 :type integer))
-
-;;; ============================================================
-;;; Output Structure
-;;; ============================================================
-
-(defstruct output-data
-  (format :vtk)
-  (interval 0.1d0 :type double-float)
-  (directory "results/" :type string)
-  (fields '(vorticity streamfunction velocity) :type list))
-
-;;; Output data accessors (must be after defstruct)
-(defun get-format (obj)
-  "Get format from output-data."
-  (typecase obj
-    (output-data (output-data-format obj))
-    (t nil)))
-
-(defun get-interval (obj)
-  "Get interval from output-data."
-  (typecase obj
-    (output-data (output-data-interval obj))
-    (t nil)))
-
-(defun get-directory (obj)
-  "Get directory from output-data."
-  (typecase obj
-    (output-data (output-data-directory obj))
-    (t nil)))
-
-(defun get-fields (obj)
-  "Get fields from output-data."
-  (typecase obj
-    (output-data (output-data-fields obj))
-    (t nil)))
-
-;;; ============================================================
-;;; Main Simulation Macro
-;;; ============================================================
-
-(defmacro simulation (&rest args)
-  "Define a simulation.
+(defun domain (&rest args)
+  "Create a domain.
 
    Usage:
-   (simulation
-     :name \"cavity-flow\"
-     :version 1
-     :dimension 2
+   (domain geometry :mesh :n '(10 10))
+   (domain geometry :points :n '(20 20))
+   (domain geometry :points :h 0.05)
+   (domain geometry :particles :n 1000)
+   (domain :file \"path.mesh\")"
+  (cond
+    ;; File domain: (domain :file "path")
+    ((eq (first args) :file)
+     (%make-domain :type :file :file (second args)))
+    ;; Geometry-based domain: (domain geom type &key ...)
+    (t
+     (let* ((geom (first args))
+            (type (second args))
+            (rest (cddr args))
+            (n nil) (h nil) (particle-count nil))
+       ;; Parse keyword args
+       (loop with r = rest
+             while r
+             do (cond
+                  ((eq (car r) :n)
+                   (if (eq type :particles)
+                       (setf particle-count (cadr r))
+                       (setf n (cadr r)))
+                   (setf r (cddr r)))
+                  ((eq (car r) :h)
+                   (setf h (cadr r))
+                   (setf r (cddr r)))
+                  (t (setf r (cdr r)))))
+       (%make-domain
+        :type type
+        :dimension (shape-dimension geom)
+        :geometry geom
+        :n n
+        :h (when h (coerce h 'double-float))
+        :particle-count particle-count)))))
 
-     (geometry ...)
-     (mesh ...)
-     (boundaries ...)
-     (physics ...)
-     (discretization ...)
-     (solver ...)
-     (output ...))"
-  (let ((sim (gensym "SIM"))
-        (name "unnamed")
-        (version 1)
-        (dimension 2)
-        (body-clauses nil))
-    ;; Parse args: extract keyword options and collect body clauses
+;;; ============================================================
+;;; Predicates
+;;; ============================================================
+
+(defstruct (predicate-data (:constructor %make-predicate)
+                           (:conc-name predicate-))
+  test-fn)
+
+(defun coord-index (sym)
+  "Map a coordinate symbol to its index in a point list."
+  (let ((name (string-upcase (symbol-name sym))))
+    (cond
+      ((string= name "X") 0)
+      ((string= name "Y") 1)
+      ((string= name "Z") 2)
+      (t (error "Unknown coordinate: ~A" sym)))))
+
+(defun compile-predicate-expr (expr)
+  "Compile an S-expression predicate to a test function (point) -> boolean."
+  (let ((op (first expr)))
+    (cond
+      ;; (= coord value)
+      ((string= (symbol-name op) "=")
+       (let ((idx (coord-index (second expr)))
+             (val (coerce (third expr) 'double-float)))
+         (lambda (point)
+           (< (abs (- (nth idx point) val)) 1.0d-10))))
+      ;; (> coord value)
+      ((string= (symbol-name op) ">")
+       (let ((idx (coord-index (second expr)))
+             (val (coerce (third expr) 'double-float)))
+         (lambda (point)
+           (> (nth idx point) val))))
+      ;; (< coord value)
+      ((string= (symbol-name op) "<")
+       (let ((idx (coord-index (second expr)))
+             (val (coerce (third expr) 'double-float)))
+         (lambda (point)
+           (< (nth idx point) val))))
+      ;; (>= coord value)
+      ((string= (symbol-name op) ">=")
+       (let ((idx (coord-index (second expr)))
+             (val (coerce (third expr) 'double-float)))
+         (lambda (point)
+           (>= (nth idx point) val))))
+      ;; (<= coord value)
+      ((string= (symbol-name op) "<=")
+       (let ((idx (coord-index (second expr)))
+             (val (coerce (third expr) 'double-float)))
+         (lambda (point)
+           (<= (nth idx point) val))))
+      ;; (and ...)
+      ((string= (symbol-name op) "AND")
+       (let ((sub-fns (mapcar #'compile-predicate-expr (rest expr))))
+         (lambda (point)
+           (every (lambda (fn) (funcall fn point)) sub-fns))))
+      ;; (or ...)
+      ((string= (symbol-name op) "OR")
+       (let ((sub-fns (mapcar #'compile-predicate-expr (rest expr))))
+         (lambda (point)
+           (some (lambda (fn) (funcall fn point)) sub-fns))))
+      ;; (not ...)
+      ((string= (symbol-name op) "NOT")
+       (let ((sub-fn (compile-predicate-expr (second expr))))
+         (lambda (point)
+           (not (funcall sub-fn point)))))
+      (t (error "Unknown predicate operator: ~A" op)))))
+
+(defun make-predicate (expr)
+  "Create a predicate from an S-expression.
+
+   Supported forms:
+   (= x 0)    (= y 1)    (= z 0.5)
+   (> x 0)    (< x 1)    (>= x 0)    (<= x 1)
+   (and ...)  (or ...)   (not ...)"
+  (%make-predicate :test-fn (compile-predicate-expr expr)))
+
+(defun predicate-matches-p (pred point)
+  "Test if a point matches a predicate."
+  (funcall (predicate-test-fn pred) point))
+
+;;; ============================================================
+;;; Boundary Selectors
+;;; ============================================================
+
+(defstruct (boundary-selector-data (:constructor %make-boundary-selector)
+                                   (:conc-name selector-))
+  type attribute)
+
+(defun make-boundary-selector (spec)
+  "Create a boundary selector from a specification.
+   Example: (make-boundary-selector '(attribute 3))"
+  (let ((type-name (string-upcase (symbol-name (first spec)))))
+    (cond
+      ((string= type-name "ATTRIBUTE")
+       (%make-boundary-selector :type :attribute :attribute (second spec)))
+      (t (error "Unknown selector type: ~A" (first spec))))))
+
+;;; ============================================================
+;;; Boundaries
+;;; ============================================================
+
+(defstruct (boundary-def (:constructor %make-boundary-def)
+                         (:conc-name boundary-))
+  name predicate)
+
+(defstruct (boundary-set (:constructor %make-boundary-set))
+  defs)
+
+(defun make-boundaries (specs)
+  "Create boundary definitions from a specification list.
+
+   Example:
+   (make-boundaries '((lid (= y 1))
+                      (walls (or (= x 0) (= x 1)))))"
+  (mapcar (lambda (spec)
+            (%make-boundary-def
+             :name (first spec)
+             :predicate (make-predicate (second spec))))
+          specs))
+
+;;; ============================================================
+;;; Subdomains
+;;; ============================================================
+
+(defstruct (subdomain-def (:constructor %make-subdomain-def)
+                          (:conc-name subdomain-))
+  name predicate)
+
+(defstruct (subdomain-set (:constructor %make-subdomain-set))
+  defs)
+
+(defun make-subdomains (specs)
+  "Create subdomain definitions from a specification list.
+
+   Example:
+   (make-subdomains '((fluid (< x 0.5))
+                      (solid (>= x 0.5))))"
+  (mapcar (lambda (spec)
+            (%make-subdomain-def
+             :name (first spec)
+             :predicate (make-predicate (second spec))))
+          specs))
+
+;;; ============================================================
+;;; Boundary Conditions
+;;; ============================================================
+
+(defstruct (bc-data (:constructor %make-bc)
+                    (:conc-name bc-))
+  type boundary value function h T-inf)
+
+(defun make-bc (boundary type &rest args)
+  "Create a boundary condition.
+
+   Examples:
+   (make-bc 'inlet :velocity '(1 0 0))
+   (make-bc 'wall :no-slip)
+   (make-bc 'outlet :pressure 0)
+   (make-bc 'surface :convection :h 10 :T-inf 20)
+   (make-bc 'inlet :velocity :fn (lambda (x y z) ...))"
+  (let ((value nil) (fn nil) (h nil) (T-inf nil))
+    ;; Parse args
     (loop with rest = args
           while rest
-          for item = (car rest)
           do (cond
-               ;; Keyword argument
-               ((eq item :name)
-                (setf name (cadr rest))
+               ((eq (car rest) :fn)
+                (setf fn (cadr rest))
                 (setf rest (cddr rest)))
-               ((eq item :version)
-                (setf version (cadr rest))
+               ((eq (car rest) :h)
+                (setf h (cadr rest))
                 (setf rest (cddr rest)))
-               ((eq item :dimension)
-                (setf dimension (cadr rest))
+               ((eq (car rest) :T-inf)
+                (setf T-inf (cadr rest))
                 (setf rest (cddr rest)))
-               ;; Body clause (list starting with symbol)
-               ((and (listp item) (symbolp (car item)))
-                (push item body-clauses)
-                (setf rest (cdr rest)))
-               ;; Skip anything else
+               ;; Positional value
                (t
+                (setf value (car rest))
                 (setf rest (cdr rest)))))
-    (setf body-clauses (nreverse body-clauses))
-    `(let ((,sim (make-simulation-data
-                  :name ,name
-                  :version ,version
-                  :dimension ,dimension)))
-       (setf *current-simulation* ,sim)
-       ,@(mapcar (lambda (clause)
-                   `(process-clause ,sim ',clause))
-                 body-clauses)
-       ,sim)))
-
-(defgeneric process-clause (sim clause)
-  (:documentation "Process a simulation clause"))
-
-(defmethod process-clause (sim (clause list))
-  "Process a clause based on its first element."
-  (case (first clause)
-    (geometry (process-geometry-clause sim (rest clause)))
-    (mesh (process-mesh-clause sim (rest clause)))
-    (boundaries (process-boundaries-clause sim (rest clause)))
-    (physics (process-physics-clause sim (rest clause)))
-    (discretization (process-discretization-clause sim (rest clause)))
-    (solver (process-solver-clause sim (rest clause)))
-    (output (process-output-clause sim (rest clause)))
-    (otherwise
-     (warn "Unknown clause type: ~A" (first clause)))))
+    (%make-bc
+     :boundary boundary
+     :type type
+     :value value
+     :function fn
+     :h (when h (coerce h 'double-float))
+     :T-inf (when T-inf (coerce T-inf 'double-float)))))
 
 ;;; ============================================================
-;;; Clause Processors
+;;; Physics
 ;;; ============================================================
 
-(defun process-geometry-clause (sim body)
-  "Process geometry definitions."
-  ;; Execute body forms and collect defined shapes
-  (dolist (form body)
-    (when (and (listp form) (eq (first form) 'defparameter))
-      (eval form)
-      (let ((shape (symbol-value (second form))))
-        (when (typep shape 'streamvorti.geometry:shape)
-          (push shape (simulation-data-geometry-shapes sim)))))))
+(defstruct (physics-data (:constructor %make-physics)
+                         (:conc-name physics-))
+  name type (Re nil) (conductivity nil) subdomain bcs)
 
-(defun process-mesh-clause (sim body)
-  "Process mesh specification."
-  (let ((mesh-spec nil))
-    (dolist (form body)
-      (cond
-        ;; (generate shape ...)
-        ((and (listp form) (eq (first form) 'generate))
-         (let* ((geometry (eval (second form)))
-                (options (cddr form))
-                (type (or (getf options :type) :quad))
-                ;; Evaluate divisions since it may be quoted '(40 40)
-                (divisions-raw (or (getf options :divisions) '(10 10)))
-                (divisions (if (and (listp divisions-raw)
-                                    (eq (first divisions-raw) 'quote))
-                               (second divisions-raw)
-                               divisions-raw)))
-           (setf mesh-spec
-                 (streamvorti.mesh:make-mesh-spec-generate
-                  geometry :type type :divisions divisions))))
-        ;; (load path ...)
-        ((and (listp form) (eq (first form) 'load-mesh))
-         (let* ((path (second form))
-                (format (or (getf (cddr form) :format) :auto)))
-           (setf mesh-spec
-                 (streamvorti.mesh:make-mesh-spec-load path :format format))))))
-    (setf (simulation-data-mesh-spec sim) mesh-spec)))
+(defun parse-bc-spec (spec)
+  "Parse a boundary condition specification like (lid :velocity (1 0))."
+  (let ((boundary (first spec))
+        (type (second spec))
+        (value (third spec)))
+    (%make-bc :boundary boundary :type type :value value)))
 
-(defun process-boundaries-clause (sim body)
-  "Process boundary conditions."
-  (let ((boundaries nil))
-    (dolist (form body)
-      (cond
-        ;; (defun ...) - define BC function
-        ((and (listp form) (eq (first form) 'defun))
-         (eval form))
-        ;; (region ...) - define BC region
-        ((and (listp form) (eq (first form) 'region))
-         (push (eval form) boundaries))))
-    (setf (simulation-data-boundaries sim) (nreverse boundaries))))
+(defun make-physics (&key type Re conductivity bcs)
+  "Create a physics definition.
 
-(defun process-physics-clause (sim body)
-  "Process physics parameters."
-  (let ((physics (make-physics-data)))
-    (loop for (key value) on body by #'cddr do
-      (case key
-        (:type (setf (physics-data-type physics) value))
-        (:formulation (setf (physics-data-formulation physics) value))
-        (:reynolds (setf (physics-data-reynolds physics) (coerce value 'double-float)))
-        (:density (setf (physics-data-density physics) (coerce value 'double-float)))
-        (:viscosity (setf (physics-data-viscosity physics) (coerce value 'double-float)))))
-    (setf (simulation-data-physics sim) physics)))
-
-(defun process-discretization-clause (sim body)
-  "Process discretization parameters."
-  (let ((disc (make-discretization-data)))
-    (loop for (key value) on body by #'cddr do
-      (case key
-        (:method (setf (discretization-data-method disc) value))
-        (:num-neighbors (setf (discretization-data-num-neighbors disc) value))
-        (:cutoff-radius (setf (discretization-data-cutoff-radius disc)
-                              (coerce value 'double-float)))
-        (:support-radius (setf (discretization-data-support-radius disc)
-                               (coerce value 'double-float)))))
-    (setf (simulation-data-discretization sim) disc)))
-
-(defun process-solver-clause (sim body)
-  "Process solver parameters."
-  (let ((solver (make-solver-data)))
-    (loop for (key value) on body by #'cddr do
-      (case key
-        (:timestepping (setf (solver-data-timestepping solver) value))
-        (:dt (setf (solver-data-dt solver) (coerce value 'double-float)))
-        (:end-time (setf (solver-data-end-time solver) (coerce value 'double-float)))
-        (:tolerance (setf (solver-data-tolerance solver) (coerce value 'double-float)))
-        (:max-iterations (setf (solver-data-max-iterations solver) value))))
-    (setf (simulation-data-solver sim) solver)))
-
-(defun process-output-clause (sim body)
-  "Process output configuration."
-  (let ((output (make-output-data)))
-    (loop for (key value) on body by #'cddr do
-      (case key
-        (:format (setf (output-data-format output) value))
-        (:interval (setf (output-data-interval output) (coerce value 'double-float)))
-        (:directory (setf (output-data-directory output) value))
-        (:fields (setf (output-data-fields output) value))))
-    (setf (simulation-data-output sim) output)))
+   Example:
+   (make-physics :type :navier-stokes :Re 100
+                 :bcs '((lid :velocity (1 0))
+                        (walls :no-slip)))"
+  (%make-physics
+   :type type
+   :Re (when Re (coerce Re 'double-float))
+   :conductivity (when conductivity (coerce conductivity 'double-float))
+   :bcs (when bcs (mapcar #'parse-bc-spec bcs))))
 
 ;;; ============================================================
-;;; Convenience Macros for SDL
+;;; Methods (Discretization)
 ;;; ============================================================
 
-(defmacro geometry (&body body)
-  "Define geometry shapes.
-   This macro is used within simulation definition."
-  `(progn ,@body))
+(defstruct (method-data (:constructor %make-method)
+                        (:conc-name method-))
+  type neighbors support-radius order kernel h)
 
-(defmacro mesh (&body body)
-  "Define mesh generation/loading.
-   This macro is used within simulation definition."
-  `(progn ,@body))
+(defun make-method (type &key neighbors support-radius order kernel h)
+  "Create a discretization method.
 
-(defmacro boundaries (&body body)
-  "Define boundary conditions.
-   This macro is used within simulation definition."
-  `(progn ,@body))
-
-(defmacro physics (&body options)
-  "Define physics parameters.
-   This macro is used within simulation definition."
-  (declare (ignore options))
-  nil)
-
-(defmacro discretization (&body options)
-  "Define discretization parameters.
-   This macro is used within simulation definition."
-  (declare (ignore options))
-  nil)
-
-(defmacro solver (&body options)
-  "Define solver parameters.
-   This macro is used within simulation definition."
-  (declare (ignore options))
-  nil)
-
-(defmacro output (&body options)
-  "Define output configuration.
-   This macro is used within simulation definition."
-  (declare (ignore options))
-  nil)
-
-(defmacro generate (geometry &rest options)
-  "Generate a mesh from geometry."
-  `(streamvorti.mesh:generate-mesh ,geometry ,@options))
+   Examples:
+   (make-method :dcpse :neighbors 25 :support-radius 3.5)
+   (make-method :fem :order 2)
+   (make-method :sph :kernel :wendland :h 0.02)"
+  (%make-method
+   :type type
+   :neighbors neighbors
+   :support-radius (when support-radius (coerce support-radius 'double-float))
+   :order order
+   :kernel kernel
+   :h (when h (coerce h 'double-float))))
 
 ;;; ============================================================
-;;; Simulation Loading
+;;; Solvers
 ;;; ============================================================
 
-(defun load-simulation (path)
-  "Load a simulation definition from file."
-  (setf *current-simulation* nil)
-  (load path)
-  (unless *current-simulation*
-    (error "No simulation defined in ~A" path))
-  *current-simulation*)
+(defstruct (solver-data (:constructor %make-solver)
+                        (:conc-name solver-))
+  method dt end tolerance)
+
+(defun make-time-solver (&key method dt end)
+  "Create a time integration solver.
+
+   Example:
+   (make-time-solver :method :bdf2 :dt 0.001 :end 10.0)"
+  (%make-solver
+   :method method
+   :dt (when dt (coerce dt 'double-float))
+   :end (when end (coerce end 'double-float))))
+
+(defun make-steady-solver (&key method tolerance)
+  "Create a steady-state solver.
+
+   Example:
+   (make-steady-solver :method :newton :tolerance 1e-8)"
+  (%make-solver
+   :method method
+   :tolerance (when tolerance (coerce tolerance 'double-float))))
+
+(defstruct (linear-solver-data (:constructor %make-linear-solver)
+                               (:conc-name linear-solver-))
+  method preconditioner)
+
+(defun make-linear-solver (&key method preconditioner)
+  "Create a linear solver configuration.
+
+   Example:
+   (make-linear-solver :method :gmres :preconditioner :ilu)"
+  (%make-linear-solver
+   :method method
+   :preconditioner preconditioner))
+
+;;; ============================================================
+;;; Materials
+;;; ============================================================
+
+(defstruct (material-data (:constructor %make-material)
+                          (:conc-name material-))
+  name density youngs-modulus poissons-ratio viscosity conductivity)
+
+(defun make-material (name &key density youngs-modulus poissons-ratio
+                               viscosity conductivity)
+  "Create a material definition.
+
+   Examples:
+   (make-material 'steel :density 7850 :youngs-modulus 200e9 :poissons-ratio 0.3)
+   (make-material 'water :density 1000 :viscosity 0.001 :conductivity 0.6)"
+  (%make-material
+   :name name
+   :density (when density (coerce density 'double-float))
+   :youngs-modulus (when youngs-modulus (coerce youngs-modulus 'double-float))
+   :poissons-ratio (when poissons-ratio (coerce poissons-ratio 'double-float))
+   :viscosity (when viscosity (coerce viscosity 'double-float))
+   :conductivity (when conductivity (coerce conductivity 'double-float))))
+
+;;; ============================================================
+;;; Output
+;;; ============================================================
+
+(defstruct (output-data (:constructor %make-output)
+                        (:conc-name output-))
+  format directory interval fields probes)
+
+(defun make-output (&key format directory every fields probes)
+  "Create output configuration.
+
+   Example:
+   (make-output :format :vtk :directory \"results/\" :every 0.1
+                :fields '(velocity pressure))"
+  (%make-output
+   :format format
+   :directory directory
+   :interval (when every (coerce every 'double-float))
+   :fields fields
+   :probes probes))
+
+;;; ============================================================
+;;; Coupling (Multiphysics)
+;;; ============================================================
+
+(defstruct (coupling-data (:constructor %make-coupling)
+                          (:conc-name coupling-))
+  name physics type iterations interface)
+
+(defun make-coupling (&key name physics type iterations interface)
+  "Create a multiphysics coupling definition.
+
+   Examples:
+   (make-coupling :name :thermal-flow :physics '(thermal flow)
+                  :type :sequential :iterations 10)
+   (make-coupling :name :fsi :physics '(fluid structure)
+                  :type :monolithic :interface 'moving-wall)"
+  (%make-coupling
+   :name name
+   :physics physics
+   :type type
+   :iterations iterations
+   :interface interface))
+
+#+sbcl (sb-ext:lock-package :common-lisp)

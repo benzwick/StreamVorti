@@ -1,4 +1,4 @@
-;;;; simulation.lisp - High-level simulation interface
+;;;; simulation.lisp - SDL v2 simulation assembly
 ;;;;
 ;;;; StreamVorti - Software for solving PDEs using explicit methods.
 ;;;; Copyright (C) 2026 Benjamin F. Zwick
@@ -11,135 +11,230 @@
 (in-package :sdl)
 
 ;;; ============================================================
-;;; Simulation Accessors (for C++ interop)
+;;; Simulation Structure
+;;; ============================================================
+
+(defstruct (sim-data (:constructor %make-sim)
+                     (:conc-name sim-))
+  name dim domain boundaries subdomains physics-list
+  time-solver output-config coupling)
+
+;;; ============================================================
+;;; Simulation Helper Functions
+;;; ============================================================
+
+(defun boundaries (specs)
+  "Create a boundary set for use in a simulation definition.
+   Returns a tagged wrapper so simulation can identify it.
+
+   Example:
+   (boundaries '((lid (= y 1))
+                 (walls (or (= x 0) (= x 1)))))"
+  (%make-boundary-set :defs (make-boundaries specs)))
+
+(defvar *known-physics-types*
+  '(:navier-stokes :heat-conduction :stokes :euler :laplace :diffusion
+    :elasticity :poisson)
+  "Known physics type keywords for parsing physics helper arguments.")
+
+(defun physics (&rest args)
+  "Create a physics definition for use in a simulation definition.
+
+   Single physics:
+   (physics :navier-stokes :Re 100 '((lid :velocity (1 0)) ...))
+
+   Named physics (for multiphysics):
+   (physics :flow :navier-stokes :Re 100 :subdomain 'fluid '((lid ...) ...))
+   (physics :thermal :heat-conduction '((inlet :temperature 20) ...))"
+  (let* (;; Last arg is always the BCs list
+         (bc-specs (car (last args)))
+         (rest-args (butlast args))
+         ;; Parse name and type
+         (name nil) (type nil) (keywords nil))
+    ;; Determine if first arg is a name or a type
+    (cond
+      ;; Two keywords at start, second is a known type -> first is name
+      ((and (>= (length rest-args) 2)
+            (keywordp (first rest-args))
+            (keywordp (second rest-args))
+            (member (second rest-args) *known-physics-types*))
+       (setf name (first rest-args))
+       (setf type (second rest-args))
+       (setf keywords (cddr rest-args)))
+      ;; First is a keyword (known or not) -> it's the type
+      ((and (>= (length rest-args) 1)
+            (keywordp (first rest-args)))
+       (setf type (first rest-args))
+       (setf keywords (cdr rest-args)))
+      (t (error "Invalid physics arguments: ~S" args)))
+    ;; Parse keyword pairs from remaining args
+    (let ((Re nil) (conductivity nil) (subdomain nil))
+      (loop with r = keywords
+            while r
+            do (cond
+                 ((eq (car r) :Re)
+                  (setf Re (cadr r)) (setf r (cddr r)))
+                 ((eq (car r) :conductivity)
+                  (setf conductivity (cadr r)) (setf r (cddr r)))
+                 ((eq (car r) :subdomain)
+                  (setf subdomain (cadr r)) (setf r (cddr r)))
+                 (t (setf r (cdr r)))))
+      ;; Create physics with parsed BCs
+      (%make-physics
+       :name name
+       :type type
+       :Re (when Re (coerce Re 'double-float))
+       :conductivity (when conductivity (coerce conductivity 'double-float))
+       :subdomain subdomain
+       :bcs (when bc-specs (mapcar #'parse-bc-spec bc-specs))))))
+
+(defun time (&key dt end (method nil))
+  "Create a time solver for use in a simulation definition.
+
+   Example:
+   (time :dt 0.001 :end 10.0)"
+  (%make-solver
+   :method method
+   :dt (when dt (coerce dt 'double-float))
+   :end (when end (coerce end 'double-float))))
+
+(defun output (format &rest args)
+  "Create output configuration for use in a simulation definition.
+
+   Example:
+   (output :vtk :every 0.1)"
+  (let ((every nil) (directory nil) (fields nil) (probes nil))
+    (loop with rest = args
+          while rest
+          do (cond
+               ((eq (car rest) :every)
+                (setf every (cadr rest)) (setf rest (cddr rest)))
+               ((eq (car rest) :directory)
+                (setf directory (cadr rest)) (setf rest (cddr rest)))
+               ((eq (car rest) :fields)
+                (setf fields (cadr rest)) (setf rest (cddr rest)))
+               ((eq (car rest) :probes)
+                (setf probes (cadr rest)) (setf rest (cddr rest)))
+               (t (setf rest (cdr rest)))))
+    (%make-output
+     :format format
+     :directory directory
+     :interval (when every (coerce every 'double-float))
+     :fields fields
+     :probes probes)))
+
+(defun subdomains (specs)
+  "Create a subdomain set for use in a simulation definition.
+
+   Example:
+   (subdomains '((fluid (< x 0.5))
+                 (solid (>= x 0.5))))"
+  (%make-subdomain-set :defs (make-subdomains specs)))
+
+(defun coupling (name &key physics type iterations interface)
+  "Create a coupling definition for use in a simulation definition.
+
+   Example:
+   (coupling :flow-thermal :physics '(flow thermal) :type :sequential)"
+  (%make-coupling
+   :name name
+   :physics physics
+   :type type
+   :iterations iterations
+   :interface interface))
+
+;;; ============================================================
+;;; Simulation Component Dispatch
+;;; ============================================================
+
+(defun %sim-add (sim obj)
+  "Add a component to a simulation by dispatching on type."
+  (typecase obj
+    (domain-data
+     (setf (sim-domain sim) obj))
+    (boundary-set
+     (setf (sim-boundaries sim) (boundary-set-defs obj)))
+    (subdomain-set
+     (setf (sim-subdomains sim) (subdomain-set-defs obj)))
+    (physics-data
+     (push obj (sim-physics-list sim)))
+    (solver-data
+     (setf (sim-time-solver sim) obj))
+    (output-data
+     (setf (sim-output-config sim) obj))
+    (coupling-data
+     (setf (sim-coupling sim) obj))
+    (t (warn "Unknown simulation component type: ~A" (type-of obj)))))
+
+;;; ============================================================
+;;; Simulation Macro
+;;; ============================================================
+
+(defmacro simulation (name &rest args)
+  "Define a complete simulation.
+
+   Example:
+   (simulation \"lid-driven-cavity\" :dim 2
+     (domain (box '(0 0) '(1 1)) :mesh :n '(40 40))
+     (boundaries '((lid (= y 1)) (walls (or (= x 0) (= x 1)))))
+     (physics :navier-stokes :Re 100 '((lid :velocity (1 0))))
+     (time :dt 0.001 :end 10.0)
+     (output :vtk :every 0.1))"
+  (let ((dim 2)
+        (body-forms nil))
+    ;; Parse :dim from args, collect body forms
+    (loop with rest = args
+          while rest
+          do (cond
+               ((eq (car rest) :dim)
+                (setf dim (cadr rest))
+                (setf rest (cddr rest)))
+               (t
+                (push (car rest) body-forms)
+                (setf rest (cdr rest)))))
+    (setf body-forms (nreverse body-forms))
+    (let ((sim-var (gensym "SIM")))
+      `(let ((,sim-var (%make-sim :name ,name :dim ,dim)))
+         ,@(mapcar (lambda (form)
+                     `(%sim-add ,sim-var ,form))
+                   body-forms)
+         ;; Reverse physics list to preserve definition order
+         (setf (sim-physics-list ,sim-var)
+               (nreverse (sim-physics-list ,sim-var)))
+         ,sim-var))))
+
+;;; ============================================================
+;;; Simulation Accessors
 ;;; ============================================================
 
 (defun simulation-name (sim)
   "Get simulation name."
-  (simulation-data-name sim))
+  (sim-name sim))
 
-(defun simulation-dimension (sim)
+(defun simulation-dim (sim)
   "Get simulation dimension."
-  (simulation-data-dimension sim))
+  (sim-dim sim))
 
-(defun simulation-mesh (sim)
-  "Get simulation mesh specification."
-  (simulation-data-mesh-spec sim))
+(defun simulation-domain (sim)
+  "Get simulation domain."
+  (sim-domain sim))
 
 (defun simulation-boundaries (sim)
-  "Get simulation boundary conditions."
-  (simulation-data-boundaries sim))
+  "Get simulation boundary definitions."
+  (sim-boundaries sim))
 
 (defun simulation-physics (sim)
-  "Get simulation physics parameters."
-  (simulation-data-physics sim))
+  "Get the primary (first) physics definition."
+  (first (sim-physics-list sim)))
 
-(defun simulation-discretization (sim)
-  "Get simulation discretization parameters."
-  (simulation-data-discretization sim))
+(defun simulation-subdomains (sim)
+  "Get simulation subdomain definitions."
+  (sim-subdomains sim))
 
-(defun simulation-solver (sim)
-  "Get simulation solver parameters."
-  (simulation-data-solver sim))
+(defun simulation-physics-list (sim)
+  "Get all physics definitions."
+  (sim-physics-list sim))
 
-(defun simulation-output (sim)
-  "Get simulation output configuration."
-  (simulation-data-output sim))
-
-;;; ============================================================
-;;; Simulation Validation
-;;; ============================================================
-
-(defun validate-simulation (sim)
-  "Validate simulation configuration.
-   Returns list of errors, empty if valid."
-  (let ((errors nil))
-    ;; Check required fields
-    (unless (simulation-data-mesh-spec sim)
-      (push "Missing mesh specification" errors))
-
-    (unless (simulation-data-boundaries sim)
-      (push "No boundary conditions defined" errors))
-
-    ;; Check dimension consistency
-    (let ((dim (simulation-data-dimension sim)))
-      (unless (member dim '(2 3))
-        (push (format nil "Invalid dimension: ~A (must be 2 or 3)" dim) errors)))
-
-    (nreverse errors)))
-
-;;; ============================================================
-;;; Simulation Execution (Lisp-side, for future use)
-;;; ============================================================
-
-(defun realize-simulation (sim)
-  "Convert simulation specification to runtime objects.
-   Creates actual mesh and prepares for solving."
-  (let ((mesh-spec (simulation-data-mesh-spec sim)))
-    (when mesh-spec
-      (setf (simulation-data-mesh sim)
-            (streamvorti.mesh:realize-mesh-spec mesh-spec))))
-  sim)
-
-(defun print-simulation-summary (sim &optional (stream *standard-output*))
-  "Print a summary of the simulation configuration."
-  (format stream "~&Simulation: ~A~%" (simulation-data-name sim))
-  (format stream "  Version: ~D~%" (simulation-data-version sim))
-  (format stream "  Dimension: ~DD~%" (simulation-data-dimension sim))
-
-  (let ((mesh-spec (simulation-data-mesh-spec sim)))
-    (when mesh-spec
-      (format stream "  Mesh: ~A~%"
-              (streamvorti.mesh:mesh-spec-type mesh-spec))))
-
-  (format stream "  Boundaries: ~D defined~%"
-          (length (simulation-data-boundaries sim)))
-
-  (let ((physics (simulation-data-physics sim)))
-    (when physics
-      (format stream "  Physics: ~A (~A)~%"
-              (physics-data-type physics)
-              (physics-data-formulation physics))
-      (format stream "    Reynolds: ~A~%" (physics-data-reynolds physics))))
-
-  (let ((disc (simulation-data-discretization sim)))
-    (when disc
-      (format stream "  Discretization: ~A~%"
-              (discretization-data-method disc))
-      (format stream "    Neighbors: ~D~%"
-              (discretization-data-num-neighbors disc))))
-
-  (let ((solver (simulation-data-solver sim)))
-    (when solver
-      (format stream "  Solver: ~A~%"
-              (solver-data-timestepping solver))
-      (format stream "    dt: ~A, end: ~A~%"
-              (solver-data-dt solver)
-              (solver-data-end-time solver))))
-
-  sim)
-
-;;; ============================================================
-;;; File Loading Utilities
-;;; ============================================================
-
-(defun load-sdl-file (path)
-  "Load an SDL file and return the simulation object."
-  (setf *current-simulation* nil)
-  (load path)
-  (or *current-simulation*
-      (error "No simulation defined in ~A" path)))
-
-;;; ============================================================
-;;; REPL Helpers
-;;; ============================================================
-
-(defun describe-current-simulation ()
-  "Describe the current simulation in the REPL."
-  (if *current-simulation*
-      (print-simulation-summary *current-simulation*)
-      (format t "~&No current simulation. Use (simulation ...) to define one.~%")))
-
-(defun clear-simulation ()
-  "Clear the current simulation."
-  (setf *current-simulation* nil))
+(defun simulation-coupling (sim)
+  "Get simulation coupling definition."
+  (sim-coupling sim))

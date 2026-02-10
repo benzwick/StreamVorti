@@ -67,13 +67,25 @@
    #:shape-dimension
    #:shape-bounds
    #:shape-contains-p
+   ;; 1D primitives
+   #:interval
+   #:interval-min-corner
+   #:interval-max-corner
    ;; 2D primitives
    #:rectangle
+   #:rectangle-min-corner
+   #:rectangle-max-corner
    #:circle
+   #:circle-center
+   #:circle-radius
    #:polygon
    ;; 3D primitives
    #:box
+   #:box-min-corner
+   #:box-max-corner
    #:sphere
+   #:sphere-center
+   #:sphere-radius
    #:cylinder
    ;; CSG operations (future)
    #:union-shape
@@ -140,6 +152,18 @@
    #:x-equals
    #:y-equals
    #:z-equals
+   #:x-greater-than
+   #:y-greater-than
+   #:z-greater-than
+   #:x-less-than
+   #:y-less-than
+   #:z-less-than
+   #:x-greater-equal
+   #:y-greater-equal
+   #:z-greater-equal
+   #:x-less-equal
+   #:y-less-equal
+   #:z-less-equal
    #:and-predicate
    #:or-predicate
    #:not-predicate
@@ -173,97 +197,112 @@
    #:save-derivative-matrix))
 
 ;;; ============================================================
-;;; Main SDL Package
+;;; Main SDL Package (v2)
 ;;; ============================================================
 
 (defpackage :sdl
-  (:use :cl
-        :streamvorti.ffi
-        :streamvorti.geometry
-        :streamvorti.mesh
-        :streamvorti.boundaries
-        :streamvorti.dcpse)
-  (:documentation "Simulation Definition Language for StreamVorti")
+  (:use :cl :streamvorti.geometry)
+  (:shadow #:time #:box #:method)
+  (:documentation "Simulation Definition Language v2 for StreamVorti")
   (:export
-   ;; Main macros
-   #:simulation
-   #:geometry
-   #:mesh
+   ;; Geometry wrappers
+   #:box
+   #:ball
+   #:geometry-dimension
+   #:geometry-min
+   #:geometry-max
+   #:geometry-contains-p
+   #:ball-center
+   #:ball-radius
+   ;; Domain
+   #:domain
+   #:domain-type
+   #:domain-dimension
+   #:domain-n
+   #:domain-h
+   #:domain-file
+   #:domain-particle-count
+   ;; Predicates
+   #:make-predicate
+   #:predicate-matches-p
+   ;; Boundary selectors
+   #:make-boundary-selector
+   #:selector-type
+   #:selector-attribute
+   ;; Boundaries
+   #:make-boundaries
+   #:boundary-name
+   ;; Subdomains
+   #:make-subdomains
+   #:subdomain-name
+   ;; Physics
+   #:make-physics
+   #:physics-type
+   #:physics-Re
+   #:physics-conductivity
+   #:physics-bcs
+   ;; Boundary conditions
+   #:make-bc
+   #:bc-type
+   #:bc-boundary
+   #:bc-value
+   #:bc-function
+   #:bc-h
+   #:bc-T-inf
+   ;; Methods
+   #:make-method
+   #:method-type
+   #:method-neighbors
+   #:method-support-radius
+   #:method-order
+   #:method-kernel
+   #:method-h
+   ;; Solvers
+   #:make-time-solver
+   #:make-steady-solver
+   #:make-linear-solver
+   #:solver-method
+   #:solver-dt
+   #:solver-end
+   #:solver-tolerance
+   #:linear-solver-method
+   #:linear-solver-preconditioner
+   ;; Materials
+   #:make-material
+   #:material-name
+   #:material-density
+   #:material-youngs-modulus
+   #:material-poissons-ratio
+   #:material-viscosity
+   #:material-conductivity
+   ;; Output
+   #:make-output
+   #:output-format
+   #:output-directory
+   #:output-interval
+   #:output-fields
+   #:output-probes
+   ;; Coupling
+   #:make-coupling
+   #:coupling-name
+   #:coupling-type
+   #:coupling-physics
+   #:coupling-iterations
+   #:coupling-interface
+   ;; Simulation helpers (used inside simulation macro)
    #:boundaries
    #:physics
-   #:discretization
-   #:solver
+   #:time
    #:output
-   ;; Geometry re-exports
-   #:rectangle
-   #:circle
-   #:polygon
-   #:box
-   #:sphere
-   #:cylinder
-   ;; Mesh
-   #:generate
-   #:load-mesh
-   ;; Boundaries
-   #:region
-   #:where
-   #:velocity
-   #:pressure
-   #:no-slip
-   ;; Simulation access
-   #:*current-simulation*
-   #:get-current-simulation
+   #:subdomains
+   #:coupling
+   ;; Simulation
+   #:simulation
    #:simulation-name
-   #:simulation-dimension
-   #:simulation-mesh
+   #:simulation-dim
+   #:simulation-domain
    #:simulation-boundaries
    #:simulation-physics
-   #:simulation-discretization
-   #:simulation-solver
-   #:simulation-output
-   ;; Accessors for C++ loader
-   #:get-name
-   #:get-version
-   #:get-dimension
-   #:get-mesh
-   #:get-boundaries
-   #:get-physics
-   #:get-discretization
-   #:get-solver
-   #:get-output
-   ;; Generic property accessors for C++ bridge
-   #:get-type
-   #:get-path
-   #:get-divisions
-   #:get-element-type
-   #:get-sizes
-   #:get-size-x
-   #:get-size-y
-   #:get-size-z
-   #:get-formulation
-   #:get-reynolds
-   #:get-density
-   #:get-viscosity
-   #:get-method
-   #:get-num-neighbors
-   #:get-cutoff-radius
-   #:get-support-radius
-   #:get-timestepping
-   #:get-dt
-   #:get-end-time
-   #:get-tolerance
-   #:get-max-iterations
-   #:get-attribute
-   #:get-function
-   #:get-u-function
-   #:get-v-function
-   #:get-w-function
-   #:get-format
-   #:get-interval
-   #:get-directory
-   #:get-fields
-   #:get-predicate
-   #:get-predicate-axis
-   #:get-predicate-value
-   #:get-predicate-tolerance
-   #:evaluate-predicate))
+   #:simulation-subdomains
+   #:simulation-physics-list
+   #:simulation-coupling))
