@@ -29,12 +29,12 @@
     (bc left   :no-slip)
     (bc right  :no-slip))
 
-  (method :dcpse
+  (spatial :dcpse
     :neighbors 25
     :support-radius 5.0)
 
   ;; Short runtime
-  (time :method :explicit-euler
+  (temporal :explicit-euler
     :dt 0.005
     :end 2.0)
 

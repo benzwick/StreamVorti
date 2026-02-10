@@ -44,11 +44,11 @@
     (bc bottom    :no-slip)
     (bc step-face :no-slip))
 
-  (method :dcpse
+  (spatial :dcpse
     :neighbors 25
     :support-radius 5.0)
 
-  (time :method :explicit-euler
+  (temporal :explicit-euler
     :dt 0.001
     :end 20.0)
 

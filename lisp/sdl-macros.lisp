@@ -10,9 +10,6 @@
 
 (in-package :sdl)
 
-;; SBCL considers make-method a reserved CL name (method is a standard class).
-;; Unlock the CL package to allow defining it.
-#+sbcl (sb-ext:unlock-package :common-lisp)
 
 ;;; ============================================================
 ;;; Geometry Wrappers
@@ -336,21 +333,21 @@
    :bcs (when bcs (mapcar #'parse-bc-spec bcs))))
 
 ;;; ============================================================
-;;; Methods (Discretization)
+;;; Spatial Discretization
 ;;; ============================================================
 
-(defstruct (method-data (:constructor %make-method)
-                        (:conc-name method-))
+(defstruct (spatial-data (:constructor %make-spatial)
+                         (:conc-name spatial-))
   type neighbors support-radius order kernel h)
 
-(defun make-method (type &key neighbors support-radius order kernel h)
-  "Create a discretization method.
+(defun make-spatial (type &key neighbors support-radius order kernel h)
+  "Create a spatial discretization definition.
 
    Examples:
-   (make-method :dcpse :neighbors 25 :support-radius 3.5)
-   (make-method :fem :order 2)
-   (make-method :sph :kernel :wendland :h 0.02)"
-  (%make-method
+   (make-spatial :dcpse :neighbors 25 :support-radius 3.5)
+   (make-spatial :fem :order 2)
+   (make-spatial :sph :kernel :wendland :h 0.02)"
+  (%make-spatial
    :type type
    :neighbors neighbors
    :support-radius (when support-radius (coerce support-radius 'double-float))
@@ -359,29 +356,29 @@
    :h (when h (coerce h 'double-float))))
 
 ;;; ============================================================
-;;; Solvers
+;;; Temporal Integration
 ;;; ============================================================
 
-(defstruct (solver-data (:constructor %make-solver)
-                        (:conc-name solver-))
+(defstruct (temporal-data (:constructor %make-temporal)
+                          (:conc-name temporal-))
   method dt end tolerance)
 
-(defun make-time-solver (&key method dt end)
-  "Create a time integration solver.
+(defun make-temporal (method &key dt end)
+  "Create a temporal integration definition.
 
    Example:
-   (make-time-solver :method :bdf2 :dt 0.001 :end 10.0)"
-  (%make-solver
+   (make-temporal :bdf2 :dt 0.001 :end 10.0)"
+  (%make-temporal
    :method method
    :dt (when dt (coerce dt 'double-float))
    :end (when end (coerce end 'double-float))))
 
-(defun make-steady-solver (&key method tolerance)
+(defun make-steady-solver (method &key tolerance)
   "Create a steady-state solver.
 
    Example:
-   (make-steady-solver :method :newton :tolerance 1e-8)"
-  (%make-solver
+   (make-steady-solver :newton :tolerance 1e-8)"
+  (%make-temporal
    :method method
    :tolerance (when tolerance (coerce tolerance 'double-float))))
 
@@ -465,4 +462,3 @@
    :iterations iterations
    :interface interface))
 
-#+sbcl (sb-ext:lock-package :common-lisp)

@@ -41,11 +41,11 @@
     (bc bottom   :slip)
     (bc cylinder :no-slip))
 
-  (method :dcpse
+  (spatial :dcpse
     :neighbors 25
     :support-radius 5.0)
 
-  (time :method :explicit-euler
+  (temporal :explicit-euler
     :dt 0.005
     :end 50.0)
 

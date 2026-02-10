@@ -308,45 +308,45 @@
       (check-near (first v) 1.0 1e-10 "Parabolic profile at y=0.5"))))
 
 ;;; ============================================================
-;;; Tests for Methods (Discretization)
+;;; Tests for Spatial Discretization
 ;;; ============================================================
 
-(define-test test-method-dcpse
-  "Test DCPSE method definition."
-  (let ((m (sdl:make-method :dcpse :neighbors 25 :support-radius 3.5)))
-    (check-equal (sdl:method-type m) :dcpse "Method type")
-    (check-equal (sdl:method-neighbors m) 25 "Neighbor count")
-    (check-near (sdl:method-support-radius m) 3.5 1e-10 "Support radius")))
+(define-test test-spatial-dcpse
+  "Test DCPSE spatial discretization definition."
+  (let ((m (sdl:make-spatial :dcpse :neighbors 25 :support-radius 3.5)))
+    (check-equal (sdl:spatial-type m) :dcpse "Spatial type")
+    (check-equal (sdl:spatial-neighbors m) 25 "Neighbor count")
+    (check-near (sdl:spatial-support-radius m) 3.5 1e-10 "Support radius")))
 
-(define-test test-method-fem
-  "Test FEM method definition."
-  (let ((m (sdl:make-method :fem :order 2)))
-    (check-equal (sdl:method-type m) :fem "Method type")
-    (check-equal (sdl:method-order m) 2 "Element order")))
+(define-test test-spatial-fem
+  "Test FEM spatial discretization definition."
+  (let ((m (sdl:make-spatial :fem :order 2)))
+    (check-equal (sdl:spatial-type m) :fem "Spatial type")
+    (check-equal (sdl:spatial-order m) 2 "Element order")))
 
-(define-test test-method-sph
-  "Test SPH method definition."
-  (let ((m (sdl:make-method :sph :kernel :wendland :h 0.02)))
-    (check-equal (sdl:method-type m) :sph "Method type")
-    (check-equal (sdl:method-kernel m) :wendland "Kernel type")
-    (check-near (sdl:method-h m) 0.02 1e-10 "Smoothing length")))
+(define-test test-spatial-sph
+  "Test SPH spatial discretization definition."
+  (let ((m (sdl:make-spatial :sph :kernel :wendland :h 0.02)))
+    (check-equal (sdl:spatial-type m) :sph "Spatial type")
+    (check-equal (sdl:spatial-kernel m) :wendland "Kernel type")
+    (check-near (sdl:spatial-h m) 0.02 1e-10 "Smoothing length")))
 
 ;;; ============================================================
-;;; Tests for Solvers
+;;; Tests for Temporal Integration
 ;;; ============================================================
 
-(define-test test-time-solver
-  "Test time integration solver."
-  (let ((s (sdl:make-time-solver :method :bdf2 :dt 0.001 :end 10.0)))
-    (check-equal (sdl:solver-method s) :bdf2 "Time method")
-    (check-near (sdl:solver-dt s) 0.001 1e-10 "Time step")
-    (check-near (sdl:solver-end s) 10.0 1e-10 "End time")))
+(define-test test-temporal
+  "Test temporal integration definition."
+  (let ((s (sdl:make-temporal :bdf2 :dt 0.001 :end 10.0)))
+    (check-equal (sdl:temporal-method s) :bdf2 "Temporal method")
+    (check-near (sdl:temporal-dt s) 0.001 1e-10 "Time step")
+    (check-near (sdl:temporal-end s) 10.0 1e-10 "End time")))
 
 (define-test test-steady-solver
   "Test steady-state solver."
-  (let ((s (sdl:make-steady-solver :method :newton :tolerance 1e-8)))
-    (check-equal (sdl:solver-method s) :newton "Steady method")
-    (check-near (sdl:solver-tolerance s) 1e-8 1e-15 "Tolerance")))
+  (let ((s (sdl:make-steady-solver :newton :tolerance 1e-8)))
+    (check-equal (sdl:temporal-method s) :newton "Steady method")
+    (check-near (sdl:temporal-tolerance s) 1e-8 1e-15 "Tolerance")))
 
 (define-test test-linear-solver
   "Test linear solver configuration."
@@ -445,7 +445,7 @@
                  (bc left   :no-slip)
                  (bc right  :no-slip))
 
-               (time :dt 0.001 :end 10.0)
+               (temporal :explicit-euler :dt 0.001 :end 10.0)
 
                (output :vtk :every 0.1))))
     (check-not-null sim "Simulation created")
@@ -534,15 +534,15 @@
   (test-boundary-conditions)
   (test-bc-with-function)
 
-  ;; Method tests
-  (format t "~%--- Methods ---~%")
-  (test-method-dcpse)
-  (test-method-fem)
-  (test-method-sph)
+  ;; Spatial discretization tests
+  (format t "~%--- Spatial Discretization ---~%")
+  (test-spatial-dcpse)
+  (test-spatial-fem)
+  (test-spatial-sph)
 
-  ;; Solver tests
-  (format t "~%--- Solvers ---~%")
-  (test-time-solver)
+  ;; Temporal integration tests
+  (format t "~%--- Temporal Integration ---~%")
+  (test-temporal)
   (test-steady-solver)
   (test-linear-solver)
 

@@ -17,7 +17,7 @@
 (defstruct (sim-data (:constructor %make-sim)
                      (:conc-name sim-))
   name dim domain boundaries subdomains physics-list
-  method time-solver output-config coupling)
+  spatial temporal output-config coupling)
 
 (defvar *known-physics-types*
   '(:navier-stokes :heat-conduction :stokes :euler :laplace :diffusion
@@ -314,21 +314,22 @@
                         nil))
              (sim-physics-list ,sim-var)))))
 
-(defun compile-sim-method (sim-var form)
-  "Compile a (method type &key ...) form."
+(defun compile-sim-spatial (sim-var form)
+  "Compile a (spatial type &key ...) form."
   (let* ((args (cdr form))
          (type (car args))
          (kwargs (cdr args)))
-    `(setf (sim-method ,sim-var) (make-method ,type ,@kwargs))))
+    `(setf (sim-spatial ,sim-var) (make-spatial ,type ,@kwargs))))
 
-(defun compile-sim-time (sim-var form)
-  "Compile a (time &key method dt end tolerance) form."
-  (let ((method nil) (dt nil) (end nil) (tolerance nil))
-    (loop with r = (cdr form)
+(defun compile-sim-temporal (sim-var form)
+  "Compile a (temporal type &key dt end tolerance) form.
+   Type is the first positional argument, symmetric with spatial."
+  (let* ((args (cdr form))
+         (type (car args))
+         (dt nil) (end nil) (tolerance nil))
+    (loop with r = (cdr args)
           while r
           do (cond
-               ((eq (car r) :method)
-                (setf method (cadr r)) (setf r (cddr r)))
                ((eq (car r) :dt)
                 (setf dt (cadr r)) (setf r (cddr r)))
                ((eq (car r) :end)
@@ -336,9 +337,9 @@
                ((eq (car r) :tolerance)
                 (setf tolerance (cadr r)) (setf r (cddr r)))
                (t (setf r (cdr r)))))
-    `(setf (sim-time-solver ,sim-var)
-           (%make-solver
-            ,@(when method `(:method ,method))
+    `(setf (sim-temporal ,sim-var)
+           (%make-temporal
+            :method ,type
             ,@(when dt `(:dt (coerce ,dt 'double-float)))
             ,@(when end `(:end (coerce ,end 'double-float)))
             ,@(when tolerance
@@ -404,8 +405,8 @@
       ((string= tag "BOUNDARIES")  (compile-sim-boundaries sim-var form))
       ((string= tag "SUBDOMAINS")  (compile-sim-subdomains sim-var form))
       ((string= tag "PHYSICS")     (compile-sim-physics sim-var form))
-      ((string= tag "METHOD")      (compile-sim-method sim-var form))
-      ((string= tag "TIME")        (compile-sim-time sim-var form))
+      ((string= tag "SPATIAL")     (compile-sim-spatial sim-var form))
+      ((string= tag "TEMPORAL")    (compile-sim-temporal sim-var form))
       ((string= tag "OUTPUT")      (compile-sim-output sim-var form))
       ((string= tag "COUPLING")    (compile-sim-coupling sim-var form))
       (t (error "Unknown simulation form: ~A" (car form))))))
@@ -434,7 +435,7 @@
        (bc bottom :no-slip)
        (bc left   :no-slip)
        (bc right  :no-slip))
-     (time :dt 0.001 :end 10.0)
+     (temporal :explicit-euler :dt 0.001 :end 10.0)
      (output :vtk :every 0.1))"
   (let ((dim 2)
         (body-forms nil))
@@ -490,9 +491,13 @@
   "Get all physics definitions."
   (sim-physics-list sim))
 
-(defun simulation-method (sim)
-  "Get simulation discretization method."
-  (sim-method sim))
+(defun simulation-spatial (sim)
+  "Get simulation spatial discretization."
+  (sim-spatial sim))
+
+(defun simulation-temporal (sim)
+  "Get simulation temporal integration."
+  (sim-temporal sim))
 
 (defun simulation-coupling (sim)
   "Get simulation coupling definition."

@@ -32,12 +32,12 @@
     (bc right  :no-slip))
 
   ;; DCPSE meshless discretization
-  (method :dcpse
+  (spatial :dcpse
     :neighbors 25
     :support-radius 5.0)
 
   ;; Time integration
-  (time :method :explicit-euler
+  (temporal :explicit-euler
     :dt 0.001
     :end 10.0
     :tolerance 1e-6)

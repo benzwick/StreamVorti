@@ -201,8 +201,15 @@
 ;;; ============================================================
 
 (defpackage :sdl
-  (:use :cl :streamvorti.geometry)
-  (:shadow #:box #:method)
+  (:use :cl)
+  (:import-from :streamvorti.geometry
+   #:shape #:shape-dimension #:shape-contains-p #:shape-bounds
+   #:interval #:interval-min-corner #:interval-max-corner
+   #:rectangle #:rectangle-min-corner #:rectangle-max-corner
+   #:circle #:circle-center #:circle-radius
+   #:sphere #:sphere-center #:sphere-radius
+   #:make-rectangle #:make-circle
+   #:make-box #:make-sphere)
   (:documentation "Simulation Definition Language v2 for StreamVorti")
   (:export
    ;; Geometry wrappers
@@ -250,22 +257,22 @@
    #:bc-function
    #:bc-h
    #:bc-T-inf
-   ;; Methods
-   #:make-method
-   #:method-type
-   #:method-neighbors
-   #:method-support-radius
-   #:method-order
-   #:method-kernel
-   #:method-h
-   ;; Solvers
-   #:make-time-solver
+   ;; Spatial discretization
+   #:make-spatial
+   #:spatial-type
+   #:spatial-neighbors
+   #:spatial-support-radius
+   #:spatial-order
+   #:spatial-kernel
+   #:spatial-h
+   ;; Temporal integration
+   #:make-temporal
+   #:temporal-method
+   #:temporal-dt
+   #:temporal-end
+   #:temporal-tolerance
    #:make-steady-solver
    #:make-linear-solver
-   #:solver-method
-   #:solver-dt
-   #:solver-end
-   #:solver-tolerance
    #:linear-solver-method
    #:linear-solver-preconditioner
    ;; Materials
@@ -299,5 +306,6 @@
    #:simulation-physics
    #:simulation-subdomains
    #:simulation-physics-list
-   #:simulation-method
+   #:simulation-spatial
+   #:simulation-temporal
    #:simulation-coupling))

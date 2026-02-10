@@ -29,11 +29,11 @@
     (bc left   :no-slip)
     (bc right  :no-slip))
 
-  (method :dcpse
+  (spatial :dcpse
     :neighbors 25
     :support-radius 5.0)
 
-  (time :method :explicit-euler
+  (temporal :explicit-euler
     :dt 0.001
     :end 15.0)
 

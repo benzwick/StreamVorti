@@ -29,12 +29,12 @@
     (bc left   :no-slip)
     (bc right  :no-slip))
 
-  (method :dcpse
+  (spatial :dcpse
     :neighbors 25
     :support-radius 5.0)
 
   ;; Smaller timestep for stability
-  (time :method :explicit-euler
+  (temporal :explicit-euler
     :dt 0.0005
     :end 30.0
     :tolerance 1e-6)
