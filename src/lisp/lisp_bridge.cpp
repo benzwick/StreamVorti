@@ -394,6 +394,7 @@ EclObject Bridge::symbolFunction(EclObject sym)
 LispFunction::LispFunction(EclObject func)
     : func_(func)
 {
+    registerRoot();
 }
 
 LispFunction::LispFunction(const std::string& name,
@@ -415,6 +416,43 @@ LispFunction::LispFunction(const std::string& name,
     } else {
         func_ = nullptr;
     }
+    registerRoot();
+}
+
+LispFunction::~LispFunction()
+{
+    deregisterRoot();
+}
+
+LispFunction::LispFunction(LispFunction&& other) noexcept
+    : func_(other.func_)
+{
+    registerRoot();
+    other.func_ = nullptr;
+}
+
+LispFunction& LispFunction::operator=(LispFunction&& other) noexcept
+{
+    if (this != &other) {
+        deregisterRoot();
+        func_ = other.func_;
+        registerRoot();
+        other.func_ = nullptr;
+    }
+    return *this;
+}
+
+void LispFunction::registerRoot()
+{
+    if (func_ != nullptr) {
+        ecl_register_root(reinterpret_cast<cl_object*>(&func_));
+    }
+}
+
+void LispFunction::deregisterRoot()
+{
+    // Set to nil so the GC root (which persists) doesn't keep a stale object alive
+    func_ = to_ecl(ECL_NIL);
 }
 
 bool LispFunction::isValid() const

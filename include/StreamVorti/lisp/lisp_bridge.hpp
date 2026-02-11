@@ -262,6 +262,14 @@ public:
     LispFunction(const std::string& name,
                  const std::string& package = "SDL");
 
+    ~LispFunction();
+
+    // Non-copyable (GC root is tied to this instance's gc_root_ address)
+    LispFunction(const LispFunction&) = delete;
+    LispFunction& operator=(const LispFunction&) = delete;
+    LispFunction(LispFunction&& other) noexcept;
+    LispFunction& operator=(LispFunction&& other) noexcept;
+
     /**
      * @brief Check if function is valid
      */
@@ -289,6 +297,8 @@ public:
 
 private:
     EclObject func_;
+    void registerRoot();
+    void deregisterRoot();
 };
 
 } // namespace Lisp
