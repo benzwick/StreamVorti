@@ -15,7 +15,7 @@ jobs:
   run-demo:
     name: "Demo: ${{ matrix.name }}"
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: ${{ matrix.timeout || 5 }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     strategy:
@@ -25,14 +25,18 @@ jobs:
           - name: cavity
             file: demo/cavity.lisp
             validate: true
+            timeout: 10
           - name: cavity-quick
             file: demo/cavity-quick.lisp
           - name: cavity-re1000
             file: demo/cavity-re1000.lisp
+            timeout: 15
           - name: cavity-regularized
             file: demo/cavity-regularized.lisp
+            timeout: 10
           - name: double-lid-cavity
             file: demo/double-lid-cavity.lisp
+            timeout: 15
           - name: poiseuille
             file: demo/poiseuille.lisp
           - name: backward-step
