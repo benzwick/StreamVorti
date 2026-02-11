@@ -91,7 +91,7 @@ jobs:
           results/
           ${{ matrix.file }}
           data/
-        retention-days: 90
+        retention-days: 5
 
   run-cavity-cli:
     name: "Cavity (CLI)"
@@ -144,7 +144,7 @@ jobs:
       with:
         name: cavity-cli-results
         path: results/
-        retention-days: 90
+        retention-days: 5
 
   run-mfemrun:
     name: "MfemRun"
@@ -189,4 +189,4 @@ jobs:
       with:
         name: mfemrun-results
         path: results/
-        retention-days: 90
+        retention-days: 5
