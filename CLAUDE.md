@@ -6,18 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Build the project using CMake:
 ```bash
-mkdir build
-cd build
+mkdir build && cd build
 cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug ..
 make -j6
 ```
 
-The build produces two executables:
-- `MfemRun` - Basic MFEM demo (from `mfem_main.cpp`) - computes and saves derivatives only
-- `StreamVorti` - Full lid-driven cavity solver (from `streamvorti.cpp`) - time-stepping solver with ParaView output, validation features
-- `libStreamVorti_static.a` - Static library in `build/lib/StreamVorti/`
+With ECL (enables SDL/Lisp simulation files):
+```bash
+cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug -DSTREAMVORTI_WITH_ECL=ON ..
+```
 
-**Use `StreamVorti` for the complete lid-driven cavity solver.**
+Run tests:
+```bash
+cmake -DSTREAMVORTI_BUILD_TESTS=ON ..
+make -j6
+ctest --output-on-failure   # C++ tests (Google Test)
+make test-lisp              # Lisp tests (requires SBCL or ECL)
+```
+
+The build produces:
+- `StreamVorti` - Full solver (from `streamvorti.cpp`) - time-stepping, ParaView output, SDL support
+- `MfemRun` - Derivative export tool (from `mfem_main.cpp`) - outputs DCPSE derivatives for MATLAB/Python
+- `libStreamVorti_static.a` - Static library in `build/lib/StreamVorti/`
 
 ## Dependencies
 
@@ -25,6 +35,7 @@ The build produces two executables:
 - MFEM library (specify path with `-DMFEM_DIR`)
 - CGAL (Computational Geometry Algorithms Library)
 - Eigen3 (linear algebra library)
+- OpenMP (shared-memory parallelism)
 
 **Debian Linux Note:** If you encounter `fatal error: Eigen/Dense: No such file or directory`, create symlinks:
 ```bash
@@ -47,24 +58,14 @@ StreamVorti is a C++ library for solving PDEs using explicit methods, specifical
 
 **Executables:**
 
-1. `MfemRun` (from `mfem_main.cpp`) - Basic derivative computation demo
+1. `StreamVorti` (from `streamvorti.cpp`) - Full solver
+   - CLI mode: `StreamVorti -dim 2 -nx 40 -ny 40 -nn 25 -Re 100 -dt 0.001 -ft 10.0 -pv`
+   - SDL mode: `StreamVorti -f demo/cavity.lisp -lp lisp -pv` (requires ECL build)
+   - `-lp lisp` tells the binary where to find the Lisp SDL files; needed when not running from repo root
+
+2. `MfemRun` (from `mfem_main.cpp`) - Derivative export tool
    - Usage: `MfemRun -sd -sn`
-   - Computes and saves DCPSE derivative matrices
-   - No time-stepping solver
-
-2. `StreamVorti` (from `streamvorti.cpp`) - Full lid-driven cavity solver
-   - Usage: `StreamVorti -dim 2 -nx 40 -ny 40 -nn 25 -Re 100 -dt 0.001 -ft 10.0 -pv`
-   - Implements stream function-vorticity formulation
-   - Time-stepping solver with steady-state detection
-   - ParaView VTK output
-   - Centerline extraction for Ghia validation
-   - Optional SDL/Lisp support with `-DSTREAMVORTI_WITH_ECL=ON` (requires `ecl libecl-dev`)
-   - SDL usage: `StreamVorti -f demo/cavity.lisp -pv`
-
-**Configuration:**
-- Command-line options for grid, Re, dt, etc.
-- Optional `.ini` files for DCPSE parameters
-- SDL files (`.lisp`) for complete simulation definition (requires ECL)
+   - Outputs DCPSE derivative matrices for use by MATLAB/Python
 
 **Library Structure:**
 - Header-only style with implementation in `src/` compiled into static library
@@ -82,21 +83,21 @@ The codebase focuses on meshless methods for computational fluid dynamics, with 
 
 Validate results against Ghia et al. (1982) benchmark data:
 
-1. Run simulation to steady state:
+1. Run simulation to steady state (CLI mode):
 ```bash
 ./StreamVorti -nx 40 -ny 40 -Re 100 -dt 0.001 -ft 30.0 -pv
 ```
 
 2. Run validation script (requires SBCL):
 ```bash
+# CLI mode output uses prefix "mfem_square10x10":
 sbcl --load lisp/compare-ghia.lisp \
      --eval '(streamvorti.validation:run-validation :results-file "output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100)'
-```
 
-Reference data files in `data/`:
-- `ghia_1982_u.txt` - u-velocity along x=0.5 (Re=100-10000)
-- `ghia_1982_v.txt` - v-velocity along y=0.5
-- `erturk_2005_u.txt` - u-velocity for high Re (1000-21000)
+# SDL mode output uses the simulation name (e.g., "lid-driven-cavity"):
+sbcl --load lisp/compare-ghia.lisp \
+     --eval '(streamvorti.validation:run-validation :results-file "output_dat/lid-driven-cavity_u_centerline_x0.5.dat" :reynolds 100)'
+```
 
 ## Git Workflow
 
