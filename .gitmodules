@@ -1,0 +1,9 @@
+[submodule "_reference/vgplot"]
+	path = _reference/vgplot
+	url = https://github.com/volkers/vgplot.git
+[submodule "_reference/mfem"]
+	path = _reference/mfem
+	url = https://github.com/mfem/mfem.git
+[submodule "_reference/hypre"]
+	path = _reference/hypre
+	url = https://github.com/hypre-space/hypre.git

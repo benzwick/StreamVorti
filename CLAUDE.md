@@ -71,6 +71,11 @@ StreamVorti is a C++ library for solving PDEs using explicit methods, specifical
 - Modular design with each component as separate CMake target
 - All functionality accessible through single `mfem_main.hpp` header
 
+**Reference Sources:**
+- `_reference/` contains git submodules of key dependencies (MFEM, HYPRE, vgplot) for code reference
+- `_reference/README.md` has links and version info for all dependencies
+- Initialize with: `git submodule update --init`
+
 The codebase focuses on meshless methods for computational fluid dynamics, with MFEM providing mesh handling and linear algebra operations while StreamVorti implements the meshless approximation schemes.
 
 ## Validation
