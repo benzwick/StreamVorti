@@ -45,6 +45,13 @@
 #include "StreamVorti/approximants/dcpse_3d.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 
+// Parallel DCPSE (MPI-enabled)
+#ifdef MFEM_USE_MPI
+#include "StreamVorti/approximants/par_dcpse.hpp"
+#include "StreamVorti/approximants/par_dcpse_2d.hpp"
+#include "StreamVorti/support_domain/par_support_domain.hpp"
+#endif
+
 // Standard library includes for struct definitions
 #include <algorithm>
 #include <fstream>
@@ -272,10 +279,14 @@ struct PerformanceMetrics {
  * Manages lifetime of solver and preconditioner pointers together.
  * Ensures proper cleanup and prevents memory leaks.
  * Preconditioner is nullptr for direct solvers (UMFPACK, KLU).
+ * HypreParMatrix is only used when solver_type is "hypre".
  */
 struct SolverPackage {
     mfem::Solver* solver = nullptr;         ///< Linear solver pointer (owned, deleted in destructor)
     mfem::Solver* preconditioner = nullptr; ///< Preconditioner pointer (nullptr for direct solvers)
+#ifdef MFEM_USE_HYPRE
+    mfem::HypreParMatrix* hypre_matrix = nullptr; ///< HypreParMatrix for Hypre solvers (nullptr for other solvers)
+#endif
 
     /**
      * @brief Destructor: automatically cleans up solver and preconditioner
@@ -285,6 +296,9 @@ struct SolverPackage {
     ~SolverPackage() {
         delete solver;
         delete preconditioner;
+#ifdef MFEM_USE_HYPRE
+        delete hypre_matrix;
+#endif
     }
 };
 
@@ -325,6 +339,22 @@ mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int
  */
 StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int num_neighbors);
 
+#ifdef MFEM_USE_MPI
+/**
+ * @brief Initialize parallel DC PSE derivative operators
+ *
+ * Creates 2D or 3D parallel DC PSE object with ghost node exchange.
+ * Performs neighbor search (including ghosts) and computes distributed
+ * derivative matrices as HypreParMatrix. Timing information is printed to console.
+ *
+ * @param gf Parallel grid function containing nodal coordinates
+ * @param dim Spatial dimension (2 or 3)
+ * @param num_neighbors Number of neighbors for DC PSE stencil
+ * @return Pointer to parallel DC PSE derivative object
+ */
+StreamVorti::ParDcpse2d* InitialiseParDCPSE(mfem::ParGridFunction& gf, int dim, int num_neighbors);
+#endif
+
 /**
  * @brief Save DC PSE derivative matrices to file
  *
@@ -357,7 +387,8 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
  */
 void IdentifyBoundaryNodes(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                             std::vector<int>& right_nodes, std::vector<int>& top_nodes,
-                            std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
+                            std::vector<int>& left_nodes, std::vector<int>& interior_nodes,
+                            int num_true_verts = -1);
 
 /**
  * @brief Create and configure linear solver based on type
@@ -421,15 +452,16 @@ std::string GetCurrentDateTime();
 void IdentifyBoundaryNodesByAttribute(
     mfem::Mesh* mesh,
     std::map<int, std::vector<int>>& boundary_nodes,
-    std::vector<int>& interior_nodes);
+    std::vector<int>& interior_nodes,
+    int num_true_verts = -1);
 
 /**
- * @brief Extract velocity along a centerline for validation
+ * @brief Extract velocity along a centerline for validation (serial).
  *
  * Used to compare simulation results against Ghia et al. (1982) or
  * Erturk & Corke (2005) benchmark data.
  *
- * @param u_velocity U-velocity field
+ * @param u_velocity U-velocity field (indexed by local vertex = true DOF for serial mesh)
  * @param v_velocity V-velocity field
  * @param mesh The MFEM mesh
  * @param filename Output file path
@@ -444,6 +476,30 @@ void ExtractCenterline(const mfem::Vector& u_velocity,
                        char axis,
                        double position,
                        double tol = 0.01);
+
+#ifdef MFEM_USE_MPI
+/**
+ * @brief Extract velocity along a centerline for validation (parallel).
+ *
+ * Parallel version that correctly maps true DOF indices to local mesh vertices,
+ * gathers data to rank 0 via MPI, and writes a single output file.
+ *
+ * @param u_velocity U-velocity field indexed by TRUE DOF (size = TrueVSize)
+ * @param v_velocity V-velocity field indexed by TRUE DOF
+ * @param pfes Parallel finite element space (provides DOF mapping + communicator)
+ * @param filename Output file path (written by rank 0 only)
+ * @param axis Fixed coordinate ('x' or 'y')
+ * @param position Value of the fixed coordinate (e.g., 0.5 for x=0.5)
+ * @param tol Tolerance for "on the line" detection
+ */
+void ExtractCenterline(const mfem::Vector& u_velocity,
+                       const mfem::Vector& v_velocity,
+                       mfem::ParFiniteElementSpace* pfes,
+                       const std::string& filename,
+                       char axis,
+                       double position,
+                       double tol = 0.01);
+#endif
 
 
 #endif //STREAMVORTI_STREAM_VORTI_SIM_HPP_

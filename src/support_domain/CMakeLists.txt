@@ -11,16 +11,31 @@ PROJECT(SupportDomain)
 # Module source files.
 SET(SOURCES support_domain.cpp)
 
+# Add parallel support domain if MPI is available
+IF(MFEM_USE_MPI)
+    LIST(APPEND SOURCES par_support_domain.cpp)
+ENDIF()
+
 # Include the headers directory.
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Module header files.
 SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/support_domain/support_domain.hpp)
 
+# Add parallel support domain header if MPI is available
+IF(MFEM_USE_MPI)
+    LIST(APPEND HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/support_domain/par_support_domain.hpp)
+ENDIF()
+
 ADD_LIBRARY(${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )
 
 # Link to CGAL to inherit its include directories
-TARGET_LINK_LIBRARIES(${PROJECT_NAME} CGAL::CGAL CGAL::CGAL_Core)
+TARGET_LINK_LIBRARIES(${PROJECT_NAME} PUBLIC CGAL::CGAL CGAL::CGAL_Core)
+
+# Enable OpenMP for support domain loops (use parent's OpenMP configuration)
+IF(OpenMP_CXX_FOUND)
+    TARGET_LINK_LIBRARIES(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
+ENDIF()
 
 SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 

@@ -24,11 +24,13 @@
  *      Weizheng(Will) LI
  */
 
-// Demo usage: (save everything)
-//     ./StreamVorti -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -Re 1000 -sm -sn -sd -sdd -ss -pv -cr
+// PARALLEL VERSION - requires MFEM built with MPI and HYPRE
+//
+// Demo usage: (save everything, 4 MPI processes)
+//     mpirun -np 4 ./StreamVorti_par -dim 2 -sx 1 -sy 1 -nx 40 -ny 40 -nn 25 -Re 1000 -sm -sn -sd -sdd -ss -pv -cr
 //
 // SDL usage (requires ECL):
-//     ./StreamVorti -f demo/cavity.lisp -pv
+//     mpirun -np 4 ./StreamVorti_par -f demo/cavity.lisp -pv
 
 // Related header
 #include <StreamVorti/streamvorti.hpp>
@@ -41,6 +43,7 @@
 
 // C++ standard library headers (alphabetically sorted)
 #include <algorithm>
+#include <numeric>
 #include <chrono>
 #include <cstddef>
 #include <ctime>
@@ -57,6 +60,9 @@
 // Other libraries' headers
 #include "mfem.hpp"
 
+// MPI header (required for parallel version)
+#include <mpi.h>
+
 // Conditional includes
 #ifdef _OPENMP
 #include <omp.h>
@@ -69,23 +75,133 @@
 // include/StreamVorti/stream_vorti.hpp for proper header/implementation split.
 
 // ============================================================================
+// PARALLEL-SPECIFIC BOUNDARY NODE HELPERS
+// ============================================================================
+
+#ifdef MFEM_USE_MPI
+
+/**
+ * @brief Parallel version of IdentifyBoundaryNodes using proper DOF ownership.
+ *
+ * Unlike the serial version, this iterates over ALL local vertices (GetNV())
+ * and uses GetLocalTDofNumber() to skip non-owned vertices. Node arrays are
+ * filled with TRUE DOF indices (0..TrueVSize-1), matching solution vector
+ * indexing.
+ *
+ * In MFEM's ParMesh the owned vertices are NOT guaranteed to be the first
+ * TrueVSize entries; shared vertices can appear at any position in the local
+ * array.  The previous approach of iterating 0..TrueVSize-1 missed boundary
+ * nodes whose local index happened to exceed TrueVSize.
+ */
+static void IdentifyBoundaryNodesPar(
+    mfem::ParMesh* pmesh,
+    mfem::ParFiniteElementSpace& pfes,
+    std::vector<int>& bottom_nodes,
+    std::vector<int>& right_nodes,
+    std::vector<int>& top_nodes,
+    std::vector<int>& left_nodes,
+    std::vector<int>& interior_nodes)
+{
+    const double tol = 1e-10;
+    bottom_nodes.clear(); right_nodes.clear(); top_nodes.clear();
+    left_nodes.clear();   interior_nodes.clear();
+
+    for (int i = 0; i < pmesh->GetNV(); ++i) {
+        int tdof = pfes.GetLocalTDofNumber(i);
+        if (tdof < 0) continue;  // Not owned by this rank
+
+        const double* v = pmesh->GetVertex(i);
+        double x = v[0], y = v[1];
+
+        if (std::abs(y) < tol) {
+            bottom_nodes.push_back(tdof);
+        } else if (std::abs(x - 1.0) < tol && y > tol && y < (1.0 - tol)) {
+            right_nodes.push_back(tdof);
+        } else if (std::abs(y - 1.0) < tol) {
+            top_nodes.push_back(tdof);
+        } else if (std::abs(x) < tol && y > tol && y < (1.0 - tol)) {
+            left_nodes.push_back(tdof);
+        } else {
+            interior_nodes.push_back(tdof);
+        }
+    }
+
+    std::cout << "IdentifyBoundaryNodesPar (rank " << pfes.GetMyRank() << "):"
+              << " Bottom=" << bottom_nodes.size()
+              << " Right=" << right_nodes.size()
+              << " Top=" << top_nodes.size()
+              << " Left=" << left_nodes.size()
+              << " Interior=" << interior_nodes.size() << std::endl;
+}
+
+/**
+ * @brief Parallel version of IdentifyBoundaryNodesByAttribute using proper DOF ownership.
+ *
+ * Same ownership fix as IdentifyBoundaryNodesPar. Node indices stored are
+ * TRUE DOF indices.
+ */
+static void IdentifyBoundaryNodesByAttributePar(
+    mfem::ParMesh* pmesh,
+    mfem::ParFiniteElementSpace& pfes,
+    std::map<int, std::vector<int>>& boundary_nodes,
+    std::vector<int>& interior_nodes)
+{
+    boundary_nodes.clear();
+    interior_nodes.clear();
+
+    int nv = pmesh->GetNV();
+    std::vector<bool> is_boundary(nv, false);
+
+    // Mark vertices on physical boundary elements
+    for (int be = 0; be < pmesh->GetNBE(); ++be) {
+        int attr = pmesh->GetBdrAttribute(be);
+        mfem::Array<int> vertices;
+        pmesh->GetBdrElementVertices(be, vertices);
+
+        for (int v = 0; v < vertices.Size(); ++v) {
+            int vi = vertices[v];
+            int tdof = pfes.GetLocalTDofNumber(vi);
+            if (tdof < 0) continue;  // Not owned
+
+            is_boundary[vi] = true;
+            auto& nodes = boundary_nodes[attr];
+            if (std::find(nodes.begin(), nodes.end(), tdof) == nodes.end()) {
+                nodes.push_back(tdof);
+            }
+        }
+    }
+
+    // Collect interior owned vertices
+    for (int i = 0; i < nv; ++i) {
+        int tdof = pfes.GetLocalTDofNumber(i);
+        if (tdof < 0) continue;
+        if (!is_boundary[i]) {
+            interior_nodes.push_back(tdof);
+        }
+    }
+}
+
+#endif  // MFEM_USE_MPI
+
+// ============================================================================
 // MAIN FUNCTION
 // ============================================================================
 
 /**
- * @brief Main driver for 2D lid-driven cavity flow solver
+ * @brief PARALLEL version: 2D lid-driven cavity flow solver with MPI/Hypre
  *
  * Solves incompressible Navier-Stokes equations using stream function-vorticity
  * formulation with Meshless Point Collocation (MPC) and DC PSE operators.
+ * Distributed across multiple MPI processes using MFEM's parallel data structures.
  *
  * Algorithm (from Bourantas et al. 2019):
  * 1. Compute DC PSE derivative operators (pre-processing)
  * 2. Time-stepping loop:
  *    a) Update vorticity: explicit Euler for transport equation
- *    b) Solve streamfunction: ∇²ψ = -ω (Poisson equation)
+ *    b) Solve streamfunction: ∇²ψ = -ω (Poisson equation with Hypre)
  *    c) Apply boundary conditions for lid-driven cavity
  *    d) Check steady-state convergence
- *    e) Output solutions (DAT files, ParaView)
+ *    e) Output solutions (DAT files, ParaView with parallel I/O)
  *
  * @param argc Number of command-line arguments
  * @param argv Command-line argument values
@@ -93,8 +209,11 @@
  */
 int main(int argc, char *argv[])
 {
-    // Initialize MPI if MFEM was built with MPI support
-#ifdef MFEM_USE_MPI
+#ifndef MFEM_USE_MPI
+    #error "StreamVorti_par requires MFEM built with MPI support (MFEM_USE_MPI)"
+#endif
+
+    // Initialize MPI (required for parallel execution)
     MPI_Init(&argc, &argv);
     int num_procs, myid;
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
@@ -104,7 +223,6 @@ int main(int argc, char *argv[])
     {
         std::cout << "MPI initialized with " << num_procs << " process(es)" << std::endl;
     }
-#endif
 
     // Options
     const char *mesh_file = "";
@@ -137,6 +255,7 @@ int main(int argc, char *argv[])
 
     // Simulation parameters
     SimulationParams params;
+    params.solver_type = "gmres";  // DCPSE Laplacian is non-symmetric; GMRES required (CG stalls for some partitions)
     // Performance Metrics parameters
     PerformanceMetrics perf_metrics;
 
@@ -221,16 +340,17 @@ int main(int argc, char *argv[])
     args.Parse();
 
     if (!args.Good()) {
-        args.PrintUsage(std::cout);
-#ifdef MFEM_USE_MPI
-        MPI_Finalize();
-#endif
+        if (myid == 0) {
+            args.PrintUsage(std::cout);
+        }
         return 1;
     }
-    args.PrintOptions(std::cout);
+    if (myid == 0) {
+        args.PrintOptions(std::cout);
+    }
 
-    // Mesh pointer - will be set by SDL mode or traditional mode
-    mfem::Mesh* mesh = nullptr;
+    // Mesh pointer - serial mesh for initial loading, then converted to ParMesh
+    mfem::Mesh* serial_mesh = nullptr;
 #ifdef STREAMVORTI_WITH_ECL
     bool sdl_mode = false;
     // Store SDL boundary conditions for runtime evaluation
@@ -313,34 +433,36 @@ int main(int argc, char *argv[])
             nx = ny = static_cast<int>(std::sqrt(static_cast<double>(nv))) - 1;
             dim = config.dimension;
 
-            // Transfer ownership of mesh
-            mesh = config.mesh.release();
+            // Transfer ownership of mesh (serial for now, will convert to ParMesh)
+            serial_mesh = config.mesh.release();
 
             std::cout << "\nContinuing with SDL-configured simulation...\n" << std::endl;
 
         } catch (const StreamVorti::Lisp::EclException& e) {
-            std::cerr << "ECL Error: " << e.what() << std::endl;
+            if (myid == 0) {
+                std::cerr << "ECL Error: " << e.what() << std::endl;
+            }
             StreamVorti::Lisp::Runtime::shutdown();
-#ifdef MFEM_USE_MPI
-            MPI_Finalize();
-#endif
             return EXIT_FAILURE;
         } catch (const std::exception& e) {
-            std::cerr << "Error loading SDL file: " << e.what() << std::endl;
+            if (myid == 0) {
+                std::cerr << "Error loading SDL file: " << e.what() << std::endl;
+            }
             StreamVorti::Lisp::Runtime::shutdown();
-#ifdef MFEM_USE_MPI
-            MPI_Finalize();
-#endif
             return EXIT_FAILURE;
         }
     }
 #endif // STREAMVORTI_WITH_ECL
 
     // Create or load mesh (traditional mode - only if not in SDL mode)
-    if (mesh == nullptr) {
-        mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
+    if (serial_mesh == nullptr) {
+        serial_mesh = CreateOrLoadMesh(mesh_file, dim, nx, ny, nz, sx, sy, sz, save_mesh);
     }
     perf_metrics.grid_size = nx;
+
+    // Convert serial mesh to parallel mesh (distributed across MPI ranks)
+    mfem::ParMesh* mesh = new mfem::ParMesh(MPI_COMM_WORLD, *serial_mesh);
+    delete serial_mesh;  // No longer needed after creating ParMesh
 
     // dat files for Matlab
     std::string dat_dir = "output_dat";
@@ -355,18 +477,23 @@ int main(int argc, char *argv[])
         mesh->Print(mesh_ofs);
     }
 
-    // Set up finite element space
+    // Set up parallel finite element space
     dim = mesh->Dimension();
     mfem::H1_FECollection fec(order, dim);
-    mfem::FiniteElementSpace fes(mesh, &fec, 1);
-    std::cout << "main: Number of finite element unknowns: " << fes.GetTrueVSize() << std::endl;
-    mfem::GridFunction gf(&fes); // as 'x' in ex1.cpp
+    mfem::ParFiniteElementSpace fes(mesh, &fec, 1);
+
+    HYPRE_BigInt global_dofs = fes.GlobalTrueVSize();
+    if (myid == 0) {
+        std::cout << "Number of finite element unknowns: " << global_dofs << std::endl;
+    }
+
+    mfem::ParGridFunction gf(&fes); // Parallel grid function
 
     // ================== Timing PHASE 1: DERIVATIVE COMPUTATION ==================
     mfem::StopWatch deriv_timer;
     deriv_timer.Start();
-    // Initialise DCPSE derivatives
-    StreamVorti::Dcpse* derivs = InitialiseDCPSE(gf, dim, params.num_neighbors);
+    // Initialise parallel DCPSE derivatives
+    StreamVorti::ParDcpse2d* derivs = InitialiseParDCPSE(gf, dim, params.num_neighbors);
 
     deriv_timer.Stop();
     perf_metrics.derivative_time = deriv_timer.RealTime();
@@ -374,7 +501,8 @@ int main(int argc, char *argv[])
     std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
     // save derivs matrices
-    SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
+    // TODO: SaveDerivativeMatrices not yet implemented for ParDcpse2d (HypreParMatrix output)
+    // SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
 
     // Save neighbors if requested
     if (save_neighbors) {
@@ -388,30 +516,25 @@ int main(int argc, char *argv[])
 // PART 1: INITIALIZATION
 // ================================================================
 
-    const int num_nodes = mesh->GetNV();
+    const int num_nodes = fes.GetTrueVSize();
 
-    // Ensure we have a 2D DCPSE object first
-    StreamVorti::Dcpse2d* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(derivs);
-    if (!dcpse2d) {
-        MFEM_ABORT("Setup: Only 2D simulations are currently supported.");
-    }
+    // Get parallel DCPSE derivative matrices (HypreParMatrix)
+    const mfem::HypreParMatrix& dx_matrix = derivs->ShapeFunctionDx();
+    const mfem::HypreParMatrix& dy_matrix = derivs->ShapeFunctionDy();
+    const mfem::HypreParMatrix& dxx_matrix = derivs->ShapeFunctionDxx();
+    const mfem::HypreParMatrix& dyy_matrix = derivs->ShapeFunctionDyy();
 
-    // Get DCPSE derivative matrices
-    const mfem::SparseMatrix& dx_matrix = dcpse2d->ShapeFunctionDx();
-    const mfem::SparseMatrix& dy_matrix = dcpse2d->ShapeFunctionDy();
-    const mfem::SparseMatrix& dxx_matrix = dcpse2d->ShapeFunctionDxx();
-    const mfem::SparseMatrix& dyy_matrix = dcpse2d->ShapeFunctionDyy();
-
-    std::cout << "Setup: Retrieved DCPSE derivative matrices successfully." << std::endl;
+    std::cout << "Setup: Retrieved parallel DCPSE derivative matrices successfully." << std::endl;
 
     // Identify boundary and interior nodes
+    // Use the parallel-specific version which correctly handles DOF ownership.
     std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
-    IdentifyBoundaryNodes(mesh, bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes);
+    IdentifyBoundaryNodesPar(mesh, fes, bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes);
 
     // Also identify boundary nodes by MFEM boundary attributes (for SDL BC integration)
     std::map<int, std::vector<int>> boundary_nodes_by_attr;
     std::vector<int> interior_nodes_by_attr;
-    IdentifyBoundaryNodesByAttribute(mesh, boundary_nodes_by_attr, interior_nodes_by_attr);
+    IdentifyBoundaryNodesByAttributePar(mesh, fes, boundary_nodes_by_attr, interior_nodes_by_attr);
 
     // Combine all boundary nodes for streamfunction boundary conditions
     std::vector<int> all_boundary_nodes;
@@ -420,36 +543,62 @@ int main(int argc, char *argv[])
     all_boundary_nodes.insert(all_boundary_nodes.end(), top_nodes.begin(), top_nodes.end());
     all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
 
-    // Create Laplacian matrix for streamfunction equation
-    // Flip sign to Ensures matrix positive definiteness for iterative solvers
-    mfem::SparseMatrix* laplacian_matrix = new mfem::SparseMatrix(dxx_matrix);
-    laplacian_matrix->Add(1.0, dyy_matrix);
+    // Create parallel Laplacian matrix for streamfunction equation
+    // Laplacian = dxx + dyy, then negate for positive definiteness
+    mfem::HypreParMatrix* laplacian_matrix = mfem::ParAdd(&dxx_matrix, &dyy_matrix);
     *laplacian_matrix *= -1.0;
-    // Apply BC
-    for (int idx : all_boundary_nodes) {
-        laplacian_matrix->EliminateRow(idx);  // Zeros the row except diagonal
-        laplacian_matrix->Set(idx, idx, 1.0); // Set diagonal
-    }
-    laplacian_matrix->Finalize();
 
-    std::cout << "Setup: Created Laplacian matrix with boundary conditions." << std::endl;
+    // Apply boundary conditions
+    // Convert boundary nodes to essential true DOF list
+    mfem::Array<int> ess_tdof_list;
+    for (int idx : all_boundary_nodes) {
+        ess_tdof_list.Append(idx);
+    }
+
+    // Eliminate rows/columns corresponding to essential boundary conditions
+    laplacian_matrix->EliminateRowsCols(ess_tdof_list);
+
+    std::cout << "Setup: Created parallel Laplacian matrix with boundary conditions." << std::endl;
 
     // ================== Timing PHASE 2: FACTORIZATION ==================
     mfem::StopWatch factor_timer;
     factor_timer.Start();
 
-    // Create and setup linear solver (factorization happens here for direct solvers)
-    SolverPackage* solver_package = CreateLinearSolver(params.solver_type, *laplacian_matrix, params);
+    // Create parallel Hypre solver (inline for HypreParMatrix compatibility)
+    mfem::Solver* linear_solver = nullptr;
+    mfem::Solver* precond = nullptr;
 
-    if (!solver_package || !solver_package->solver) {
-        MFEM_ABORT("Failed to create linear solver");
+    if (params.solver_type == "cg") {
+        if (myid == 0) std::cout << "Using HyprePCG solver (parallel conjugate gradient)" << std::endl;
+        mfem::HyprePCG* cg_solver = new mfem::HyprePCG(MPI_COMM_WORLD);
+        cg_solver->SetTol(params.solver_rel_tol);
+        cg_solver->SetMaxIter(params.solver_max_iter);
+        cg_solver->SetPrintLevel(params.solver_print_level);
+        cg_solver->SetOperator(*laplacian_matrix);
+        linear_solver = cg_solver;
     }
-
-    mfem::Solver* linear_solver = solver_package->solver;
+    else if (params.solver_type == "gmres") {
+        if (myid == 0) std::cout << "Using HypreGMRES solver (parallel GMRES)" << std::endl;
+        mfem::HypreGMRES* gmres_solver = new mfem::HypreGMRES(MPI_COMM_WORLD);
+        gmres_solver->SetTol(params.solver_rel_tol);
+        gmres_solver->SetMaxIter(params.solver_max_iter);
+        gmres_solver->SetPrintLevel(params.solver_print_level);
+        gmres_solver->SetOperator(*laplacian_matrix);
+        linear_solver = gmres_solver;
+    }
+    else if (params.solver_type == "hypre" || params.solver_type == "amg") {
+        if (myid == 0) std::cout << "Using HypreBoomerAMG solver (algebraic multigrid)" << std::endl;
+        mfem::HypreBoomerAMG* amg_solver = new mfem::HypreBoomerAMG(*laplacian_matrix);
+        amg_solver->SetPrintLevel(params.solver_print_level);
+        linear_solver = amg_solver;
+    }
+    else {
+        MFEM_ABORT("Parallel solver type '" << params.solver_type << "' not supported. Use: cg, gmres, hypre");
+    }
 
     factor_timer.Stop();
     perf_metrics.factorization_time = factor_timer.RealTime();
-    std::cout << "Phase 2 - Factorization: " << perf_metrics.factorization_time << " s" << std::endl;
+    std::cout << "Phase 2 - Solver setup: " << perf_metrics.factorization_time << " s" << std::endl;
 
     // Initialize solution vectors
     mfem::Vector vorticity(num_nodes);
@@ -484,16 +633,16 @@ int main(int argc, char *argv[])
     mfem::Vector diffusion_term(num_nodes);
 
     // ====================================================================
-    // PARAVIEW OUTPUT SETUP
+    // PARAVIEW OUTPUT SETUP (Parallel)
     // ====================================================================
-    // Create finite element spaces
-    mfem::FiniteElementSpace scalar_fes(const_cast<mfem::Mesh*>(mesh), &fec, 1);
-    mfem::FiniteElementSpace vector_fes(const_cast<mfem::Mesh*>(mesh), &fec, mesh->Dimension());
+    // Create parallel finite element spaces for visualization
+    mfem::ParFiniteElementSpace scalar_fes(mesh, &fec, 1);
+    mfem::ParFiniteElementSpace vector_fes(mesh, &fec, mesh->Dimension());
 
-    // Create grid functions
-    mfem::GridFunction vorticity_gf(&scalar_fes);
-    mfem::GridFunction streamfunction_gf(&scalar_fes);
-    mfem::GridFunction velocity_gf(&vector_fes);
+    // Create parallel grid functions
+    mfem::ParGridFunction vorticity_gf(&scalar_fes);
+    mfem::ParGridFunction streamfunction_gf(&scalar_fes);
+    mfem::ParGridFunction velocity_gf(&vector_fes);
 
     // Create ParaView data collection
     mfem::ParaViewDataCollection paraview_dc(paraview_filename, mesh);
@@ -572,24 +721,26 @@ int main(int argc, char *argv[])
         // STEP 2: UPDATE VORTICITY (using derivatives computed above) (interior only)
         // ================================================================
         // Use explicit Euler scheme (Eq. 11)
-        for (int idx : interior_nodes) {
-            double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
-            double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
-
-                // Store for residual computation (if enabled)
-            if (params.check_residuals) {
-                convection_term[idx] = convection;
-                diffusion_term[idx] = diffusion;
-            }
-            // Update vorticity
-            vorticity[idx] += current_dt * (diffusion - convection);
-        }
 #ifdef _OPENMP
         #pragma omp parallel for schedule(static)
         for (int i = 0; i < (int)interior_nodes.size(); ++i) {
             int idx = interior_nodes[i];
             double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
             double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
+            if (params.check_residuals) {
+                convection_term[idx] = convection;
+                diffusion_term[idx] = diffusion;
+            }
+            vorticity[idx] += current_dt * (diffusion - convection);
+        }
+#else
+        for (int idx : interior_nodes) {
+            double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
+            double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
+            if (params.check_residuals) {
+                convection_term[idx] = convection;
+                diffusion_term[idx] = diffusion;
+            }
             vorticity[idx] += current_dt * (diffusion - convection);
         }
 #endif
@@ -665,7 +816,6 @@ int main(int argc, char *argv[])
             vorticity[idx] = dv_dx[idx] - du_dy[idx];
         }
 
-
         // ================================================================
         // STEP 5: COMPUTE AND LOG RESIDUALS (if enabled)
         // ================================================================
@@ -731,6 +881,9 @@ int main(int argc, char *argv[])
         // STEP 6: ADAPTIVE TIMESTEP
         // Implement Gershgorin circle theorem estimation (Equation 42 from paper)
         // ================================================================
+        // NOTE: Adaptive timestep disabled in parallel version due to HypreParMatrix
+        // not supporting direct element access via GetI()/GetData()
+        #ifndef MFEM_USE_MPI
         if (params.enable_adaptive_timestep &&
             time_step % params.gershgorin_frequency == 0) {
             // Compute Gershgorin bound: max_i { Σ_j (|L_ij| + |K_ij|) }
@@ -796,6 +949,7 @@ int main(int argc, char *argv[])
                 std::cout << "  Updated total steps = " << num_timesteps << std::endl;
             }
         }
+        #endif // MFEM_USE_MPI
 
         // ================================================================
         // STEP 7: OUTPUT SOLUTION PERIODICALLY (if enabled)
@@ -946,10 +1100,10 @@ int main(int argc, char *argv[])
 // ====================================================================
 
     // Extract centerlines for validation against Ghia et al. (1982)
-    ExtractCenterline(u_velocity, v_velocity, mesh,
+    ExtractCenterline(u_velocity, v_velocity, &scalar_fes,
                       dat_dir + "/" + params.output_prefix + "_u_centerline_x0.5.dat",
                       'x', 0.5);
-    ExtractCenterline(u_velocity, v_velocity, mesh,
+    ExtractCenterline(u_velocity, v_velocity, &scalar_fes,
                       dat_dir + "/" + params.output_prefix + "_v_centerline_y0.5.dat",
                       'y', 0.5);
 
@@ -971,18 +1125,27 @@ int main(int argc, char *argv[])
     std::cout << "  Average time per iteration: " << total_solve_time / perf_metrics.total_iterations << " s\n\n";
 
 
-    // Final solution statistics
-    std::cout << "Final simulation statistics:" << std::endl;
-    std::cout << "  - Maximum vorticity: " << vorticity.Max() << std::endl;
-    std::cout << "  - Minimum vorticity: " << vorticity.Min() << std::endl;
-    std::cout << "  - Maximum streamfunction: " << streamfunction.Max() << std::endl;
-    std::cout << "  - Minimum streamfunction: " << streamfunction.Min() << std::endl;
+    // Final solution statistics - compute GLOBAL max/min across all ranks
+    double local_vort_max = vorticity.Max();
+    double local_vort_min = vorticity.Min();
+    double local_psi_max = streamfunction.Max();
+    double local_psi_min = streamfunction.Min();
 
-    // Cleanup
-    delete derivs;
-    delete mesh;
-    delete solver_package;  // delete both solver and preconditioner
-    delete laplacian_matrix;
+    double global_vort_max, global_vort_min;
+    double global_psi_max, global_psi_min;
+
+    MPI_Reduce(&local_vort_max, &global_vort_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&local_vort_min, &global_vort_min, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&local_psi_max, &global_psi_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&local_psi_min, &global_psi_min, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
+    if (myid == 0) {
+        std::cout << "Final simulation statistics (GLOBAL):" << std::endl;
+        std::cout << "  - Maximum vorticity: " << global_vort_max << std::endl;
+        std::cout << "  - Minimum vorticity: " << global_vort_min << std::endl;
+        std::cout << "  - Maximum streamfunction: " << global_psi_max << std::endl;
+        std::cout << "  - Minimum streamfunction: " << global_psi_min << std::endl;
+    }
 
 #ifdef STREAMVORTI_WITH_ECL
     // Shutdown ECL if it was initialized
@@ -991,11 +1154,17 @@ int main(int argc, char *argv[])
     }
 #endif
 
-#ifdef MFEM_USE_MPI
-    MPI_Finalize();
-#endif
+    if (myid == 0) {
+        std::cout << "main: success!" << std::endl;
+    }
 
-    std::cout << "main: success!" << std::endl;
+    // Clean up all Hypre/MPI objects before MPI_Finalize (Hypre requires this)
+    delete derivs;
+    delete laplacian_matrix;
+    delete linear_solver;
+    delete mesh;
+
+    MPI_Finalize();
     return EXIT_SUCCESS;
 }
 
@@ -1052,6 +1221,30 @@ StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int num_nei
     return derivs;
 }
 
+#ifdef MFEM_USE_MPI
+StreamVorti::ParDcpse2d* InitialiseParDCPSE(mfem::ParGridFunction& gf, int dim, int num_neighbors) {
+    std::cout << "InitialiseParDCPSE: Initialising parallel DC PSE derivatives." << std::endl;
+    mfem::StopWatch timer;
+    timer.Start();
+
+    if (dim != 2) {
+        MFEM_ABORT("InitialiseParDCPSE: Only 2D supported currently. Got dim=" << dim);
+    }
+
+    StreamVorti::ParDcpse2d* derivs = new StreamVorti::ParDcpse2d(gf, num_neighbors);
+
+    std::cout << "InitialiseParDCPSE: Execution time for parallel DCPSE initialisation: "
+              << timer.RealTime() << " s" << std::endl;
+
+    timer.Clear();
+    derivs->Update();  // Includes ghost exchange via ParSupportDomain::Update()
+    std::cout << "InitialiseParDCPSE: Execution time for parallel DCPSE computation (includes ghost exchange): "
+              << timer.RealTime() << " s" << std::endl;
+
+    return derivs;
+}
+#endif
+
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
                            int dim, bool save_d, bool save_dd,
                            const std::string& dat_dir) {
@@ -1082,9 +1275,9 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh,
                                           std::vector<int>& right_nodes,
                                           std::vector<int>& top_nodes,
                                           std::vector<int>& left_nodes,
-                                          std::vector<int>& interior_nodes) {
+                                          std::vector<int>& interior_nodes,
+                                          int num_true_verts) {
     const double tolerance = 1e-10;
-    const int num_vertices = mesh->GetNV();
 
     // Clear all vectors
     bottom_nodes.clear();
@@ -1095,6 +1288,23 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh,
 
     // First pass: collect all boundary nodes
     std::vector<int> all_boundary_nodes;
+
+    // Iterate over ALL local vertices (including shared from neighboring ranks).
+    // For each vertex, determine if it is owned by this rank by checking whether
+    // its local vertex index maps to a valid true DOF index.
+    //
+    // In parallel (num_true_verts >= 0), MFEM does not guarantee "owned-first"
+    // ordering in ParMesh: shared vertices may appear anywhere in 0..GetNV()-1.
+    // We detect owned vertices by checking if their local index i has a valid
+    // true DOF (GetLocalTDofNumber would be the correct API, but since we only
+    // have num_true_verts here, we use the caller's knowledge: if the true DOF
+    // range is 0..num_true_verts-1, vertices with local index in that range are
+    // ASSUMED owned — this matches the DCPSE ownership assumption).
+    //
+    // NOTE: This is the same assumption as the DCPSE code in par_support_domain.cpp
+    // (local_to_global_[i] = local_node_offset + i for i < num_local_nodes_).
+    // If MFEM changes its vertex ordering, both must be updated together.
+    const int num_vertices = (num_true_verts >= 0) ? num_true_verts : mesh->GetNV();
 
     for (int i = 0; i < num_vertices; ++i) {
         const double* vertex = mesh->GetVertex(i);
@@ -1354,9 +1564,13 @@ std::string GetCurrentDateTime() {
 void IdentifyBoundaryNodesByAttribute(
     mfem::Mesh* mesh,
     std::map<int, std::vector<int>>& boundary_nodes,
-    std::vector<int>& interior_nodes)
+    std::vector<int>& interior_nodes,
+    int num_true_verts)
 {
-    const int num_vertices = mesh->GetNV();
+    // In parallel, only consider OWNED (true DOF) vertices to avoid
+    // including shared vertices from neighboring ranks (local indices
+    // >= TrueVSize()) which are out of range for HypreParMatrix operations.
+    const int num_vertices = (num_true_verts >= 0) ? num_true_verts : mesh->GetNV();
     std::vector<bool> is_boundary(num_vertices, false);
 
     boundary_nodes.clear();
@@ -1371,6 +1585,8 @@ void IdentifyBoundaryNodesByAttribute(
 
         for (int v = 0; v < vertices.Size(); ++v) {
             int vi = vertices[v];
+            // Skip shared vertices owned by other ranks
+            if (vi >= num_vertices) continue;
             is_boundary[vi] = true;
             // Add to the attribute's list (avoid duplicates)
             auto& nodes = boundary_nodes[attr];
@@ -1380,7 +1596,7 @@ void IdentifyBoundaryNodesByAttribute(
         }
     }
 
-    // Collect interior nodes
+    // Collect interior nodes (only owned vertices)
     for (int i = 0; i < num_vertices; ++i) {
         if (!is_boundary[i]) {
             interior_nodes.push_back(i);
@@ -1400,50 +1616,75 @@ void IdentifyBoundaryNodesByAttribute(
 
 void ExtractCenterline(const mfem::Vector& u_velocity,
                        const mfem::Vector& v_velocity,
-                       mfem::Mesh* mesh,
+                       mfem::ParFiniteElementSpace* pfes,
                        const std::string& filename,
                        char axis,
                        double position,
                        double tol)
 {
-    std::ofstream out(filename);
-    out << "# StreamVorti Centerline Data\n";
-    out << "# Axis: " << axis << " = " << position << "\n";
+    MPI_Comm comm = pfes->GetComm();
+    int myrank, nranks;
+    MPI_Comm_rank(comm, &myrank);
+    MPI_Comm_size(comm, &nranks);
 
-    const int num_vertices = mesh->GetNV();
+    mfem::Mesh* mesh = pfes->GetMesh();
+    int nldofs = pfes->GetNDofs();  // local DOFs (owned + shared)
 
-    // Collect nodes along the line: (varying_coord, u, v)
-    std::vector<std::tuple<double, double, double>> line_data;
+    // Collect owned nodes along the line: iterate LOCAL DOFs, skip non-owned.
+    // For P1 H1 elements: local DOF ldof = local vertex ldof.
+    // True DOF index = pfes->GetLocalTDofNumber(ldof).
+    // u_velocity[tdof] is the correct velocity at the owned vertex.
+    std::vector<double> local_vary, local_u, local_v;
+    for (int ldof = 0; ldof < nldofs; ++ldof) {
+        int tdof = pfes->GetLocalTDofNumber(ldof);
+        if (tdof < 0) continue;  // shared vertex owned by another rank
 
-    for (int i = 0; i < num_vertices; ++i) {
-        const double* vertex = mesh->GetVertex(i);
-        double x = vertex[0];
-        double y = vertex[1];
-
-        double fixed_val = (axis == 'x') ? x : y;
-        double vary_val = (axis == 'x') ? y : x;
+        const double* vertex = mesh->GetVertex(ldof);
+        double fixed_val = (axis == 'x') ? vertex[0] : vertex[1];
+        double vary_val  = (axis == 'x') ? vertex[1] : vertex[0];
 
         if (std::abs(fixed_val - position) < tol) {
-            line_data.push_back({vary_val, u_velocity[i], v_velocity[i]});
+            local_vary.push_back(vary_val);
+            local_u.push_back(u_velocity[tdof]);
+            local_v.push_back(v_velocity[tdof]);
         }
     }
 
-    // Sort by varying coordinate
-    std::sort(line_data.begin(), line_data.end());
+    // Gather all centerline data to rank 0 via MPI
+    int local_n = (int)local_vary.size();
+    std::vector<int> counts(nranks, 0), displs(nranks, 0);
+    MPI_Gather(&local_n, 1, MPI_INT, counts.data(), 1, MPI_INT, 0, comm);
 
-    // Output header
-    if (axis == 'x') {
-        out << "# y  u  v\n";
-    } else {
-        out << "# x  u  v\n";
+    int total_n = 0;
+    if (myrank == 0) {
+        for (int r = 0; r < nranks; ++r) { displs[r] = total_n; total_n += counts[r]; }
     }
 
-    // Output data
-    out.precision(8);
-    for (const auto& [coord, u, v] : line_data) {
-        out << coord << " " << u << " " << v << "\n";
-    }
+    std::vector<double> all_vary(total_n), all_u(total_n), all_v(total_n);
+    MPI_Gatherv(local_vary.data(), local_n, MPI_DOUBLE,
+                all_vary.data(), counts.data(), displs.data(), MPI_DOUBLE, 0, comm);
+    MPI_Gatherv(local_u.data(), local_n, MPI_DOUBLE,
+                all_u.data(), counts.data(), displs.data(), MPI_DOUBLE, 0, comm);
+    MPI_Gatherv(local_v.data(), local_n, MPI_DOUBLE,
+                all_v.data(), counts.data(), displs.data(), MPI_DOUBLE, 0, comm);
 
-    std::cout << "Saved centerline data to: " << filename
-              << " (" << line_data.size() << " points)" << std::endl;
+    // Only rank 0 writes the file
+    if (myrank == 0) {
+        // Sort by varying coordinate
+        std::vector<int> order(total_n);
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(),
+                  [&](int a, int b){ return all_vary[a] < all_vary[b]; });
+
+        std::ofstream out(filename);
+        out << "# StreamVorti Centerline Data\n";
+        out << "# Axis: " << axis << " = " << position << "\n";
+        out << (axis == 'x' ? "# y  u  v\n" : "# x  u  v\n");
+        out.precision(8);
+        for (int idx : order) {
+            out << all_vary[idx] << " " << all_u[idx] << " " << all_v[idx] << "\n";
+        }
+        std::cout << "Saved centerline data to: " << filename
+                  << " (" << total_n << " points)" << std::endl;
+    }
 }

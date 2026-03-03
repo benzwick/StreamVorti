@@ -56,7 +56,7 @@ public:
         delete this->global_nodes_;
     };
 
-    void ComputeSupportRadiuses(const std::size_t &neighs_num);
+    virtual void ComputeSupportRadiuses(const std::size_t &neighs_num);
 
     inline const mfem::GridFunction & SupportNodes() const { return *this->support_nodes_; }
 
@@ -97,6 +97,9 @@ protected:
     /*! Number of neighbors requested for support domain */
     int num_neighbors_ = 0;
 
+    /*! The support radiuses of the influence nodes of the support domain. */
+    std::vector<double> support_radiuses_;
+
 private:
     /*! Dimension of the mesh */
     const int dim_;
@@ -111,9 +114,6 @@ private:
 
     /*! The global support nodes of the support domain. */
     mfem::GridFunction *global_nodes_;
-
-    /*! The support radiuses of the influence nodes of the support domain. */
-    std::vector<double> support_radiuses_;
 };
 
 } // namespace StreamVorti
