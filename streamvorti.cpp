@@ -93,19 +93,6 @@
  */
 int main(int argc, char *argv[])
 {
-    // Initialize MPI if MFEM was built with MPI support
-#ifdef MFEM_USE_MPI
-    MPI_Init(&argc, &argv);
-    int num_procs, myid;
-    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-
-    if (myid == 0)
-    {
-        std::cout << "MPI initialized with " << num_procs << " process(es)" << std::endl;
-    }
-#endif
-
     // Options
     const char *mesh_file = "";
     const char *sdl_file = "";  // SDL file for Lisp-based configuration
@@ -222,9 +209,6 @@ int main(int argc, char *argv[])
 
     if (!args.Good()) {
         args.PrintUsage(std::cout);
-#ifdef MFEM_USE_MPI
-        MPI_Finalize();
-#endif
         return 1;
     }
     args.PrintOptions(std::cout);
@@ -321,16 +305,10 @@ int main(int argc, char *argv[])
         } catch (const StreamVorti::Lisp::EclException& e) {
             std::cerr << "ECL Error: " << e.what() << std::endl;
             StreamVorti::Lisp::Runtime::shutdown();
-#ifdef MFEM_USE_MPI
-            MPI_Finalize();
-#endif
             return EXIT_FAILURE;
         } catch (const std::exception& e) {
             std::cerr << "Error loading SDL file: " << e.what() << std::endl;
             StreamVorti::Lisp::Runtime::shutdown();
-#ifdef MFEM_USE_MPI
-            MPI_Finalize();
-#endif
             return EXIT_FAILURE;
         }
     }
@@ -584,16 +562,6 @@ int main(int argc, char *argv[])
             // Update vorticity
             vorticity[idx] += current_dt * (diffusion - convection);
         }
-#ifdef _OPENMP
-        #pragma omp parallel for schedule(static)
-        for (int i = 0; i < (int)interior_nodes.size(); ++i) {
-            int idx = interior_nodes[i];
-            double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
-            double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
-            vorticity[idx] += current_dt * (diffusion - convection);
-        }
-#endif
-
 
         // ================================================================
         // STEP 3: SOLVE STREAMFUNCTION POISSON EQUATION (Equation 12)
@@ -991,10 +959,6 @@ int main(int argc, char *argv[])
     }
 #endif
 
-#ifdef MFEM_USE_MPI
-    MPI_Finalize();
-#endif
-
     std::cout << "main: success!" << std::endl;
     return EXIT_SUCCESS;
 }
@@ -1311,21 +1275,11 @@ SolverPackage* CreateLinearSolver(const std::string& solver_type,
     else if (solver_type == "hypre") {
 #ifdef MFEM_USE_HYPRE
         std::cout << "Using HypreBoomerAMG (parallel algebraic multigrid)" << std::endl;
-
-        // Convert serial SparseMatrix to HypreParMatrix
-        // This creates a parallel matrix structure that Hypre requires
-        mfem::HypreParMatrix* hypre_A = new mfem::HypreParMatrix(
-            MPI_COMM_WORLD,           // MPI communicator
-            A.Size(),                 // Global number of rows
-            A.GetRowStarts(),         // Row partitioning (nullptr for serial)
-            &A                        // Serial SparseMatrix to convert
-        );
-
-        mfem::HypreBoomerAMG* amg = new mfem::HypreBoomerAMG(*hypre_A);
+        mfem::HypreBoomerAMG* amg = new mfem::HypreBoomerAMG();
         amg->SetPrintLevel(params.solver_print_level);
+        amg->SetOperator(A);
 
         package->solver = amg;
-        package->hypre_matrix = hypre_A;
 #else
         std::cerr << "ERROR: HYPRE not available. Rebuild MFEM with HYPRE support." << std::endl;
         delete package;
