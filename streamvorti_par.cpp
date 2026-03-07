@@ -17,11 +17,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Contributors:
+ * Contributors (alphabetically):
  *      George C. BOURANTAS
+ *      Weizheng (Will) LI
  *      Konstantinos A. MOUNTRIS
  *      Benjamin F. ZWICK
- *      Weizheng(Will) LI
  */
 
 // PARALLEL VERSION - requires MFEM built with MPI and HYPRE

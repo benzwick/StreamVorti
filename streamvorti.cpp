@@ -1046,7 +1046,8 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh,
                                           std::vector<int>& right_nodes,
                                           std::vector<int>& top_nodes,
                                           std::vector<int>& left_nodes,
-                                          std::vector<int>& interior_nodes) {
+                                          std::vector<int>& interior_nodes,
+                                          int num_true_verts) {
     const double tolerance = 1e-10;
     const int num_vertices = mesh->GetNV();
 
@@ -1308,7 +1309,8 @@ std::string GetCurrentDateTime() {
 void IdentifyBoundaryNodesByAttribute(
     mfem::Mesh* mesh,
     std::map<int, std::vector<int>>& boundary_nodes,
-    std::vector<int>& interior_nodes)
+    std::vector<int>& interior_nodes,
+    int num_true_verts)
 {
     const int num_vertices = mesh->GetNV();
     std::vector<bool> is_boundary(num_vertices, false);

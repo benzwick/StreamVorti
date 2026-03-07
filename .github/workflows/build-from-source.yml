@@ -141,5 +141,6 @@ jobs:
         name: streamvorti-binaries-${{ matrix.os }}
         path: |
           build/StreamVorti
+          build/StreamVorti_par
           build/MfemRun
         retention-days: 7
