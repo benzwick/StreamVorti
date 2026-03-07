@@ -31,7 +31,7 @@
 //     ./StreamVorti -f demo/cavity.lisp -pv
 
 // Related header
-#include <StreamVorti/streamvorti.hpp>
+#include <StreamVorti/streamvorti_par.hpp>
 
 // SDL/Lisp support (conditional)
 #ifdef STREAMVORTI_WITH_ECL
