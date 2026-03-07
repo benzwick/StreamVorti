@@ -49,6 +49,10 @@ else()
     target_link_libraries(streamvorti_tests ${PROJECT_NAME})
 endif()
 
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(streamvorti_tests OpenMP::OpenMP_CXX)
+endif()
+
 if(STREAMVORTI_WITH_ECL)
     target_link_libraries(streamvorti_tests ${ECL_LIBRARIES})
     target_compile_definitions(streamvorti_tests PRIVATE STREAMVORTI_WITH_ECL)
