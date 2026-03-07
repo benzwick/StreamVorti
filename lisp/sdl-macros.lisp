@@ -69,6 +69,12 @@
     (circle (circle-radius ball))
     (sphere (sphere-radius ball))))
 
+(defun difference (shape subtracted)
+  "Create a CSG difference: subtract SUBTRACTED from SHAPE.
+   NOTE: CSG geometry requires an unstructured mesh generator (e.g. Gmsh)
+   which is not yet supported by the C++ backend."
+  (streamvorti.geometry:csg-difference shape subtracted))
+
 ;;; ============================================================
 ;;; Domain
 ;;; ============================================================
