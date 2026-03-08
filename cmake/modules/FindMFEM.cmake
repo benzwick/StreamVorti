@@ -14,6 +14,7 @@
 #   MFEM_INCLUDE_DIRS - Include directories for MFEM
 #   MFEM_LIBRARIES - Libraries to link against
 #   MFEM_VERSION - Version of MFEM
+#   MFEM_USE_MPI - TRUE if MFEM was built with MPI support
 #   MFEM_CXX_COMPILER - C++ compiler used to build MFEM (from config.mk only)
 #   MFEM_CXX_FLAGS - C++ flags used to build MFEM (from config.mk only)
 #
@@ -53,6 +54,18 @@ if(mfem_FOUND)
     # The config file should set these, but ensure they're available
     if(NOT MFEM_VERSION AND DEFINED mfem_VERSION)
         set(MFEM_VERSION ${mfem_VERSION})
+    endif()
+
+    # MFEMConfig.cmake typically sets MFEM_USE_MPI; if not, detect it from the
+    # imported target's interface compile definitions (where MFEM_USE_MPI appears
+    # as a preprocessor define when MFEM was built with MPI).
+    if(NOT DEFINED MFEM_USE_MPI)
+        get_target_property(_mfem_icd mfem INTERFACE_COMPILE_DEFINITIONS)
+        if(_mfem_icd AND "MFEM_USE_MPI" IN_LIST _mfem_icd)
+            set(MFEM_USE_MPI TRUE CACHE BOOL "MFEM was built with MPI support" FORCE)
+        else()
+            set(MFEM_USE_MPI FALSE CACHE BOOL "MFEM was built with MPI support" FORCE)
+        endif()
     endif()
 
 else()
@@ -98,6 +111,14 @@ else()
         elseif(line MATCHES "^MFEM_EXT_LIBS[ ]*=[ ]*(.+)$")
             set(MFEM_EXT_LIBS "${CMAKE_MATCH_1}")
             string(STRIP "${MFEM_EXT_LIBS}" MFEM_EXT_LIBS)
+        elseif(line MATCHES "^MFEM_USE_MPI[ ]*=[ ]*(.+)$")
+            set(_mfem_use_mpi "${CMAKE_MATCH_1}")
+            string(STRIP "${_mfem_use_mpi}" _mfem_use_mpi)
+            if(_mfem_use_mpi STREQUAL "YES")
+                set(MFEM_USE_MPI TRUE CACHE BOOL "MFEM was built with MPI support" FORCE)
+            else()
+                set(MFEM_USE_MPI FALSE CACHE BOOL "MFEM was built with MPI support" FORCE)
+            endif()
         endif()
     endforeach()
 
@@ -161,6 +182,7 @@ if(MFEM_FOUND)
     message(STATUS "MFEM version: ${MFEM_VERSION}")
     message(STATUS "MFEM include dirs: ${MFEM_INCLUDE_DIRS}")
     message(STATUS "MFEM libraries: ${MFEM_LIBRARIES}")
+    message(STATUS "MFEM_USE_MPI: ${MFEM_USE_MPI}")
 endif()
 
 mark_as_advanced(MFEM_CONFIG_MK MFEM_LIBRARY)
