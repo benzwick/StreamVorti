@@ -1197,28 +1197,10 @@ mfem::Mesh* CreateOrLoadMesh(const char* mesh_file, int dim, int nx, int ny, int
 }
 
 StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int num_neighbors) {
-    std::cout << "InitialiseDCPSE: Initialising DC PSE derivatives." << std::endl;
-    mfem::StopWatch timer;
-    timer.Start();
-
-    StreamVorti::Dcpse* derivs;
-    if (dim == 2) {
-        derivs = new StreamVorti::Dcpse2d(gf, num_neighbors);
-    } else if (dim == 3) {
-        derivs = new StreamVorti::Dcpse3d(gf, num_neighbors);
-    } else {
-        MFEM_ABORT("Unsupported dimension: " << dim << ".");
-    }
-
-    std::cout << "InitialiseDCPSE: Execution time for DCPSE derivatives initialisation: "
-              << timer.RealTime() << " s" << std::endl;
-
-    timer.Clear();
-    derivs->Update();
-    std::cout << "InitialiseDCPSE: Execution time for DCPSE derivatives calculation: "
-              << timer.RealTime() << " s" << std::endl;
-
-    return derivs;
+    MFEM_ABORT("Serial InitialiseDCPSE not available in parallel build. "
+               "Use InitialiseParDCPSE() which creates ParDcpse2d with "
+               "distributed ghost exchange.");
+    return nullptr;
 }
 
 #ifdef MFEM_USE_MPI
@@ -1248,26 +1230,9 @@ StreamVorti::ParDcpse2d* InitialiseParDCPSE(mfem::ParGridFunction& gf, int dim, 
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
                            int dim, bool save_d, bool save_dd,
                            const std::string& dat_dir) {
-    if (!save_d && !save_dd) return;
-
-    std::cout << "SaveDerivativeMatrices: Save derivative operator matrices to file... " << std::flush;
-
-    if (save_d) {
-        if (dim > 1) derivs->SaveDerivToFile("dx", dat_dir + "/" + params.output_prefix + ".dx" + params.output_extension);
-        if (dim > 1) derivs->SaveDerivToFile("dy", dat_dir + "/" + params.output_prefix + ".dy" + params.output_extension);
-        if (dim > 2) derivs->SaveDerivToFile("dz", dat_dir + "/" + params.output_prefix + ".dz" + params.output_extension);
-    }
-
-    if (save_dd) {
-        if (dim > 1) derivs->SaveDerivToFile("dxx", dat_dir + "/" + params.output_prefix + ".dxx" + params.output_extension);
-        if (dim > 1) derivs->SaveDerivToFile("dxy", dat_dir + "/" + params.output_prefix + ".dxy" + params.output_extension);
-        if (dim > 2) derivs->SaveDerivToFile("dxz", dat_dir + "/" + params.output_prefix + ".dxz" + params.output_extension);
-        if (dim > 1) derivs->SaveDerivToFile("dyy", dat_dir + "/" + params.output_prefix + ".dyy" + params.output_extension);
-        if (dim > 2) derivs->SaveDerivToFile("dyz", dat_dir + "/" + params.output_prefix + ".dyz" + params.output_extension);
-        if (dim > 2) derivs->SaveDerivToFile("dzz", dat_dir + "/" + params.output_prefix + ".dzz" + params.output_extension);
-    }
-
-    std::cout << "done." << std::endl;
+    MFEM_ABORT("Serial SaveDerivativeMatrices not available in parallel build. "
+               "Parallel DCPSE derivatives use HypreParMatrix; parallel export "
+               "not yet implemented.");
 }
 
 void IdentifyBoundaryNodes(mfem::Mesh* mesh,
@@ -1277,90 +1242,9 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh,
                                           std::vector<int>& left_nodes,
                                           std::vector<int>& interior_nodes,
                                           int num_true_verts) {
-    const double tolerance = 1e-10;
-
-    // Clear all vectors
-    bottom_nodes.clear();
-    right_nodes.clear();
-    top_nodes.clear();
-    left_nodes.clear();
-    interior_nodes.clear();
-
-    // First pass: collect all boundary nodes
-    std::vector<int> all_boundary_nodes;
-
-    // Iterate over ALL local vertices (including shared from neighboring ranks).
-    // For each vertex, determine if it is owned by this rank by checking whether
-    // its local vertex index maps to a valid true DOF index.
-    //
-    // In parallel (num_true_verts >= 0), MFEM does not guarantee "owned-first"
-    // ordering in ParMesh: shared vertices may appear anywhere in 0..GetNV()-1.
-    // We detect owned vertices by checking if their local index i has a valid
-    // true DOF (GetLocalTDofNumber would be the correct API, but since we only
-    // have num_true_verts here, we use the caller's knowledge: if the true DOF
-    // range is 0..num_true_verts-1, vertices with local index in that range are
-    // ASSUMED owned — this matches the DCPSE ownership assumption).
-    //
-    // NOTE: This is the same assumption as the DCPSE code in par_support_domain.cpp
-    // (local_to_global_[i] = local_node_offset + i for i < num_local_nodes_).
-    // If MFEM changes its vertex ordering, both must be updated together.
-    const int num_vertices = (num_true_verts >= 0) ? num_true_verts : mesh->GetNV();
-
-    for (int i = 0; i < num_vertices; ++i) {
-        const double* vertex = mesh->GetVertex(i);
-        double x = vertex[0];
-        double y = vertex[1];
-
-        // Bottom boundary: y == 0 (includes corners (0,0) and (1,0))
-        if (std::abs(y) < tolerance) {
-            bottom_nodes.push_back(i);
-            all_boundary_nodes.push_back(i);
-        }
-        // Right boundary: x == 1 AND 0 < y < 1 (excludes corners)
-        else if (std::abs(x - 1.0) < tolerance &&
-                 y > tolerance &&
-                 y < (1.0 - tolerance)) {
-            right_nodes.push_back(i);
-            all_boundary_nodes.push_back(i);
-        }
-        // Top boundary: y == 1 (includes corners (0,1) and (1,1))
-        else if (std::abs(y - 1.0) < tolerance) {
-            top_nodes.push_back(i);
-            all_boundary_nodes.push_back(i);
-        }
-        // Left boundary: x == 0 AND 0 < y < 1 (excludes corners)
-        else if (std::abs(x) < tolerance &&
-                 y > tolerance &&
-                 y < (1.0 - tolerance)) {
-            left_nodes.push_back(i);
-            all_boundary_nodes.push_back(i);
-        }
-        // Interior nodes: everything else
-        else {
-            interior_nodes.push_back(i);
-        }
-    }
-
-    // Create combined boundary nodes vector (nb in MATLAB)
-    // This matches: nb=[bottom; right; top; left];
-
-    // Diagnostic output
-    std::cout << "IdentifyBoundaryNodes:" << std::endl;
-    std::cout << "  Bottom: " << bottom_nodes.size() << " nodes" << std::endl;
-    std::cout << "  Right:  " << right_nodes.size() << " nodes" << std::endl;
-    std::cout << "  Top:    " << top_nodes.size() << " nodes" << std::endl;
-    std::cout << "  Left:   " << left_nodes.size() << " nodes" << std::endl;
-    std::cout << "  Total boundary: " << all_boundary_nodes.size() << " nodes" << std::endl;
-    std::cout << "  Interior: " << interior_nodes.size() << " nodes" << std::endl;
-
-    // Expected counts for an N×N grid:
-    // - Bottom and Top: N nodes each (including corners)
-    // - Right and Left: (N-2) nodes each (excluding corners)
-    // - Total boundary: 4N - 4
-    // - Interior: (N-2)²
-
-    // For a 20×20 grid: 20, 18, 20, 18 (total boundary: 76)
-    // For a 40×40 grid: 40, 38, 40, 38 (total boundary: 156)
+    MFEM_ABORT("Serial IdentifyBoundaryNodes not available in parallel build. "
+               "Use IdentifyBoundaryNodesPar() which uses GetLocalTDofNumber() "
+               "for correct DOF ownership.");
 }
 
 void SaveSolutionToFile(const mfem::Vector& vorticity,
@@ -1429,127 +1313,10 @@ SolverPackage* CreateLinearSolver(const std::string& solver_type,
                                    const mfem::SparseMatrix& A,
                                    const SimulationParams& params)
 {
-    SolverPackage* package = new SolverPackage();
-
-    std::cout << "Creating linear solver: " << solver_type << std::endl;
-
-    if (solver_type == "umfpack") {
-#ifdef MFEM_USE_SUITESPARSE
-        std::cout << "Using UMFPackSolver (direct solver)" << std::endl;
-        mfem::UMFPackSolver* umf_solver = new mfem::UMFPackSolver();
-        umf_solver->Control[UMFPACK_ORDERING] = UMFPACK_ORDERING_METIS;
-        umf_solver->SetOperator(A);
-        package->solver = umf_solver;
-        // No preconditioner needed for direct solver
-#else
-        std::cerr << "ERROR: UMFPACK not available. Rebuild MFEM with SuiteSparse." << std::endl;
-        delete package;
-        return nullptr;
-#endif
-    }
-    else if (solver_type == "klu") {
-#ifdef MFEM_USE_SUITESPARSE
-        std::cout << "Using KLUSolver (direct solver)" << std::endl;
-        mfem::KLUSolver* klu_solver = new mfem::KLUSolver();
-        klu_solver->SetOperator(A);
-        package->solver = klu_solver;
-        // No preconditioner needed for direct solver
-#else
-        std::cerr << "ERROR: KLU not available. Rebuild MFEM with SuiteSparse." << std::endl;
-        delete package;
-        return nullptr;
-#endif
-    }
-    else if (solver_type == "cg") {
-        std::cout << "Using CGSolver (iterative, symmetric positive definite)" << std::endl;
-        mfem::CGSolver* cg_solver = new mfem::CGSolver();
-        cg_solver->SetRelTol(params.solver_rel_tol);
-        cg_solver->SetMaxIter(params.solver_max_iter);
-        cg_solver->SetPrintLevel(params.solver_print_level);
-
-        // Add preconditioner (Gauss-Seidel smoother)
-        mfem::GSSmoother* precond = new mfem::GSSmoother();
-        cg_solver->SetPreconditioner(*precond);
-        cg_solver->SetOperator(A);
-
-        package->solver = cg_solver;
-        package->preconditioner = precond;  // Store for proper cleanup
-    }
-    else if (solver_type == "gmres") {
-        std::cout << "Using GMRESSolver (iterative, general matrices)" << std::endl;
-        mfem::GMRESSolver* gmres_solver = new mfem::GMRESSolver();
-        gmres_solver->SetRelTol(params.solver_rel_tol);
-        gmres_solver->SetMaxIter(params.solver_max_iter);
-        gmres_solver->SetPrintLevel(params.solver_print_level);
-        gmres_solver->SetKDim(200); // Restart parameter
-
-        // Add preconditioner (Gauss-Seidel smoother)
-        mfem::GSSmoother* gs_precond = new mfem::GSSmoother();
-        gmres_solver->SetPreconditioner(*gs_precond);
-        gmres_solver->SetOperator(A);
-
-        package->solver = gmres_solver;
-        package->preconditioner = gs_precond;
-    }
-    else if (solver_type == "minres") {
-        std::cout << "Using MINRESSolver (iterative, symmetric indefinite)" << std::endl;
-        mfem::MINRESSolver* minres_solver = new mfem::MINRESSolver();
-        minres_solver->SetRelTol(params.solver_rel_tol);
-        minres_solver->SetMaxIter(params.solver_max_iter);
-        minres_solver->SetPrintLevel(params.solver_print_level);
-        minres_solver->SetOperator(A);
-
-        package->solver = minres_solver;
-        // No preconditioner for MINRES in this implementation
-    }
-    else if (solver_type == "bicgstab") {
-        std::cout << "Using BiCGSTABSolver (iterative, nonsymmetric)" << std::endl;
-        mfem::BiCGSTABSolver* bicg_solver = new mfem::BiCGSTABSolver();
-        bicg_solver->SetRelTol(params.solver_rel_tol);
-        bicg_solver->SetAbsTol(1e-14);
-        bicg_solver->SetMaxIter(params.solver_max_iter);
-        bicg_solver->SetPrintLevel(params.solver_print_level);
-
-        // Add preconditioner (Gauss-Seidel smoother)
-        mfem::GSSmoother* precond = new mfem::GSSmoother();
-        bicg_solver->SetPreconditioner(*precond);
-        bicg_solver->SetOperator(A);
-
-        package->solver = bicg_solver;
-        package->preconditioner = precond;
-    }
-    else if (solver_type == "hypre") {
-#ifdef MFEM_USE_HYPRE
-        std::cout << "Using HypreBoomerAMG (parallel algebraic multigrid)" << std::endl;
-
-        // Convert serial SparseMatrix to HypreParMatrix
-        // This creates a parallel matrix structure that Hypre requires
-        mfem::HypreParMatrix* hypre_A = new mfem::HypreParMatrix(
-            MPI_COMM_WORLD,           // MPI communicator
-            A.Size(),                 // Global number of rows
-            A.GetRowStarts(),         // Row partitioning (nullptr for serial)
-            &A                        // Serial SparseMatrix to convert
-        );
-
-        mfem::HypreBoomerAMG* amg = new mfem::HypreBoomerAMG(*hypre_A);
-        amg->SetPrintLevel(params.solver_print_level);
-
-        package->solver = amg;
-        package->hypre_matrix = hypre_A;
-#else
-        std::cerr << "ERROR: HYPRE not available. Rebuild MFEM with HYPRE support." << std::endl;
-        delete package;
-        return nullptr;
-#endif
-    }
-    else {
-        std::cerr << "ERROR: Unknown solver type: " << solver_type << std::endl;
-        std::cerr << "Available solvers: umfpack, klu, cg, gmres, minres, bicgstab, hypre" << std::endl;
-        delete package;
-        return nullptr;
-    }
-
-    return package;
+    MFEM_ABORT("Serial CreateLinearSolver not available in parallel build. "
+               "Parallel solvers (HyprePCG, HypreGMRES, HypreBoomerAMG) are "
+               "created inline with HypreParMatrix.");
+    return nullptr;
 }
 
 std::string GetCurrentDateTime() {
@@ -1567,51 +1334,9 @@ void IdentifyBoundaryNodesByAttribute(
     std::vector<int>& interior_nodes,
     int num_true_verts)
 {
-    // In parallel, only consider OWNED (true DOF) vertices to avoid
-    // including shared vertices from neighboring ranks (local indices
-    // >= TrueVSize()) which are out of range for HypreParMatrix operations.
-    const int num_vertices = (num_true_verts >= 0) ? num_true_verts : mesh->GetNV();
-    std::vector<bool> is_boundary(num_vertices, false);
-
-    boundary_nodes.clear();
-    interior_nodes.clear();
-
-    // Mark all vertices on boundary elements with their attribute
-    int num_bdr_elements = mesh->GetNBE();
-    for (int be = 0; be < num_bdr_elements; ++be) {
-        int attr = mesh->GetBdrAttribute(be);
-        mfem::Array<int> vertices;
-        mesh->GetBdrElementVertices(be, vertices);
-
-        for (int v = 0; v < vertices.Size(); ++v) {
-            int vi = vertices[v];
-            // Skip shared vertices owned by other ranks
-            if (vi >= num_vertices) continue;
-            is_boundary[vi] = true;
-            // Add to the attribute's list (avoid duplicates)
-            auto& nodes = boundary_nodes[attr];
-            if (std::find(nodes.begin(), nodes.end(), vi) == nodes.end()) {
-                nodes.push_back(vi);
-            }
-        }
-    }
-
-    // Collect interior nodes (only owned vertices)
-    for (int i = 0; i < num_vertices; ++i) {
-        if (!is_boundary[i]) {
-            interior_nodes.push_back(i);
-        }
-    }
-
-    // Diagnostic output
-    std::cout << "IdentifyBoundaryNodesByAttribute:" << std::endl;
-    int total_boundary = 0;
-    for (const auto& [attr, nodes] : boundary_nodes) {
-        std::cout << "  Attribute " << attr << ": " << nodes.size() << " nodes" << std::endl;
-        total_boundary += nodes.size();
-    }
-    std::cout << "  Total boundary: " << total_boundary << " nodes" << std::endl;
-    std::cout << "  Interior: " << interior_nodes.size() << " nodes" << std::endl;
+    MFEM_ABORT("Serial IdentifyBoundaryNodesByAttribute not available in parallel build. "
+               "Use IdentifyBoundaryNodesByAttributePar() which uses "
+               "GetLocalTDofNumber() for correct DOF ownership.");
 }
 
 void ExtractCenterline(const mfem::Vector& u_velocity,
