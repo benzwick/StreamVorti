@@ -72,6 +72,12 @@ SET(HEADERS  ${CMAKE_SOURCE_DIR}/include/StreamVorti/mfem_main.hpp )
 # Find dependencies of StreamVorti.
 # -------------------------
 
+# Find Eigen (must come before CGAL, which adds its own FindEigen3.cmake to
+# CMAKE_MODULE_PATH; that old-style module sets EIGEN3_INCLUDE_DIRS but does
+# not create the Eigen3::Eigen imported target required by our subdirectories)
+FIND_PACKAGE(Eigen3 REQUIRED)
+INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIRS})
+
 # Find CGAL
 # See https://doc.cgal.org/latest/Manual/devman_create_and_use_a_cmakelist.html
 FIND_PACKAGE(CGAL  REQUIRED COMPONENTS Core)
@@ -79,10 +85,6 @@ MESSAGE(STATUS "Found CGAL version ${CGAL_VERSION}")
 IF (CGAL_VERSION VERSION_LESS "5.0")
     MESSAGE(FATAL_ERROR "CGAL version 5.0 or higher is required")
 ENDIF()
-
-# Find Eigen
-FIND_PACKAGE(Eigen3 CONFIG REQUIRED)
-INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIRS})
 
 # Find OpenMP (optional for parallel loops in DCPSE)
 if(APPLE)

@@ -364,8 +364,7 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
  */
 void IdentifyBoundaryNodes(mfem::Mesh* mesh, std::vector<int>& bottom_nodes,
                             std::vector<int>& right_nodes, std::vector<int>& top_nodes,
-                            std::vector<int>& left_nodes, std::vector<int>& interior_nodes,
-                            int num_true_verts = -1);
+                            std::vector<int>& left_nodes, std::vector<int>& interior_nodes);
 
 /**
  * @brief Create and configure linear solver based on type
@@ -429,16 +428,15 @@ std::string GetCurrentDateTime();
 void IdentifyBoundaryNodesByAttribute(
     mfem::Mesh* mesh,
     std::map<int, std::vector<int>>& boundary_nodes,
-    std::vector<int>& interior_nodes,
-    int num_true_verts = -1);
+    std::vector<int>& interior_nodes);
 
 /**
- * @brief Extract velocity along a centerline for validation (serial).
+ * @brief Extract velocity along a centerline for validation.
  *
  * Used to compare simulation results against Ghia et al. (1982) or
  * Erturk & Corke (2005) benchmark data.
  *
- * @param u_velocity U-velocity field (indexed by local vertex = true DOF for serial mesh)
+ * @param u_velocity U-velocity field (indexed by vertex index)
  * @param v_velocity V-velocity field
  * @param mesh The MFEM mesh
  * @param filename Output file path
