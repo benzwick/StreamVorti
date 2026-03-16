@@ -543,6 +543,17 @@ int main(int argc, char *argv[])
     all_boundary_nodes.insert(all_boundary_nodes.end(), top_nodes.begin(), top_nodes.end());
     all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
 
+#ifdef STREAMVORTI_WITH_ECL
+    // Map true DOF indices back to vertex indices (needed for GetVertex in SDL BC application)
+    std::map<int, int> tdof_to_vertex;
+    for (int i = 0; i < mesh->GetNV(); ++i) {
+        int tdof = fes.GetLocalTDofNumber(i);
+        if (tdof >= 0) {
+            tdof_to_vertex[tdof] = i;
+        }
+    }
+#endif
+
     // Create parallel Laplacian matrix for streamfunction equation
     // Laplacian = dxx + dyy, then negate for positive definiteness
     mfem::HypreParMatrix* laplacian_matrix = mfem::ParAdd(&dxx_matrix, &dyy_matrix);
@@ -773,7 +784,7 @@ int main(int argc, char *argv[])
             // Apply boundary conditions from SDL using predicate matching
             // Iterate over all boundary nodes and find which BC matches
             for (int vi : all_boundary_nodes) {
-                const double* vertex = mesh->GetVertex(vi);
+                const double* vertex = mesh->GetVertex(tdof_to_vertex[vi]);
                 double x = vertex[0];
                 double y = vertex[1];
                 double z = (dim > 2) ? vertex[2] : 0.0;
