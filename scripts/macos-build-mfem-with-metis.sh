@@ -1,11 +1,15 @@
 #!/bin/bash
 #
-# Rebuild MFEM 4.8 with MPI, METIS, HYPRE, and SuiteSparse support
+# Build MFEM 4.8 on macOS with MPI, METIS, HYPRE, and SuiteSparse support
+#
+# For building MFEM on Will's MacBook. Uses Homebrew to install and
+# locate dependencies (metis, hypre, suite-sparse, open-mpi).
 #
 # This script will:
 # 1. Download MFEM 4.8 source (if needed)
-# 2. Configure with all parallel features enabled
-# 3. Build and install to /opt/mfem/mfem-4.8
+# 2. Install dependencies via Homebrew (if needed)
+# 3. Configure with all parallel features enabled
+# 4. Build and install to ~/local/mfem-4.8
 #
 
 set -e  # Exit on error
