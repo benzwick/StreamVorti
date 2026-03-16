@@ -11,6 +11,6 @@ source ${SPACK_DIR}/share/spack/setup-env.sh
 spack env activate ${ENV_NAME}
 
 cd ${BUILD_DIR}
-ctest --output-on-failure || true
+ctest --output-on-failure
 
 echo "ctest completed"

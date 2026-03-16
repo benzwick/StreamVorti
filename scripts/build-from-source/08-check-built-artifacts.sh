@@ -12,14 +12,16 @@ if [ -f ${BUILD_DIR}/MfemRun ]; then
   echo "MfemRun executable built successfully"
   ldd ${BUILD_DIR}/MfemRun
 else
-  echo "WARNING: MfemRun executable not found"
+  echo "ERROR: MfemRun executable not found"
+  exit 1
 fi
 
 if [ -f ${BUILD_DIR}/StreamVorti ]; then
   echo "StreamVorti executable built successfully"
   ldd ${BUILD_DIR}/StreamVorti
 else
-  echo "WARNING: StreamVorti executable not found"
+  echo "ERROR: StreamVorti executable not found"
+  exit 1
 fi
 
 if [ -f ${BUILD_DIR}/StreamVorti_par ]; then

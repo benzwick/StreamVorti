@@ -85,7 +85,7 @@ jobs:
         set -o pipefail
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
-             --eval '(streamvorti.validation:run-validation :results-file "results/output_dat/lid-driven-cavity_u_centerline_x0.5.dat")' \
+             --eval '(unless (streamvorti.validation:run-validation :results-file "results/output_dat/lid-driven-cavity_u_centerline_x0.5.dat") (sb-ext:exit :code 1))' \
              2>&1 | tee results/validation.log
 
     - name: Upload results
@@ -142,7 +142,7 @@ jobs:
         set -o pipefail
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
-             --eval '(streamvorti.validation:run-validation :results-file "results/output_dat/mfem_square10x10_u_centerline_x0.5.dat")' \
+             --eval '(unless (streamvorti.validation:run-validation :results-file "results/output_dat/mfem_square10x10_u_centerline_x0.5.dat") (sb-ext:exit :code 1))' \
              2>&1 | tee results/validation.log
 
     - name: Upload all results

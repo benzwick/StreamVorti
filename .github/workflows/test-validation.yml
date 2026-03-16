@@ -63,10 +63,11 @@ jobs:
         sbcl --non-interactive \
           --load ~/quicklisp/setup.lisp \
           --load lisp/compare-ghia.lisp \
-          --eval '(streamvorti.validation:run-validation :results-file "build/output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100 :output-dir "plots/")'
+          --eval '(unless (streamvorti.validation:run-validation :results-file "build/output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100 :output-dir "plots/") (sb-ext:exit :code 1))'
         ls -la plots/
 
     - name: Upload validation plots
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: validation-plots-${{ matrix.os }}
@@ -121,10 +122,11 @@ jobs:
         sbcl --non-interactive \
           --load ~/quicklisp/setup.lisp \
           --load lisp/compare-ghia.lisp \
-          --eval '(streamvorti.validation:run-validation :results-file "build/output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100 :output-dir "plots/")'
+          --eval '(unless (streamvorti.validation:run-validation :results-file "build/output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100 :output-dir "plots/") (sb-ext:exit :code 1))'
         ls -la plots/
 
     - name: Upload validation plots
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: validation-plots-parallel-${{ matrix.os }}
