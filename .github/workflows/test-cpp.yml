@@ -1,9 +1,8 @@
 # C++ unit tests and integration tests
 #
 # Downloads pre-built binaries and runs:
-# - C++ unit tests (GTest)
-# - Example simulations
-# - Coverage reporting
+# - Serial example simulations (StreamVorti, MfemRun)
+# - Parallel example simulations (StreamVorti_par with mpirun)
 #
 # Depends on build-from-source.yml completing successfully.
 
@@ -16,7 +15,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-cpp:
+  test-serial:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -41,5 +40,34 @@ jobs:
     - name: Make binaries executable
       run: chmod +x build/StreamVorti build/MfemRun
 
-    - name: Run example tests
-      run: ./scripts/build-from-source/09-run-example-tests.sh "$GITHUB_WORKSPACE/build/MfemRun" "$GITHUB_WORKSPACE/build/StreamVorti"
+    - name: Run serial example tests
+      run: ./scripts/build-from-source/09-run-example-tests-serial.sh "$GITHUB_WORKSPACE/build/MfemRun" "$GITHUB_WORKSPACE/build/StreamVorti"
+
+  test-parallel:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-latest]
+        np: [1, 2, 4]
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: ./scripts/build-from-source/01-install-system-dependencies.sh
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: streamvorti-binaries-${{ matrix.os }}
+        path: build/
+        run-id: ${{ github.event.workflow_run.id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Make binaries executable
+      run: chmod +x build/StreamVorti_par
+
+    - name: Run parallel example tests (np=${{ matrix.np }})
+      run: ./scripts/build-from-source/09-run-example-tests-parallel.sh "$GITHUB_WORKSPACE/build/StreamVorti_par" ${{ matrix.np }}
