@@ -215,7 +215,6 @@
    ;; Geometry wrappers
    #:box
    #:ball
-   #:difference
    #:geometry-dimension
    #:geometry-min
    #:geometry-max
