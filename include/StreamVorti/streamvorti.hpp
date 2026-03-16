@@ -272,14 +272,10 @@ struct PerformanceMetrics {
  * Manages lifetime of solver and preconditioner pointers together.
  * Ensures proper cleanup and prevents memory leaks.
  * Preconditioner is nullptr for direct solvers (UMFPACK, KLU).
- * HypreParMatrix is only used when solver_type is "hypre".
  */
 struct SolverPackage {
     mfem::Solver* solver = nullptr;         ///< Linear solver pointer (owned, deleted in destructor)
     mfem::Solver* preconditioner = nullptr; ///< Preconditioner pointer (nullptr for direct solvers)
-#ifdef MFEM_USE_HYPRE
-    mfem::HypreParMatrix* hypre_matrix = nullptr; ///< HypreParMatrix for Hypre solvers (nullptr for other solvers)
-#endif
 
     /**
      * @brief Destructor: automatically cleans up solver and preconditioner
@@ -289,9 +285,6 @@ struct SolverPackage {
     ~SolverPackage() {
         delete solver;
         delete preconditioner;
-#ifdef MFEM_USE_HYPRE
-        delete hypre_matrix;
-#endif
     }
 };
 
@@ -431,12 +424,12 @@ void IdentifyBoundaryNodesByAttribute(
     std::vector<int>& interior_nodes);
 
 /**
- * @brief Extract velocity along a centerline for validation.
+ * @brief Extract velocity along a centerline for validation
  *
  * Used to compare simulation results against Ghia et al. (1982) or
  * Erturk & Corke (2005) benchmark data.
  *
- * @param u_velocity U-velocity field (indexed by vertex index)
+ * @param u_velocity U-velocity field
  * @param v_velocity V-velocity field
  * @param mesh The MFEM mesh
  * @param filename Output file path
