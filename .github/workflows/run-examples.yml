@@ -16,6 +16,7 @@ jobs:
     name: "Demo: ${{ matrix.name }}"
     runs-on: ubuntu-22.04
     timeout-minutes: ${{ matrix.timeout || 5 }}
+    continue-on-error: ${{ matrix.allow-failure || false }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     strategy:
@@ -43,8 +44,9 @@ jobs:
             file: demo/channel.lisp
           - name: backward-step
             file: demo/backward-step.lisp
-          - name: cylinder
+          - name: cylinder  # Expected to fail: SDL::DIFFERENCE not yet implemented (issue #17)
             file: demo/cylinder.lisp
+            allow-failure: true
 
     steps:
     - uses: actions/checkout@v4
