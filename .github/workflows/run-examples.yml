@@ -39,6 +39,8 @@ jobs:
             timeout: 15
           - name: poiseuille
             file: demo/poiseuille.lisp
+          - name: channel
+            file: demo/channel.lisp
           - name: backward-step
             file: demo/backward-step.lisp
           - name: cylinder
