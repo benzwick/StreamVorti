@@ -22,6 +22,13 @@ else
   echo "WARNING: StreamVorti executable not found"
 fi
 
+if [ -f ${BUILD_DIR}/StreamVorti_par ]; then
+  echo "StreamVorti_par executable built successfully"
+  ldd ${BUILD_DIR}/StreamVorti_par
+else
+  echo "WARNING: StreamVorti_par executable not found"
+fi
+
 if [ -f ${BUILD_DIR}/lib/StreamVorti/libStreamVorti_static.a ]; then
   echo "StreamVorti static library built successfully"
   file ${BUILD_DIR}/lib/StreamVorti/libStreamVorti_static.a
