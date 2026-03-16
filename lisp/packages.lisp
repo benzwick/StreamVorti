@@ -91,9 +91,6 @@
    #:union-shape
    #:difference-shape
    #:intersection-shape
-   #:csg-union
-   #:csg-difference
-   #:csg-intersection
    ;; Constructors
    #:make-rectangle
    #:make-circle
