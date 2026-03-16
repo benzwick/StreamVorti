@@ -72,3 +72,61 @@ jobs:
         name: validation-plots-${{ matrix.os }}
         path: plots/
         retention-days: 30
+
+  validate-cavity-parallel:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-latest]
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: ./scripts/build-from-source/01-install-system-dependencies.sh
+
+    - name: Install SBCL and gnuplot
+      run: sudo apt-get install -y sbcl gnuplot
+
+    - name: Install Quicklisp and vgplot
+      run: |
+        curl -O https://beta.quicklisp.org/quicklisp.lisp
+        sbcl --non-interactive \
+          --load quicklisp.lisp \
+          --eval '(quicklisp-quickstart:install)' \
+          --eval '(ql:quickload :vgplot)'
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: streamvorti-binaries-${{ matrix.os }}
+        path: build/
+        run-id: ${{ github.event.workflow_run.id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Make binaries executable
+      run: chmod +x build/StreamVorti_par
+
+    - name: Run lid-driven cavity parallel (Re=100, 20x20, np=4)
+      run: |
+        cd build
+        mpirun --oversubscribe -np 4 ./StreamVorti_par -nx 20 -ny 20 -Re 100 -dt 0.001 -ft 5.0
+        ls -la output_dat/
+
+    - name: Validate against Ghia et al. (1982)
+      run: |
+        mkdir -p plots
+        sbcl --non-interactive \
+          --load ~/quicklisp/setup.lisp \
+          --load lisp/compare-ghia.lisp \
+          --eval '(streamvorti.validation:run-validation :results-file "build/output_dat/mfem_square10x10_u_centerline_x0.5.dat" :reynolds 100 :output-dir "plots/")'
+        ls -la plots/
+
+    - name: Upload validation plots
+      uses: actions/upload-artifact@v4
+      with:
+        name: validation-plots-parallel-${{ matrix.os }}
+        path: plots/
+        retention-days: 30
