@@ -290,20 +290,22 @@ ENDIF()
 INSTALL(TARGETS StreamVorti RUNTIME DESTINATION bin/StreamVorti)
 
 # StreamVorti_par executable (parallel version with MPI).
-ADD_EXECUTABLE(StreamVorti_par  streamvorti_par.cpp)
+IF(MFEM_USE_MPI)
+    ADD_EXECUTABLE(StreamVorti_par  streamvorti_par.cpp)
 
-target_link_libraries(StreamVorti_par CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targets
+    target_link_libraries(StreamVorti_par CGAL::CGAL CGAL::CGAL_Core)  # Link with CGAL targets
 
-IF(OpenMP_CXX_FOUND) # Link with OPENMP
-    TARGET_LINK_LIBRARIES(StreamVorti_par OpenMP::OpenMP_CXX)
+    IF(OpenMP_CXX_FOUND) # Link with OPENMP
+        TARGET_LINK_LIBRARIES(StreamVorti_par OpenMP::OpenMP_CXX)
+    ENDIF()
+
+    IF(STREAMVORTI_BUILD_SHARED_LIBS)
+        TARGET_LINK_LIBRARIES(StreamVorti_par  ${PROJECT_NAME})
+    ELSE()
+        TARGET_LINK_LIBRARIES(StreamVorti_par  ${PROJECT_NAME}_static)
+    ENDIF()
+    INSTALL(TARGETS StreamVorti_par RUNTIME DESTINATION bin/StreamVorti)
 ENDIF()
-
-IF(STREAMVORTI_BUILD_SHARED_LIBS)
-    TARGET_LINK_LIBRARIES(StreamVorti_par  ${PROJECT_NAME})
-ELSE()
-    TARGET_LINK_LIBRARIES(StreamVorti_par  ${PROJECT_NAME}_static)
-ENDIF()
-INSTALL(TARGETS StreamVorti_par RUNTIME DESTINATION bin/StreamVorti)
 
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
 INSTALL(FILES ${HEADERS} DESTINATION include/StreamVorti)
