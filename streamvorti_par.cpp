@@ -781,40 +781,29 @@ int main(int argc, char *argv[])
 
 #ifdef STREAMVORTI_WITH_ECL
         if (use_sdl_bcs) {
-            // Apply boundary conditions from SDL using predicate matching
-            // Iterate over all boundary nodes and find which BC matches
-            for (int vi : all_boundary_nodes) {
-                const double* vertex = mesh->GetVertex(tdof_to_vertex[vi]);
-                double x = vertex[0];
-                double y = vertex[1];
-                double z = (dim > 2) ? vertex[2] : 0.0;
+            // Apply boundary conditions from SDL using attribute-based lookup.
+            // Each BC was assigned an MFEM boundary attribute at mesh setup;
+            // boundary_nodes_by_attr maps attribute -> node list.
+            // Corner nodes in multiple lists get the last-processed BC.
+            for (const auto& bc : sdl_boundaries) {
+                auto it = boundary_nodes_by_attr.find(bc.attribute);
+                if (it == boundary_nodes_by_attr.end()) continue;
 
-                // Match this boundary node against SDL boundary conditions.
-                // Each SDL boundary defines a predicate (e.g. (= y 1)) and a
-                // type: :velocity with a value like (1 0), or :no-slip.
-                // Every boundary node must match exactly one BC predicate.
-                int match_count = 0;
-                for (const auto& bc : sdl_boundaries) {
-                    if (!bc.matchesPredicate(x, y, z)) continue;
-                    match_count++;
-                    if (match_count > 1) {
-                        MFEM_ABORT("Duplicate boundary conditions at node "
-                                   << vi << " (" << x << ", " << y << "): "
-                                   << "matched by multiple BC predicates");
-                    }
-
+                for (int vi : it->second) {
                     if (bc.type == "no-slip") {
-                        // :no-slip — zero velocity (u=0, v=0)
                         u_velocity[vi] = 0.0;
                         v_velocity[vi] = 0.0;
                     } else if (bc.type == "velocity") {
-                        // :velocity — evaluate u,v from SDL functions
-                        // e.g. (bc lid :velocity (1 0)) creates constant
-                        // lambdas returning u=1.0, v=0.0
                         if (bc.u_function) {
+                            const double* vertex = mesh->GetVertex(tdof_to_vertex[vi]);
+                            double x = vertex[0], y = vertex[1];
+                            double z = (dim > 2) ? vertex[2] : 0.0;
                             u_velocity[vi] = bc.u_function->evaluateAt(x, y, z);
                         }
                         if (bc.v_function) {
+                            const double* vertex = mesh->GetVertex(tdof_to_vertex[vi]);
+                            double x = vertex[0], y = vertex[1];
+                            double z = (dim > 2) ? vertex[2] : 0.0;
                             v_velocity[vi] = bc.v_function->evaluateAt(x, y, z);
                         }
                     } else {
@@ -822,10 +811,6 @@ int main(int argc, char *argv[])
                                    << bc.type << "' for boundary '" << bc.name
                                    << "' at node " << vi);
                     }
-                }
-                if (match_count == 0) {
-                    MFEM_ABORT("Boundary node " << vi << " at (" << x << ", "
-                               << y << ") has no matching SDL boundary condition");
                 }
             }
         } else
