@@ -398,16 +398,200 @@ int main(int argc, char *argv[])
     all_boundary_nodes.insert(all_boundary_nodes.end(), top_nodes.begin(), top_nodes.end());
     all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
 
-    // Create Laplacian matrix for streamfunction equation
-    // Flip sign to Ensures matrix positive definiteness for iterative solvers
+    // ================================================================
+    // STREAM FUNCTION BOUNDARY CONDITIONS
+    // ================================================================
+    // The Poisson equation for the stream function is: -∇²ψ = ω
+    // (negated for positive definiteness with CG/direct solvers).
+    //
+    // Boundary conditions on ψ depend on BC type:
+    //   no-slip/slip:  Dirichlet ψ = constant (determined by flow rate)
+    //   velocity:      Dirichlet ψ = ∫u dy  (integrated from velocity profile)
+    //   pressure/outflow: Neumann ∂ψ/∂n = 0 (natural outflow)
+    //
+    // For Dirichlet nodes, the matrix row is replaced with identity: ψ_i = ψ_bc_i
+    // For Neumann nodes, the matrix row is replaced with the normal derivative
+    // operator: (∂ψ/∂n)_i = 0
+    //
+    // Reference: von Karman cylinder code (ns_solver.cpp)
+
+    // Prescribed stream function values at boundary nodes.
+    // Initialized to 0 (backward-compatible with cavity where ψ=0 everywhere).
+    mfem::Vector psi_bc(num_nodes);
+    psi_bc = 0.0;
+
+    // Lists of Dirichlet and Neumann boundary nodes for the ψ equation.
+    // Neumann nodes also store their normal axis ('x' or 'y') to select
+    // the correct derivative operator.
+    std::vector<int> dirichlet_psi_nodes;
+    std::vector<std::pair<int, char>> neumann_psi_info;  // (node_idx, axis)
+
+#ifdef STREAMVORTI_WITH_ECL
+    if (use_sdl_bcs) {
+        // ============================================================
+        // A1. Classify boundary nodes by ψ condition type
+        // ============================================================
+        // First pass: compute ψ at velocity (inlet) boundaries by integrating
+        // the prescribed velocity profile along the boundary.
+        //
+        // For a velocity BC on a vertical boundary (= x val):
+        //   u = ∂ψ/∂y  →  ψ(y) = ∫₀ʸ u(x₀, η) dη
+        //
+        // For a velocity BC on a horizontal boundary (= y val):
+        //   v = -∂ψ/∂x  →  ψ(x) = ψ_ref - ∫₀ˣ v(ξ, y₀) dξ
+        //
+        // No-slip/slip walls: ψ = constant, determined from shared corner
+        // nodes with velocity boundaries (second pass below).
+
+        for (const auto& bc : sdl_boundaries) {
+            auto it = boundary_nodes_by_attr.find(bc.attribute);
+            if (it == boundary_nodes_by_attr.end()) continue;
+            const auto& nodes = it->second;
+
+            if (bc.type == "velocity") {
+                // Integrate velocity profile to get ψ along this boundary.
+                // Sort nodes by the varying coordinate (perpendicular to predicate_axis).
+                struct NodeCoord { int idx; double coord; };
+                std::vector<NodeCoord> sorted_nodes;
+                sorted_nodes.reserve(nodes.size());
+                for (int vi : nodes) {
+                    const double* v = mesh->GetVertex(vi);
+                    // For (= x val): boundary is vertical, ψ varies with y
+                    // For (= y val): boundary is horizontal, ψ varies with x
+                    double coord = (bc.predicate_axis == 'x') ? v[1] : v[0];
+                    sorted_nodes.push_back({vi, coord});
+                }
+                std::sort(sorted_nodes.begin(), sorted_nodes.end(),
+                    [](const NodeCoord& a, const NodeCoord& b) { return a.coord < b.coord; });
+
+                // Integrate using trapezoidal rule
+                double psi_val = 0.0;
+                psi_bc[sorted_nodes[0].idx] = 0.0;
+                for (size_t i = 1; i < sorted_nodes.size(); ++i) {
+                    const double* v0 = mesh->GetVertex(sorted_nodes[i-1].idx);
+                    const double* v1 = mesh->GetVertex(sorted_nodes[i].idx);
+                    double dy = sorted_nodes[i].coord - sorted_nodes[i-1].coord;
+
+                    if (bc.predicate_axis == 'x') {
+                        // Vertical boundary: ψ(y) = ∫₀ʸ u(x₀,η) dη
+                        double x0 = bc.predicate_value;
+                        double y_mid = 0.5 * (v0[1] + v1[1]);
+                        double u_mid = bc.u_function
+                            ? bc.u_function->evaluateAt(x0, y_mid, 0.0) : 0.0;
+                        psi_val += u_mid * dy;
+                    } else {
+                        // Horizontal boundary: ψ(x) = ψ_ref - ∫₀ˣ v(ξ,y₀) dξ
+                        double y0 = bc.predicate_value;
+                        double x_mid = 0.5 * (v0[0] + v1[0]);
+                        double v_mid = bc.v_function
+                            ? bc.v_function->evaluateAt(x_mid, y0, 0.0) : 0.0;
+                        psi_val -= v_mid * dy;
+                    }
+                    psi_bc[sorted_nodes[i].idx] = psi_val;
+                }
+
+                // All velocity boundary nodes are Dirichlet
+                for (int vi : nodes) {
+                    dirichlet_psi_nodes.push_back(vi);
+                }
+            } else if (bc.type == "pressure" || bc.type == "outflow") {
+                // Neumann ∂ψ/∂n = 0: natural outflow condition.
+                // The normal direction is determined from predicate_axis:
+                //   (= x val) → outward normal is ±x̂ → ∂ψ/∂x = 0
+                //   (= y val) → outward normal is ±ŷ → ∂ψ/∂y = 0
+                char axis = bc.predicate_axis;
+                if (axis == '\0') {
+                    MFEM_ABORT("Pressure/outflow BC '" << bc.name
+                               << "' requires a simple predicate (= x val) or (= y val) "
+                               << "to determine the normal direction for Neumann ∂ψ/∂n = 0");
+                }
+                for (int vi : nodes) {
+                    neumann_psi_info.push_back({vi, axis});
+                }
+            } else {
+                // no-slip, slip: Dirichlet ψ = constant.
+                // The constant is determined below from shared corner nodes.
+                for (int vi : nodes) {
+                    dirichlet_psi_nodes.push_back(vi);
+                }
+            }
+        }
+
+        // ============================================================
+        // A2. Propagate ψ constants to no-slip/slip walls
+        // ============================================================
+        // No-slip walls have ψ = constant along the wall. The constant is
+        // determined by shared corner nodes with velocity boundaries:
+        //   bottom wall → ψ = ψ_inlet(y=0) = 0 (reference)
+        //   top wall    → ψ = ψ_inlet(y=H) = Q (total flow rate)
+        //
+        // Algorithm: for each no-slip/slip BC, check if any of its nodes
+        // already have a non-zero psi_bc (from the velocity integration).
+        // If so, propagate that constant to all nodes on the wall.
+        for (const auto& bc : sdl_boundaries) {
+            if (bc.type != "no-slip" && bc.type != "slip") continue;
+            auto it = boundary_nodes_by_attr.find(bc.attribute);
+            if (it == boundary_nodes_by_attr.end()) continue;
+            const auto& nodes = it->second;
+
+            // Find the ψ value from corner nodes shared with velocity boundaries
+            double wall_psi = 0.0;
+            bool found = false;
+            for (int vi : nodes) {
+                if (std::abs(psi_bc[vi]) > 1e-30) {
+                    wall_psi = psi_bc[vi];
+                    found = true;
+                    break;
+                }
+            }
+            // If no corner node has a prescribed ψ, use 0 (cavity default)
+            if (found) {
+                for (int vi : nodes) {
+                    psi_bc[vi] = wall_psi;
+                }
+            }
+        }
+
+        std::cout << "Setup: Classified boundary nodes for ψ equation:" << std::endl;
+        std::cout << "  Dirichlet: " << dirichlet_psi_nodes.size() << " nodes" << std::endl;
+        std::cout << "  Neumann:   " << neumann_psi_info.size() << " nodes" << std::endl;
+    } else
+#endif
+    {
+        // CLI mode: all boundary nodes are Dirichlet with ψ = 0 (cavity)
+        dirichlet_psi_nodes = all_boundary_nodes;
+    }
+
+    // ================================================================
+    // LAPLACIAN MATRIX ASSEMBLY
+    // ================================================================
+    // Assemble -∇²ψ = ω system with mixed Dirichlet/Neumann BCs.
     mfem::SparseMatrix* laplacian_matrix = new mfem::SparseMatrix(dxx_matrix);
     laplacian_matrix->Add(1.0, dyy_matrix);
     *laplacian_matrix *= -1.0;
-    // Apply BC
-    for (int idx : all_boundary_nodes) {
-        laplacian_matrix->EliminateRow(idx);  // Zeros the row except diagonal
-        laplacian_matrix->Set(idx, idx, 1.0); // Set diagonal
+
+    // Dirichlet rows: replace with identity (ψ_i = ψ_bc_i)
+    for (int idx : dirichlet_psi_nodes) {
+        laplacian_matrix->EliminateRow(idx);
+        laplacian_matrix->Set(idx, idx, 1.0);
     }
+
+    // Neumann rows: replace with normal derivative operator (∂ψ/∂n = 0)
+    // For outlet at x=const: row ← dx_matrix row (enforces ∂ψ/∂x = 0)
+    // For outlet at y=const: row ← dy_matrix row (enforces ∂ψ/∂y = 0)
+    for (const auto& [idx, axis] : neumann_psi_info) {
+        laplacian_matrix->EliminateRow(idx);
+        const mfem::SparseMatrix& deriv = (axis == 'x') ? dx_matrix : dy_matrix;
+        mfem::Array<int> cols;
+        mfem::Vector vals;
+        deriv.GetRow(idx, cols, vals);
+        for (int j = 0; j < cols.Size(); ++j) {
+            if (std::abs(vals(j)) > 0.0) {
+                laplacian_matrix->Set(idx, cols[j], vals(j));
+            }
+        }
+    }
+
     laplacian_matrix->Finalize();
 
     std::cout << "Setup: Created Laplacian matrix with boundary conditions." << std::endl;
@@ -569,9 +753,13 @@ int main(int argc, char *argv[])
         // Solve -∇²ψ = ω instead ∇²ψ = -ω, so that RHS stays positive for linear solvers (cg)
         rhs = vorticity;
 
-        // Apply homogeneous Dirichlet boundary conditions: ψ = 0 on all boundaries
-        // for lid-driven cavity
-        for (int idx : all_boundary_nodes) {
+        // Apply boundary conditions to Poisson RHS:
+        //   Dirichlet nodes: rhs = ψ_prescribed (0 for cavity, ∫u dy for inlet)
+        //   Neumann nodes:   rhs = 0 (∂ψ/∂n = 0, natural outflow)
+        for (int idx : dirichlet_psi_nodes) {
+            rhs[idx] = psi_bc[idx];
+        }
+        for (const auto& [idx, axis] : neumann_psi_info) {
             rhs[idx] = 0.0;
         }
 
@@ -580,7 +768,9 @@ int main(int argc, char *argv[])
         // ================================================================
         // STEP 4: APPLY BOUNDARY CONDITIONS
         // ================================================================
-        // Compute velocities from updated streamfunction
+        // Compute velocities from updated streamfunction:
+        //   u = ∂ψ/∂y   (Eq. 3a)
+        //   v = -∂ψ/∂x  (Eq. 3b)
         dy_matrix.Mult(streamfunction, u_velocity);  // u = ∂ψ/∂y
         dx_matrix.Mult(streamfunction, v_velocity);  // temp = ∂ψ/∂x
         v_velocity *= -1.0;                          // v = -∂ψ/∂x
@@ -597,6 +787,12 @@ int main(int argc, char *argv[])
             // two edges with different attributes share a vertex. The last BC
             // processed wins at these shared nodes — for lid-driven cavity this
             // is correct since all corners are no-slip regardless of order.
+            //
+            // BC type actions on velocity:
+            //   no-slip:          u = 0, v = 0
+            //   velocity (inlet): u = u_prescribed, v = v_prescribed
+            //   pressure/outflow: leave computed values (natural outflow from ψ)
+            //   slip:             leave computed values (ψ=const → zero normal vel)
             for (const auto& bc : sdl_boundaries) {
                 auto it = boundary_nodes_by_attr.find(bc.attribute);
                 if (it == boundary_nodes_by_attr.end()) continue;
@@ -618,6 +814,14 @@ int main(int argc, char *argv[])
                             double z = (dim > 2) ? vertex[2] : 0.0;
                             v_velocity[vi] = bc.v_function->evaluateAt(x, y, z);
                         }
+                    } else if (bc.type == "pressure" || bc.type == "outflow") {
+                        // Natural outflow: velocity computed from ψ derivatives
+                        // stands. The Neumann condition ∂ψ/∂n = 0 on the Poisson
+                        // equation enforces zero-gradient outflow.
+                    } else if (bc.type == "slip") {
+                        // Free-slip: ψ = constant on this boundary gives zero
+                        // normal velocity. Tangential velocity is free (computed
+                        // from ψ derivatives).
                     } else {
                         MFEM_ABORT("Unknown boundary condition type '"
                                    << bc.type << "' for boundary '" << bc.name
