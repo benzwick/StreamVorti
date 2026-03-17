@@ -25,7 +25,7 @@ jobs:
         include:
           - name: cavity
             file: demo/cavity.lisp
-            validate: true
+            validate: ghia
             timeout: 10
           - name: cavity-quick
             file: demo/cavity-quick.lisp
@@ -40,10 +40,15 @@ jobs:
             timeout: 15
           - name: poiseuille
             file: demo/poiseuille.lisp
+            validate: poiseuille
           - name: channel
             file: demo/channel.lisp
           - name: backward-step
             file: demo/backward-step.lisp
+            allow-failure: true  # ECL crash on complex Lisp lambda evaluation
+          - name: von-karman  # Expected to fail: needs external mesh with cylinder hole
+            file: demo/von-karman.lisp
+            allow-failure: true
           - name: cylinder  # Expected to fail: SDL::DIFFERENCE not yet implemented (issue #17)
             file: demo/cylinder.lisp
             allow-failure: true
@@ -82,12 +87,21 @@ jobs:
         ../bin/StreamVorti -f ../${{ matrix.file }} -lp ../lisp -pv 2>&1 | tee simulation.log
 
     - name: Validate against Ghia
-      if: ${{ matrix.validate }}
+      if: ${{ matrix.validate == 'ghia' }}
       run: |
         set -o pipefail
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
              --eval '(unless (streamvorti.validation:run-validation :results-file "results/output_dat/lid-driven-cavity_u_centerline_x0.5.dat") (sb-ext:exit :code 1))' \
+             2>&1 | tee results/validation.log
+
+    - name: Validate against exact Poiseuille solution
+      if: ${{ matrix.validate == 'poiseuille' }}
+      run: |
+        set -o pipefail
+        sbcl --non-interactive \
+             --load lisp/compare-poiseuille.lisp \
+             --eval '(unless (streamvorti.poiseuille:run-validation :results-file "results/output_dat/poiseuille-flow_u_centerline_x0.5.dat") (sb-ext:exit :code 1))' \
              2>&1 | tee results/validation.log
 
     - name: Upload results
