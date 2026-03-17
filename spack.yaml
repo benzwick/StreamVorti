@@ -7,6 +7,14 @@ spack:
   - openmpi
   - suite-sparse
 
+  # Pin target architecture to x86_64_v3 (AVX2/Haswell) so that Spack
+  # binaries are portable across GitHub Actions runners. Without this,
+  # Spack auto-detects the CPU (e.g. icelake) and the cached binaries
+  # crash with "Illegal instruction" on runners with older CPUs.
+  packages:
+    all:
+      target: [x86_64_v3]
+
   view: true
 
   concretizer:
