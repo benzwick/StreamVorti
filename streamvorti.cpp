@@ -595,23 +595,43 @@ int main(int argc, char *argv[])
                 double y = vertex[1];
                 double z = (dim > 2) ? vertex[2] : 0.0;
 
-                // Find the matching BC by evaluating predicates
+                // Match this boundary node against SDL boundary conditions.
+                // Each SDL boundary defines a predicate (e.g. (= y 1)) and a
+                // type: :velocity with a value like (1 0), or :no-slip.
+                // Every boundary node must match exactly one BC predicate.
+                int match_count = 0;
                 for (const auto& bc : sdl_boundaries) {
-                    if (bc.type == "velocity" && bc.matchesPredicate(x, y, z)) {
-                        // Apply this BC's velocity functions
+                    if (!bc.matchesPredicate(x, y, z)) continue;
+                    match_count++;
+                    if (match_count > 1) {
+                        MFEM_ABORT("Duplicate boundary conditions at node "
+                                   << vi << " (" << x << ", " << y << "): "
+                                   << "matched by multiple BC predicates");
+                    }
+
+                    if (bc.type == "no-slip") {
+                        // :no-slip — zero velocity (u=0, v=0)
+                        u_velocity[vi] = 0.0;
+                        v_velocity[vi] = 0.0;
+                    } else if (bc.type == "velocity") {
+                        // :velocity — evaluate u,v from SDL functions
+                        // e.g. (bc lid :velocity (1 0)) creates constant
+                        // lambdas returning u=1.0, v=0.0
                         if (bc.u_function) {
                             u_velocity[vi] = bc.u_function->evaluateAt(x, y, z);
                         }
                         if (bc.v_function) {
                             v_velocity[vi] = bc.v_function->evaluateAt(x, y, z);
                         }
-                        // If only legacy single function provided, use for u
-                        else if (bc.function && !bc.u_function) {
-                            u_velocity[vi] = bc.function->evaluateAt(x, y, z);
-                            v_velocity[vi] = 0.0;
-                        }
-                        break;  // Use first matching BC
+                    } else {
+                        MFEM_ABORT("Unknown boundary condition type '"
+                                   << bc.type << "' for boundary '" << bc.name
+                                   << "' at node " << vi);
                     }
+                }
+                if (match_count == 0) {
+                    MFEM_ABORT("Boundary node " << vi << " at (" << x << ", "
+                               << y << ") has no matching SDL boundary condition");
                 }
             }
         } else
