@@ -588,9 +588,15 @@ int main(int argc, char *argv[])
 #ifdef STREAMVORTI_WITH_ECL
         if (use_sdl_bcs) {
             // Apply boundary conditions from SDL using attribute-based lookup.
-            // Each BC was assigned an MFEM boundary attribute at mesh setup;
-            // boundary_nodes_by_attr maps attribute -> node list.
-            // Corner nodes in multiple lists get the last-processed BC.
+            // Each BC was assigned an MFEM boundary attribute at mesh setup
+            // (sv_mesh_set_boundary_attribute_by_predicate); boundary_nodes_by_attr
+            // maps attribute -> node list (built by IdentifyBoundaryNodesByAttribute).
+            //
+            // Corner nodes appear in multiple attribute lists because MFEM
+            // attributes are per-element (edge), not per-vertex. At corners,
+            // two edges with different attributes share a vertex. The last BC
+            // processed wins at these shared nodes — for lid-driven cavity this
+            // is correct since all corners are no-slip regardless of order.
             for (const auto& bc : sdl_boundaries) {
                 auto it = boundary_nodes_by_attr.find(bc.attribute);
                 if (it == boundary_nodes_by_attr.end()) continue;
@@ -1321,7 +1327,13 @@ void IdentifyBoundaryNodesByAttribute(
     boundary_nodes.clear();
     interior_nodes.clear();
 
-    // Mark all vertices on boundary elements with their attribute
+    // Collect vertices from each boundary element, grouped by attribute.
+    // MFEM assigns attributes to boundary *elements* (edges in 2D), not
+    // vertices. At corners, two edges with different attributes share a
+    // vertex, so that vertex appears in both attribute lists. This is
+    // intentional — the BC application loop processes BCs in order and
+    // last-writer-wins at shared corners (standard FEM practice).
+    // The std::find check only prevents duplicates within a single attribute.
     int num_bdr_elements = mesh->GetNBE();
     for (int be = 0; be < num_bdr_elements; ++be) {
         int attr = mesh->GetBdrAttribute(be);
@@ -1331,7 +1343,6 @@ void IdentifyBoundaryNodesByAttribute(
         for (int v = 0; v < vertices.Size(); ++v) {
             int vi = vertices[v];
             is_boundary[vi] = true;
-            // Add to the attribute's list (avoid duplicates)
             auto& nodes = boundary_nodes[attr];
             if (std::find(nodes.begin(), nodes.end(), vi) == nodes.end()) {
                 nodes.push_back(vi);

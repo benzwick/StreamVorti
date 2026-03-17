@@ -152,7 +152,13 @@ static void IdentifyBoundaryNodesByAttributePar(
     int nv = pmesh->GetNV();
     std::vector<bool> is_boundary(nv, false);
 
-    // Mark vertices on physical boundary elements
+    // Collect vertices from each boundary element, grouped by attribute.
+    // MFEM assigns attributes to boundary *elements* (edges in 2D), not
+    // vertices. At corners, two edges with different attributes share a
+    // vertex, so that vertex appears in both attribute lists. This is
+    // intentional — the BC application loop processes BCs in order and
+    // last-writer-wins at shared corners (standard FEM practice).
+    // The std::find check only prevents duplicates within a single attribute.
     for (int be = 0; be < pmesh->GetNBE(); ++be) {
         int attr = pmesh->GetBdrAttribute(be);
         mfem::Array<int> vertices;
@@ -161,7 +167,7 @@ static void IdentifyBoundaryNodesByAttributePar(
         for (int v = 0; v < vertices.Size(); ++v) {
             int vi = vertices[v];
             int tdof = pfes.GetLocalTDofNumber(vi);
-            if (tdof < 0) continue;  // Not owned
+            if (tdof < 0) continue;  // Not owned by this rank
 
             is_boundary[vi] = true;
             auto& nodes = boundary_nodes[attr];
@@ -782,9 +788,15 @@ int main(int argc, char *argv[])
 #ifdef STREAMVORTI_WITH_ECL
         if (use_sdl_bcs) {
             // Apply boundary conditions from SDL using attribute-based lookup.
-            // Each BC was assigned an MFEM boundary attribute at mesh setup;
-            // boundary_nodes_by_attr maps attribute -> node list.
-            // Corner nodes in multiple lists get the last-processed BC.
+            // Each BC was assigned an MFEM boundary attribute at mesh setup
+            // (sv_mesh_set_boundary_attribute_by_predicate); boundary_nodes_by_attr
+            // maps attribute -> node list (built by IdentifyBoundaryNodesByAttributePar).
+            //
+            // Corner nodes appear in multiple attribute lists because MFEM
+            // attributes are per-element (edge), not per-vertex. At corners,
+            // two edges with different attributes share a vertex. The last BC
+            // processed wins at these shared nodes — for lid-driven cavity this
+            // is correct since all corners are no-slip regardless of order.
             for (const auto& bc : sdl_boundaries) {
                 auto it = boundary_nodes_by_attr.find(bc.attribute);
                 if (it == boundary_nodes_by_attr.end()) continue;
