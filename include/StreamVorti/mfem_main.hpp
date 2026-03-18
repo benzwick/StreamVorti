@@ -36,6 +36,7 @@
 
 // Collecting StreamVorti modules' header files.
 
+#include "StreamVorti/derivative_operator.hpp"
 #include "StreamVorti/approximants/dcpse.hpp"
 #include "StreamVorti/approximants/dcpse_2d.hpp"
 #include "StreamVorti/approximants/dcpse_3d.hpp"

@@ -25,6 +25,8 @@
 #ifndef STREAMVORTI_FINITE_DIFFERENCES_PAR_FD_HPP_
 #define STREAMVORTI_FINITE_DIFFERENCES_PAR_FD_HPP_
 
+#include "StreamVorti/derivative_operator.hpp"
+
 #ifdef MFEM_USE_MPI
 
 #include "mfem.hpp"
@@ -43,7 +45,7 @@ namespace StreamVorti {
  * (referencing DOFs owned by other ranks) are placed in the
  * off-diagonal block of the HypreParMatrix.
  */
-class ParFiniteDiff
+class ParFiniteDiff : public ParDerivativeOperator
 {
 public:
     ParFiniteDiff(mfem::ParGridFunction &gf, int stencil_order = 2);

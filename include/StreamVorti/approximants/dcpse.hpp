@@ -27,6 +27,7 @@
 
 #include "mfem.hpp"
 
+#include "StreamVorti/derivative_operator.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 
 namespace StreamVorti {
@@ -35,7 +36,7 @@ namespace StreamVorti {
  * \class Dcpse
  * \brief DC PSE derivatives base class.
  */
-class Dcpse: public SupportDomain
+class Dcpse: public SupportDomain, public DerivativeOperator
 {
 public:
     /*!

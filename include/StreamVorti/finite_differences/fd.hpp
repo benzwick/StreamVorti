@@ -27,6 +27,8 @@
 
 #include "mfem.hpp"
 
+#include "StreamVorti/derivative_operator.hpp"
+
 #include <string>
 #include <vector>
 
@@ -62,7 +64,7 @@ namespace StreamVorti {
  *     GridFunction dudx(fespace_h1);
  *     dx.Mult(u_gf, dudx);
  */
-class FiniteDiff
+class FiniteDiff : public DerivativeOperator
 {
 public:
     /*!
