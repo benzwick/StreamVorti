@@ -272,26 +272,39 @@ Material properties for different subdomains:
 
 ### 9. Output
 
-Results and post-processing:
+Results and visualization:
 
 ```lisp
-(output
-  :format :vtk           ; or :hdf5, :exodus, :cgns
+(output :vtk
   :directory "results/"
-  :fields (velocity pressure temperature stress)
-
-  ;; Time series
-  :every 0.1             ; time interval
-  :at (0 0.5 1.0 5.0)    ; specific times
-
-  ;; Probes
-  (probe :point (0.5 0.5) :fields (velocity pressure))
-  (probe :line (0 0.5) (1 0.5) :n 100 :fields (velocity))
-
-  ;; Derived quantities
-  (monitor :drag :on wall :direction (1 0 0))
-  (monitor :flux :on outlet :field temperature))
+  :every 0.1
+  :fields (velocity pressure temperature stress))
 ```
+
+### 10. Probes (Data Extraction)
+
+Probes are a separate top-level block for extracting data at specific
+locations, independent of the visualization output format:
+
+```lisp
+(probes
+  ;; Axis-aligned line probes (implemented)
+  (line vertical-center   (x 0.5))
+  (line horizontal-center (y 0.5))
+  (line mid-channel       (x 2.0))
+
+  ;; Future: point probes, arbitrary line probes, monitors
+  ;; (point sensor-1 (0.5 0.5) :fields (velocity pressure))
+  ;; (line diagonal (0 0) (1 1) :n 100 :fields (velocity))
+  ;; (monitor drag :on wall :direction (1 0 0))
+  ;; (monitor flux :on outlet :field temperature)
+  )
+```
+
+Each `(line name (axis position))` extracts u,v velocity at all mesh
+nodes matching the coordinate and writes to
+`output_dat/<sim-name>_<probe-name>.dat`. Probes are evaluated once
+at the end of the simulation.
 
 ### 10. Complete Example
 
