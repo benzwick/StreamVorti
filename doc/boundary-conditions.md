@@ -68,19 +68,33 @@ For a velocity BC on a horizontal boundary at y = y₀ with prescribed v(x):
 
     v = -∂ψ/∂x  →  ψ(x, y₀) = ψ_ref - ∫₀ˣ v(ξ, y₀) dξ
 
-The integration is performed numerically using the trapezoidal rule
-over the sorted boundary nodes.
+The integration is performed numerically using composite Simpson's
+rule with 20 sub-intervals per node. Each node computes its ψ value
+independently — there are no inter-node dependencies, so the same
+code works in both serial and parallel without any communication or
+node sorting.
+
+For example, for a vertical inlet at x = x₀ with node at y:
+
+    ψ(y) ≈ Σₖ (h/6) · [u(x₀, aₖ) + 4·u(x₀, mₖ) + u(x₀, bₖ)]
+
+where h = y/20, aₖ = k·h, bₖ = (k+1)·h, mₖ = (aₖ+bₖ)/2.
+
+This approach generalizes to any velocity function defined in SDL,
+not just analytically integrable profiles. The von Karman reference
+code uses the analytical integral directly, but we support arbitrary
+Lisp-defined velocity functions.
 
 ### Stream Function on No-Slip Walls
 
 No-slip walls have ψ = constant along the wall. The constant is
-determined by continuity with adjacent velocity boundaries:
+determined by continuity with adjacent velocity boundaries at
+shared corner nodes:
 
-- Bottom wall → ψ = 0 (reference)
-- Top wall → ψ = Q (total flow rate)
+- Bottom wall → ψ = 0 (reference, from inlet node at y=0)
+- Top wall → ψ = Q (total flow rate, from inlet node at y=H)
 
-where Q = ∫₀ᴴ u_inlet(y) dy is the total inlet flow rate. This value
-is obtained from the last integrated ψ at the top of the inlet boundary.
+where Q = ∫₀ᴴ u_inlet(y) dy is the total inlet flow rate.
 
 For the lid-driven cavity (closed domain), all walls share the same
 constant ψ = 0, which is the trivial case.
