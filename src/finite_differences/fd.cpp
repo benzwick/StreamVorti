@@ -22,32 +22,19 @@
  *      Benjamin F. ZWICK
  */
 
-
-
-/*!
-   \file mfem_main.hpp
-   \brief StreamVorti software header file. Should be included in a project to use StreamVorti.
-   \author Konstantinos A. Mountris
-   \date 12/01/2018
-*/
-
-#ifndef STREAMVORTI_STREAM_VORTI_SIM_HPP_
-#define STREAMVORTI_STREAM_VORTI_SIM_HPP_
-
-// Collecting StreamVorti modules' header files.
-
-#include "StreamVorti/approximants/dcpse.hpp"
-#include "StreamVorti/approximants/dcpse_2d.hpp"
-#include "StreamVorti/approximants/dcpse_3d.hpp"
 #include "StreamVorti/finite_differences/fd.hpp"
-#include "StreamVorti/finite_differences/fd_2d.hpp"
-#include "StreamVorti/finite_differences/fd_3d.hpp"
-#include "StreamVorti/support_domain/support_domain.hpp"
 
-/*!
- * \namespace StreamVorti Classes collection for implementation of
- *            the Strong-Form Meshless Stream Function - Vorticity formulation.
- */
+namespace StreamVorti {
 
+FiniteDiff::FiniteDiff(mfem::GridFunction &gf)
+    : gf_(&gf)
+{
+    const mfem::FiniteElementSpace *fes = gf.FESpace();
+    nnodes_ = fes->GetNDofs();
+    dim_ = fes->GetMesh()->Dimension();
+}
 
-#endif //STREAMVORTI_STREAM_VORTI_SIM_HPP_
+FiniteDiff::~FiniteDiff()
+{}
+
+} // namespace StreamVorti

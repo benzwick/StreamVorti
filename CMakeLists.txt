@@ -182,6 +182,7 @@ message(STATUS "========================================")
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/doc)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/approximants)
 ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/support_domain)
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/finite_differences)
 
 # Add Lisp integration module if ECL is enabled
 IF(STREAMVORTI_WITH_ECL)
@@ -195,11 +196,13 @@ IF( STREAMVORTI_BUILD_SHARED_LIBS )
         ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
             $<TARGET_OBJECTS:Approximants>
             $<TARGET_OBJECTS:SupportDomain>
+            $<TARGET_OBJECTS:FiniteDifferences>
             $<TARGET_OBJECTS:LispIntegration>)
     ELSE()
         ADD_LIBRARY( ${PROJECT_NAME} SHARED  ${HEADERS}
             $<TARGET_OBJECTS:Approximants>
-            $<TARGET_OBJECTS:SupportDomain>)
+            $<TARGET_OBJECTS:SupportDomain>
+            $<TARGET_OBJECTS:FiniteDifferences>)
     ENDIF()
 
     # Link with dependencies
@@ -228,11 +231,13 @@ IF( STREAMVORTI_BUILD_STATIC_LIBS )
         ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
             $<TARGET_OBJECTS:Approximants>
             $<TARGET_OBJECTS:SupportDomain>
+            $<TARGET_OBJECTS:FiniteDifferences>
             $<TARGET_OBJECTS:LispIntegration>)
     ELSE()
         ADD_LIBRARY( ${PROJECT_NAME}_static STATIC  ${HEADERS}
             $<TARGET_OBJECTS:Approximants>
-            $<TARGET_OBJECTS:SupportDomain>)
+            $<TARGET_OBJECTS:SupportDomain>
+            $<TARGET_OBJECTS:FiniteDifferences>)
     ENDIF()
 
     # Link with dependencies
