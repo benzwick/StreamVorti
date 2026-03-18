@@ -47,7 +47,7 @@ provides the same user-facing interface:
 - `ShapeFunctionDx()`, `ShapeFunctionDy()`, etc. — named accessors
 - `SaveDerivToFile()` — exports matrices in MATLAB format
 
-**Stencils used:**
+**Stencils used (2nd-order, default):**
 
 | Derivative | Interior (central) | Boundary (one-sided) | Order |
 |-----------|-------------------|---------------------|-------|
@@ -55,14 +55,37 @@ provides the same user-facing interface:
 | d²/dx² | (1, -2, 1) / h² | (2, -5, 4, -1) / h² | O(h²) |
 | d²/dxdy | (f₊₊ - f₊₋ - f₋₊ + f₋₋) / 4hxhy | one-sided fallback | O(h²) |
 
-All stencils are second-order accurate.
+**Stencils used (4th-order, optional):**
 
-**Grid detection:**
+| Derivative | Interior (central) | Boundary (one-sided) | Order |
+|-----------|-------------------|---------------------|-------|
+| d/dx | (1, -8, 0, 8, -1) / 12h | (-25, 48, -36, 16, -3) / 12h | O(h⁴) |
+| d²/dx² | (-1, 16, -30, 16, -1) / 12h² | (45, -154, 214, -156, 61, -10) / 12h² | O(h⁴) |
 
-The `Update()` method automatically detects the grid structure from the MFEM
-mesh by extracting unique x, y (and z) coordinates, verifying the node count
-matches a structured grid, and building an index map from grid indices to DOF
-indices. This works regardless of MFEM's internal DOF ordering.
+Near-boundary (1 node from edge) stencils are also 4th-order accurate.
+
+**Grid validation:**
+
+The `Update()` method performs rigorous validation before assembling stencils:
+
+1. **Node coordinate extraction** from GridFunction (not mesh vertices),
+   supporting higher-order FE spaces for visualization.
+2. **Structured grid detection** via unique coordinate analysis with
+   mesh-aware tolerances scaled to the coordinate range.
+3. **Uniform spacing verification** checking that max(|h_i - h_mean|)/h_mean
+   < 1e-6 for all intervals along each axis.
+4. **Minimum grid size check** ensuring sufficient nodes for the stencil
+   order (4 for O(h²), 6 for O(h⁴)).
+5. **Complete coverage check** verifying every grid position has exactly
+   one DOF (no missing or duplicate nodes).
+
+**Parallel support:**
+
+`ParFiniteDiff2d` constructs `HypreParMatrix` derivative operators for use
+with MFEM parallel solvers. Each rank detects the global grid structure via
+MPI collective operations, then assembles its local rows. This follows the
+same pattern as `ParDcpse2d` but without ghost exchange (FD stencils
+reference global DOF indices directly).
 
 ### Usage
 
@@ -129,10 +152,10 @@ This is distinct from `:dcpse` (meshless) and `:fem` (finite elements).
 
 ### Future Work
 
-- Non-uniform grid spacing support
-- Higher-order stencils (4th-order compact schemes)
-- Parallel (MPI) FD via `ParFiniteDiff2d` following the `ParDcpse` pattern
-- Integration into the SDL method selection
+- Non-uniform grid spacing support (stretching functions)
+- Compact (Padé) schemes for higher accuracy at same stencil width
+- 4th-order stencils for 3D (currently only 2nd-order in 3D)
+- `ParFiniteDiff3d` for parallel 3D simulations
 
 ## References
 
