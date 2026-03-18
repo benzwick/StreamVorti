@@ -28,320 +28,271 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <vector>
 
 namespace StreamVorti {
+
+// Helper: apply 1D 2nd-order first derivative stencil
+static void Apply1D_D1_O2(mfem::SparseMatrix &mat, int row, int col_m, int col_0, int col_p,
+                           int idx, int n, double h)
+{
+    if (idx > 0 && idx < n - 1)
+    {
+        mat.Add(row, col_p,  1.0 / (2.0 * h));
+        mat.Add(row, col_m, -1.0 / (2.0 * h));
+    }
+    else if (idx == 0)
+    {
+        // Forward: (-3, 4, -1) / 2h — need col_0, col_p, col_p2
+        // Caller must supply col_p2 separately; this helper is simplified.
+        // We handle it inline in Update() for 3D.
+        mat.Add(row, col_0, -3.0 / (2.0 * h));
+        mat.Add(row, col_p,  4.0 / (2.0 * h));
+        // col_p+1 handled by caller
+    }
+    // Boundary cases handled inline in Update()
+}
 
 void FiniteDiff3d::Update()
 {
     mfem::StopWatch timer;
     timer.Start();
-    std::cout << "FD: update 3D derivative matrices" << std::endl;
+    std::cout << "FD: update 3D derivative matrices (order " << stencil_order_ << ")" << std::endl;
 
-    const mfem::FiniteElementSpace *fes = gf_->FESpace();
-    const mfem::Mesh *mesh = fes->GetMesh();
-    int nnodes = fes->GetNDofs();
-
-    // Extract node coordinates
-    std::vector<double> xcoords(nnodes), ycoords(nnodes), zcoords(nnodes);
-    for (int i = 0; i < nnodes; ++i)
+    if (stencil_order_ != 2)
     {
-        const double *vtx = mesh->GetVertex(i);
-        xcoords[i] = vtx[0];
-        ycoords[i] = vtx[1];
-        zcoords[i] = vtx[2];
+        MFEM_ABORT("FD: 4th-order stencils for 3D are not yet implemented. "
+                   "Use stencil_order=2 for 3D finite differences.");
     }
 
-    // Find unique coordinates
-    std::vector<double> ux(xcoords), uy(ycoords), uz(zcoords);
-    std::sort(ux.begin(), ux.end());
-    std::sort(uy.begin(), uy.end());
-    std::sort(uz.begin(), uz.end());
-    auto near = [](double a, double b){ return std::abs(a - b) < 1e-12; };
-    ux.erase(std::unique(ux.begin(), ux.end(), near), ux.end());
-    uy.erase(std::unique(uy.begin(), uy.end(), near), uy.end());
-    uz.erase(std::unique(uz.begin(), uz.end(), near), uz.end());
+    // --- Extract node coordinates from GridFunction ---
+    std::vector<std::vector<double>> coords;
+    this->ExtractNodeCoordinates(coords);
+    const std::vector<double> &xc = coords[0];
+    const std::vector<double> &yc = coords[1];
+    const std::vector<double> &zc = coords[2];
+
+    // --- Find unique coordinates and verify structured grid ---
+    std::vector<double> ux, uy, uz;
+    FindUniqueCoordinates(xc, ux);
+    FindUniqueCoordinates(yc, uy);
+    FindUniqueCoordinates(zc, uz);
 
     int nxn = static_cast<int>(ux.size());
     int nyn = static_cast<int>(uy.size());
     int nzn = static_cast<int>(uz.size());
 
-    if (nxn * nyn * nzn != nnodes)
+    if (nxn * nyn * nzn != nnodes_)
     {
-        MFEM_ABORT("FD: Grid is not structured. "
-                   "Expected " << nxn << " x " << nyn << " x " << nzn << " = "
-                   << nxn * nyn * nzn << " nodes, but got " << nnodes);
+        MFEM_ABORT("FD: Grid is not structured rectangular. "
+                   "Detected " << nxn << " x " << nyn << " x " << nzn << " = "
+                   << nxn * nyn * nzn << " grid points, but the mesh has "
+                   << nnodes_ << " nodes. "
+                   "Finite differences require a structured Cartesian grid.");
     }
 
-    double hx = (ux.back() - ux.front()) / (nxn - 1);
-    double hy = (uy.back() - uy.front()) / (nyn - 1);
-    double hz = (uz.back() - uz.front()) / (nzn - 1);
+    if (nxn < 4 || nyn < 4 || nzn < 4)
+    {
+        MFEM_ABORT("FD: Grid too small for 2nd-order stencils. Need at least "
+                   "4 nodes in each direction, got "
+                   << nxn << " x " << nyn << " x " << nzn << ".");
+    }
 
-    std::cout << "FD: Grid dimensions: " << nxn << " x " << nyn << " x " << nzn << std::endl;
-    std::cout << "FD: Grid spacing: hx = " << hx << ", hy = " << hy << ", hz = " << hz << std::endl;
+    // --- Verify uniform spacing ---
+    double hx = VerifyUniformSpacing(ux, "x");
+    double hy = VerifyUniformSpacing(uy, "y");
+    double hz = VerifyUniformSpacing(uz, "z");
 
-    // Build 3D index map
-    std::vector<int> dof_ix(nnodes), dof_iy(nnodes), dof_iz(nnodes);
-    // Flatten 3D index: grid_to_dof[ix * nyn * nzn + iy * nzn + iz]
-    std::vector<int> grid_to_dof(nxn * nyn * nzn, -1);
+    std::cout << "FD: Grid: " << nxn << " x " << nyn << " x " << nzn
+              << ", hx=" << hx << ", hy=" << hy << ", hz=" << hz << std::endl;
+
+    // --- Build 3D index map ---
+    double xtol = 0.5 * hx, ytol = 0.5 * hy, ztol = 0.5 * hz;
+
+    std::vector<int> dof_ix(nnodes_), dof_iy(nnodes_), dof_iz(nnodes_);
+    std::vector<int> g2d(nxn * nyn * nzn, -1);
 
     auto grid_idx = [&](int ix, int iy, int iz) -> int {
         return ix * nyn * nzn + iy * nzn + iz;
     };
 
-    for (int i = 0; i < nnodes; ++i)
+    for (int i = 0; i < nnodes_; ++i)
     {
-        auto itx = std::lower_bound(ux.begin(), ux.end(), xcoords[i] - 1e-12);
-        auto ity = std::lower_bound(uy.begin(), uy.end(), ycoords[i] - 1e-12);
-        auto itz = std::lower_bound(uz.begin(), uz.end(), zcoords[i] - 1e-12);
-        int ix = std::min(static_cast<int>(itx - ux.begin()), nxn - 1);
-        int iy = std::min(static_cast<int>(ity - uy.begin()), nyn - 1);
-        int iz = std::min(static_cast<int>(itz - uz.begin()), nzn - 1);
+        int gix = CoordinateToIndex(xc[i], ux, xtol);
+        int giy = CoordinateToIndex(yc[i], uy, ytol);
+        int giz = CoordinateToIndex(zc[i], uz, ztol);
 
-        dof_ix[i] = ix;
-        dof_iy[i] = iy;
-        dof_iz[i] = iz;
-        grid_to_dof[grid_idx(ix, iy, iz)] = i;
+        if (gix < 0 || giy < 0 || giz < 0)
+        {
+            MFEM_ABORT("FD: Node " << i << " at (" << xc[i] << ", " << yc[i]
+                       << ", " << zc[i] << ") could not be mapped to the "
+                       "structured grid.");
+        }
+
+        dof_ix[i] = gix;
+        dof_iy[i] = giy;
+        dof_iz[i] = giz;
+
+        int flat = grid_idx(gix, giy, giz);
+        if (g2d[flat] >= 0)
+        {
+            MFEM_ABORT("FD: Duplicate node at grid position ("
+                       << gix << ", " << giy << ", " << giz << ").");
+        }
+        g2d[flat] = i;
     }
 
-    // Verify completeness
     for (int idx = 0; idx < nxn * nyn * nzn; ++idx)
-        if (grid_to_dof[idx] < 0)
-            MFEM_ABORT("FD: Missing node in 3D grid");
+        if (g2d[idx] < 0)
+            MFEM_ABORT("FD: Missing node in 3D grid at flat index " << idx);
 
-    // Helper to get DOF from grid indices
     auto dof = [&](int ix, int iy, int iz) -> int {
-        return grid_to_dof[grid_idx(ix, iy, iz)];
+        return g2d[grid_idx(ix, iy, iz)];
     };
 
-    // Initialize matrices
-    this->sh_func_dx_  = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dy_  = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dz_  = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dxx_ = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dyy_ = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dzz_ = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dxy_ = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dxz_ = mfem::SparseMatrix(nnodes, nnodes);
-    this->sh_func_dyz_ = mfem::SparseMatrix(nnodes, nnodes);
+    // --- Initialize matrices ---
+    sh_func_dx_  = mfem::SparseMatrix(nnodes_, nnodes_);
+    sh_func_dy_  = mfem::SparseMatrix(nnodes_, nnodes_);
+    sh_func_dz_  = mfem::SparseMatrix(nnodes_, nnodes_);
+    sh_func_dxx_ = mfem::SparseMatrix(nnodes_, nnodes_);
+    sh_func_dyy_ = mfem::SparseMatrix(nnodes_, nnodes_);
+    sh_func_dzz_ = mfem::SparseMatrix(nnodes_, nnodes_);
+    sh_func_dxy_ = mfem::SparseMatrix(nnodes_, nnodes_);
+    sh_func_dxz_ = mfem::SparseMatrix(nnodes_, nnodes_);
+    sh_func_dyz_ = mfem::SparseMatrix(nnodes_, nnodes_);
 
-    for (int node_id = 0; node_id < nnodes; ++node_id)
+    // --- Macro for 2nd-order 1D stencils along arbitrary axis ---
+    // D1: first derivative, D2: second derivative
+    #define FD_D1_O2(mat, nid, idx, n, h, DOF_FUNC) \
+    do { \
+        if ((idx) > 0 && (idx) < (n) - 1) { \
+            (mat).Add((nid), DOF_FUNC((idx)+1),  1.0 / (2.0 * (h))); \
+            (mat).Add((nid), DOF_FUNC((idx)-1), -1.0 / (2.0 * (h))); \
+        } else if ((idx) == 0) { \
+            (mat).Add((nid), DOF_FUNC(0), -3.0 / (2.0 * (h))); \
+            (mat).Add((nid), DOF_FUNC(1),  4.0 / (2.0 * (h))); \
+            (mat).Add((nid), DOF_FUNC(2), -1.0 / (2.0 * (h))); \
+        } else { \
+            (mat).Add((nid), DOF_FUNC((n)-1),  3.0 / (2.0 * (h))); \
+            (mat).Add((nid), DOF_FUNC((n)-2), -4.0 / (2.0 * (h))); \
+            (mat).Add((nid), DOF_FUNC((n)-3),  1.0 / (2.0 * (h))); \
+        } \
+    } while(0)
+
+    #define FD_D2_O2(mat, nid, idx, n, h, DOF_FUNC) \
+    do { \
+        double _h2 = (h) * (h); \
+        if ((idx) > 0 && (idx) < (n) - 1) { \
+            (mat).Add((nid), DOF_FUNC((idx)+1),  1.0 / _h2); \
+            (mat).Add((nid), DOF_FUNC((idx)  ), -2.0 / _h2); \
+            (mat).Add((nid), DOF_FUNC((idx)-1),  1.0 / _h2); \
+        } else if ((idx) == 0) { \
+            (mat).Add((nid), DOF_FUNC(0),  2.0 / _h2); \
+            (mat).Add((nid), DOF_FUNC(1), -5.0 / _h2); \
+            (mat).Add((nid), DOF_FUNC(2),  4.0 / _h2); \
+            (mat).Add((nid), DOF_FUNC(3), -1.0 / _h2); \
+        } else { \
+            (mat).Add((nid), DOF_FUNC((n)-1),  2.0 / _h2); \
+            (mat).Add((nid), DOF_FUNC((n)-2), -5.0 / _h2); \
+            (mat).Add((nid), DOF_FUNC((n)-3),  4.0 / _h2); \
+            (mat).Add((nid), DOF_FUNC((n)-4), -1.0 / _h2); \
+        } \
+    } while(0)
+
+    for (int nid = 0; nid < nnodes_; ++nid)
     {
-        int ix = dof_ix[node_id];
-        int iy = dof_iy[node_id];
-        int iz = dof_iz[node_id];
+        int ix = dof_ix[nid];
+        int iy = dof_iy[nid];
+        int iz = dof_iz[nid];
 
-        // --- dx ---
-        if (ix > 0 && ix < nxn - 1)
-        {
-            sh_func_dx_.Add(node_id, dof(ix+1, iy, iz),  1.0 / (2.0 * hx));
-            sh_func_dx_.Add(node_id, dof(ix-1, iy, iz), -1.0 / (2.0 * hx));
-        }
-        else if (ix == 0)
-        {
-            sh_func_dx_.Add(node_id, dof(ix,   iy, iz), -3.0 / (2.0 * hx));
-            sh_func_dx_.Add(node_id, dof(ix+1, iy, iz),  4.0 / (2.0 * hx));
-            sh_func_dx_.Add(node_id, dof(ix+2, iy, iz), -1.0 / (2.0 * hx));
-        }
-        else
-        {
-            sh_func_dx_.Add(node_id, dof(ix,   iy, iz),  3.0 / (2.0 * hx));
-            sh_func_dx_.Add(node_id, dof(ix-1, iy, iz), -4.0 / (2.0 * hx));
-            sh_func_dx_.Add(node_id, dof(ix-2, iy, iz),  1.0 / (2.0 * hx));
-        }
+        // dx, dxx
+        auto dof_x = [&](int i) { return dof(i, iy, iz); };
+        FD_D1_O2(sh_func_dx_, nid, ix, nxn, hx, dof_x);
+        FD_D2_O2(sh_func_dxx_, nid, ix, nxn, hx, dof_x);
 
-        // --- dy ---
-        if (iy > 0 && iy < nyn - 1)
-        {
-            sh_func_dy_.Add(node_id, dof(ix, iy+1, iz),  1.0 / (2.0 * hy));
-            sh_func_dy_.Add(node_id, dof(ix, iy-1, iz), -1.0 / (2.0 * hy));
-        }
-        else if (iy == 0)
-        {
-            sh_func_dy_.Add(node_id, dof(ix, iy,   iz), -3.0 / (2.0 * hy));
-            sh_func_dy_.Add(node_id, dof(ix, iy+1, iz),  4.0 / (2.0 * hy));
-            sh_func_dy_.Add(node_id, dof(ix, iy+2, iz), -1.0 / (2.0 * hy));
-        }
-        else
-        {
-            sh_func_dy_.Add(node_id, dof(ix, iy,   iz),  3.0 / (2.0 * hy));
-            sh_func_dy_.Add(node_id, dof(ix, iy-1, iz), -4.0 / (2.0 * hy));
-            sh_func_dy_.Add(node_id, dof(ix, iy-2, iz),  1.0 / (2.0 * hy));
-        }
+        // dy, dyy
+        auto dof_y = [&](int j) { return dof(ix, j, iz); };
+        FD_D1_O2(sh_func_dy_, nid, iy, nyn, hy, dof_y);
+        FD_D2_O2(sh_func_dyy_, nid, iy, nyn, hy, dof_y);
 
-        // --- dz ---
-        if (iz > 0 && iz < nzn - 1)
-        {
-            sh_func_dz_.Add(node_id, dof(ix, iy, iz+1),  1.0 / (2.0 * hz));
-            sh_func_dz_.Add(node_id, dof(ix, iy, iz-1), -1.0 / (2.0 * hz));
-        }
-        else if (iz == 0)
-        {
-            sh_func_dz_.Add(node_id, dof(ix, iy, iz  ), -3.0 / (2.0 * hz));
-            sh_func_dz_.Add(node_id, dof(ix, iy, iz+1),  4.0 / (2.0 * hz));
-            sh_func_dz_.Add(node_id, dof(ix, iy, iz+2), -1.0 / (2.0 * hz));
-        }
-        else
-        {
-            sh_func_dz_.Add(node_id, dof(ix, iy, iz  ),  3.0 / (2.0 * hz));
-            sh_func_dz_.Add(node_id, dof(ix, iy, iz-1), -4.0 / (2.0 * hz));
-            sh_func_dz_.Add(node_id, dof(ix, iy, iz-2),  1.0 / (2.0 * hz));
-        }
+        // dz, dzz
+        auto dof_z = [&](int k) { return dof(ix, iy, k); };
+        FD_D1_O2(sh_func_dz_, nid, iz, nzn, hz, dof_z);
+        FD_D2_O2(sh_func_dzz_, nid, iz, nzn, hz, dof_z);
 
-        // --- dxx ---
-        if (ix > 0 && ix < nxn - 1)
+        // Mixed derivatives: dxy, dxz, dyz
+        // Use product of central 1st-derivative stencils with one-sided fallback
+        auto add_mixed = [&](mfem::SparseMatrix &mat,
+                             int i1, int n1, double h1,
+                             int i2, int n2, double h2,
+                             auto dof_func)
         {
-            sh_func_dxx_.Add(node_id, dof(ix+1, iy, iz),  1.0 / (hx * hx));
-            sh_func_dxx_.Add(node_id, dof(ix,   iy, iz), -2.0 / (hx * hx));
-            sh_func_dxx_.Add(node_id, dof(ix-1, iy, iz),  1.0 / (hx * hx));
-        }
-        else if (ix == 0)
-        {
-            sh_func_dxx_.Add(node_id, dof(ix,   iy, iz),  2.0 / (hx * hx));
-            sh_func_dxx_.Add(node_id, dof(ix+1, iy, iz), -5.0 / (hx * hx));
-            sh_func_dxx_.Add(node_id, dof(ix+2, iy, iz),  4.0 / (hx * hx));
-            sh_func_dxx_.Add(node_id, dof(ix+3, iy, iz), -1.0 / (hx * hx));
-        }
-        else
-        {
-            sh_func_dxx_.Add(node_id, dof(ix,   iy, iz),  2.0 / (hx * hx));
-            sh_func_dxx_.Add(node_id, dof(ix-1, iy, iz), -5.0 / (hx * hx));
-            sh_func_dxx_.Add(node_id, dof(ix-2, iy, iz),  4.0 / (hx * hx));
-            sh_func_dxx_.Add(node_id, dof(ix-3, iy, iz), -1.0 / (hx * hx));
-        }
-
-        // --- dyy ---
-        if (iy > 0 && iy < nyn - 1)
-        {
-            sh_func_dyy_.Add(node_id, dof(ix, iy+1, iz),  1.0 / (hy * hy));
-            sh_func_dyy_.Add(node_id, dof(ix, iy,   iz), -2.0 / (hy * hy));
-            sh_func_dyy_.Add(node_id, dof(ix, iy-1, iz),  1.0 / (hy * hy));
-        }
-        else if (iy == 0)
-        {
-            sh_func_dyy_.Add(node_id, dof(ix, iy,   iz),  2.0 / (hy * hy));
-            sh_func_dyy_.Add(node_id, dof(ix, iy+1, iz), -5.0 / (hy * hy));
-            sh_func_dyy_.Add(node_id, dof(ix, iy+2, iz),  4.0 / (hy * hy));
-            sh_func_dyy_.Add(node_id, dof(ix, iy+3, iz), -1.0 / (hy * hy));
-        }
-        else
-        {
-            sh_func_dyy_.Add(node_id, dof(ix, iy,   iz),  2.0 / (hy * hy));
-            sh_func_dyy_.Add(node_id, dof(ix, iy-1, iz), -5.0 / (hy * hy));
-            sh_func_dyy_.Add(node_id, dof(ix, iy-2, iz),  4.0 / (hy * hy));
-            sh_func_dyy_.Add(node_id, dof(ix, iy-3, iz), -1.0 / (hy * hy));
-        }
-
-        // --- dzz ---
-        if (iz > 0 && iz < nzn - 1)
-        {
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz+1),  1.0 / (hz * hz));
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz  ), -2.0 / (hz * hz));
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz-1),  1.0 / (hz * hz));
-        }
-        else if (iz == 0)
-        {
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz  ),  2.0 / (hz * hz));
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz+1), -5.0 / (hz * hz));
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz+2),  4.0 / (hz * hz));
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz+3), -1.0 / (hz * hz));
-        }
-        else
-        {
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz  ),  2.0 / (hz * hz));
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz-1), -5.0 / (hz * hz));
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz-2),  4.0 / (hz * hz));
-            sh_func_dzz_.Add(node_id, dof(ix, iy, iz-3), -1.0 / (hz * hz));
-        }
-
-        // --- dxy ---
-        {
-            int ixm = (ix > 0) ? ix - 1 : ix;
-            int ixp = (ix < nxn - 1) ? ix + 1 : ix;
-            int iym = (iy > 0) ? iy - 1 : iy;
-            int iyp = (iy < nyn - 1) ? iy + 1 : iy;
-            double dx_step = (ixp - ixm) * hx;
-            double dy_step = (iyp - iym) * hy;
-            if (dx_step > 0 && dy_step > 0)
+            int i1m = (i1 > 0) ? i1 - 1 : i1;
+            int i1p = (i1 < n1 - 1) ? i1 + 1 : i1;
+            int i2m = (i2 > 0) ? i2 - 1 : i2;
+            int i2p = (i2 < n2 - 1) ? i2 + 1 : i2;
+            double ds1 = (i1p - i1m) * h1;
+            double ds2 = (i2p - i2m) * h2;
+            if (ds1 > 0 && ds2 > 0)
             {
-                double s = 1.0 / (dx_step * dy_step);
-                sh_func_dxy_.Add(node_id, dof(ixp, iyp, iz),  s);
-                sh_func_dxy_.Add(node_id, dof(ixp, iym, iz), -s);
-                sh_func_dxy_.Add(node_id, dof(ixm, iyp, iz), -s);
-                sh_func_dxy_.Add(node_id, dof(ixm, iym, iz),  s);
+                double s = 1.0 / (ds1 * ds2);
+                mat.Add(nid, dof_func(i1p, i2p),  s);
+                mat.Add(nid, dof_func(i1p, i2m), -s);
+                mat.Add(nid, dof_func(i1m, i2p), -s);
+                mat.Add(nid, dof_func(i1m, i2m),  s);
             }
-        }
+        };
 
-        // --- dxz ---
-        {
-            int ixm = (ix > 0) ? ix - 1 : ix;
-            int ixp = (ix < nxn - 1) ? ix + 1 : ix;
-            int izm = (iz > 0) ? iz - 1 : iz;
-            int izp = (iz < nzn - 1) ? iz + 1 : iz;
-            double dx_step = (ixp - ixm) * hx;
-            double dz_step = (izp - izm) * hz;
-            if (dx_step > 0 && dz_step > 0)
-            {
-                double s = 1.0 / (dx_step * dz_step);
-                sh_func_dxz_.Add(node_id, dof(ixp, iy, izp),  s);
-                sh_func_dxz_.Add(node_id, dof(ixp, iy, izm), -s);
-                sh_func_dxz_.Add(node_id, dof(ixm, iy, izp), -s);
-                sh_func_dxz_.Add(node_id, dof(ixm, iy, izm),  s);
-            }
-        }
-
-        // --- dyz ---
-        {
-            int iym = (iy > 0) ? iy - 1 : iy;
-            int iyp = (iy < nyn - 1) ? iy + 1 : iy;
-            int izm = (iz > 0) ? iz - 1 : iz;
-            int izp = (iz < nzn - 1) ? iz + 1 : iz;
-            double dy_step = (iyp - iym) * hy;
-            double dz_step = (izp - izm) * hz;
-            if (dy_step > 0 && dz_step > 0)
-            {
-                double s = 1.0 / (dy_step * dz_step);
-                sh_func_dyz_.Add(node_id, dof(ix, iyp, izp),  s);
-                sh_func_dyz_.Add(node_id, dof(ix, iyp, izm), -s);
-                sh_func_dyz_.Add(node_id, dof(ix, iym, izp), -s);
-                sh_func_dyz_.Add(node_id, dof(ix, iym, izm),  s);
-            }
-        }
+        add_mixed(sh_func_dxy_, ix, nxn, hx, iy, nyn, hy,
+                  [&](int a, int b){ return dof(a, b, iz); });
+        add_mixed(sh_func_dxz_, ix, nxn, hx, iz, nzn, hz,
+                  [&](int a, int c){ return dof(a, iy, c); });
+        add_mixed(sh_func_dyz_, iy, nyn, hy, iz, nzn, hz,
+                  [&](int b, int c){ return dof(ix, b, c); });
     }
 
-    // Finalize
-    this->sh_func_dx_.Finalize();
-    this->sh_func_dy_.Finalize();
-    this->sh_func_dz_.Finalize();
-    this->sh_func_dxx_.Finalize();
-    this->sh_func_dyy_.Finalize();
-    this->sh_func_dzz_.Finalize();
-    this->sh_func_dxy_.Finalize();
-    this->sh_func_dxz_.Finalize();
-    this->sh_func_dyz_.Finalize();
+    #undef FD_D1_O2
+    #undef FD_D2_O2
 
-    std::cout << "FD: Execution time for 3D finite difference matrices: "
+    // Finalize
+    sh_func_dx_.Finalize();
+    sh_func_dy_.Finalize();
+    sh_func_dz_.Finalize();
+    sh_func_dxx_.Finalize();
+    sh_func_dyy_.Finalize();
+    sh_func_dzz_.Finalize();
+    sh_func_dxy_.Finalize();
+    sh_func_dxz_.Finalize();
+    sh_func_dyz_.Finalize();
+
+    std::cout << "FD: Execution time for 3D FD matrices: "
               << timer.RealTime() << " s" << std::endl;
 }
 
 
 void FiniteDiff3d::SaveDerivToFile(const std::string &deriv, const std::string &filename) const
 {
-    mfem::SparseMatrix derivative;
+    const mfem::SparseMatrix *derivative = nullptr;
 
-    if      (deriv == "dx")  { derivative = this->sh_func_dx_; }
-    else if (deriv == "dy")  { derivative = this->sh_func_dy_; }
-    else if (deriv == "dz")  { derivative = this->sh_func_dz_; }
-    else if (deriv == "dxx") { derivative = this->sh_func_dxx_; }
-    else if (deriv == "dyy") { derivative = this->sh_func_dyy_; }
-    else if (deriv == "dzz") { derivative = this->sh_func_dzz_; }
-    else if (deriv == "dxy") { derivative = this->sh_func_dxy_; }
-    else if (deriv == "dxz") { derivative = this->sh_func_dxz_; }
-    else if (deriv == "dyz") { derivative = this->sh_func_dyz_; }
-
-    if (derivative.Height() == 0)
+    if      (deriv == "dx")  { derivative = &sh_func_dx_; }
+    else if (deriv == "dy")  { derivative = &sh_func_dy_; }
+    else if (deriv == "dz")  { derivative = &sh_func_dz_; }
+    else if (deriv == "dxx") { derivative = &sh_func_dxx_; }
+    else if (deriv == "dyy") { derivative = &sh_func_dyy_; }
+    else if (deriv == "dzz") { derivative = &sh_func_dzz_; }
+    else if (deriv == "dxy") { derivative = &sh_func_dxy_; }
+    else if (deriv == "dxz") { derivative = &sh_func_dxz_; }
+    else if (deriv == "dyz") { derivative = &sh_func_dyz_; }
+    else
     {
-        MFEM_ABORT( "Could not save FD derivative. "
-                    "Derivatives have not been computed." );
+        MFEM_ABORT("FiniteDiff3d::SaveDerivToFile: Unknown derivative '"
+                   << deriv << "'.");
+    }
+
+    if (derivative->Height() == 0)
+    {
+        MFEM_ABORT("Could not save FD derivative '" << deriv
+                   << "'. Derivatives have not been computed.");
     }
 
     std::string path = "";
@@ -349,23 +300,22 @@ void FiniteDiff3d::SaveDerivToFile(const std::string &deriv, const std::string &
     if (last_slash != std::string::npos) {
         path = filename.substr(0, last_slash);
     }
-
-    std::filesystem::path dir(path);
-    if (!path.empty() && !std::filesystem::exists(dir)) {
-        std::filesystem::create_directories(dir);
+    if (!path.empty()) {
+        std::filesystem::create_directories(path);
     }
 
-    std::string ext = "";
-    if (filename.find_last_of(".") != std::string::npos) {
-        ext = filename.substr(filename.find_last_of("."));
+    std::string out_filename = filename;
+    if (filename.find_last_of(".") == std::string::npos ||
+        filename.substr(filename.find_last_of(".")) != ".txt") {
+        out_filename = filename + ".txt";
     }
 
-    std::string out_filename;
-    if (ext != ".txt") { out_filename = filename + ".txt"; }
-    else { out_filename = filename; }
-
-    std::ofstream out(filename, std::ios::out | std::ios::trunc);
-    derivative.PrintMatlab(out);
+    std::ofstream out(out_filename, std::ios::out | std::ios::trunc);
+    if (!out.is_open())
+    {
+        MFEM_ABORT("Could not open file for writing: " << out_filename);
+    }
+    derivative->PrintMatlab(out);
     out.close();
 }
 

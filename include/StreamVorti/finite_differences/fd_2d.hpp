@@ -35,17 +35,32 @@ namespace StreamVorti {
  * \class FiniteDiff2d
  * \brief Finite difference derivatives on 2D structured grids.
  *
- * Builds sparse derivative matrices for a 2D Cartesian grid using:
- * - Central differences for interior nodes
- * - Forward/backward differences for boundary nodes (1st derivatives)
- * - Standard 3-point stencils for 2nd derivatives
- * - 4-point stencil for mixed derivative dxy
+ * Builds sparse derivative matrices for a 2D Cartesian grid.
+ *
+ * Supported stencil orders (set via constructor):
+ *
+ * Order 2 (default):
+ *   1st deriv interior: central 3-point     (-1, 0, 1) / 2h
+ *   1st deriv boundary: one-sided 3-point   (-3, 4, -1) / 2h
+ *   2nd deriv interior: central 3-point     (1, -2, 1) / h²
+ *   2nd deriv boundary: one-sided 4-point   (2, -5, 4, -1) / h²
+ *
+ * Order 4:
+ *   1st deriv interior: central 5-point     (1, -8, 0, 8, -1) / 12h
+ *   1st deriv boundary: one-sided 5-point   (-25, 48, -36, 16, -3) / 12h
+ *   2nd deriv interior: central 5-point     (-1, 16, -30, 16, -1) / 12h²
+ *   2nd deriv boundary: one-sided 6-point   (45, -154, 214, -156, 61, -10) / 12h²
  */
 class FiniteDiff2d: public FiniteDiff
 {
 public:
-    FiniteDiff2d(mfem::GridFunction &gf)
-        : FiniteDiff(gf) {}
+    /*!
+     * \brief Construct 2D FD operator.
+     * \param gf GridFunction on an H1 FE space over a structured mesh.
+     * \param stencil_order Accuracy order: 2 or 4 (default 2).
+     */
+    FiniteDiff2d(mfem::GridFunction &gf, int stencil_order = 2)
+        : FiniteDiff(gf, stencil_order) {}
 
     void Update();
 

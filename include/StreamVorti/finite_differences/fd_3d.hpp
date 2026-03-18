@@ -35,17 +35,13 @@ namespace StreamVorti {
  * \class FiniteDiff3d
  * \brief Finite difference derivatives on 3D structured grids.
  *
- * Builds sparse derivative matrices for a 3D Cartesian grid using:
- * - Central differences for interior nodes
- * - Forward/backward differences for boundary nodes (1st derivatives)
- * - Standard 3-point stencils for 2nd derivatives
- * - 4-point stencils for mixed derivatives
+ * Same stencil options as FiniteDiff2d, extended to three dimensions.
  */
 class FiniteDiff3d: public FiniteDiff
 {
 public:
-    FiniteDiff3d(mfem::GridFunction &gf)
-        : FiniteDiff(gf) {}
+    FiniteDiff3d(mfem::GridFunction &gf, int stencil_order = 2)
+        : FiniteDiff(gf, stencil_order) {}
 
     void Update();
 
