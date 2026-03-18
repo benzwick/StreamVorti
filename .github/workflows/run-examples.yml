@@ -26,6 +26,12 @@ jobs:
           - name: cavity
             file: demo/cavity.lisp
             validate: ghia
+            ghia-results: results/output_dat/lid-driven-cavity_vertical-center.dat
+            timeout: 10
+          - name: cavity-fdm
+            file: demo/cavity-fdm.lisp
+            validate: ghia
+            ghia-results: results/output_dat/lid-driven-cavity-fdm_vertical-center.dat
             timeout: 10
           - name: cavity-quick
             file: demo/cavity-quick.lisp
@@ -90,9 +96,10 @@ jobs:
       if: ${{ matrix.validate == 'ghia' }}
       run: |
         set -o pipefail
+        RESULTS_FILE="${{ matrix.ghia-results || 'results/output_dat/lid-driven-cavity_vertical-center.dat' }}"
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
-             --eval '(unless (streamvorti.validation:run-validation :results-file "results/output_dat/lid-driven-cavity_vertical-center.dat") (sb-ext:exit :code 1))' \
+             --eval "(unless (streamvorti.validation:run-validation :results-file \"${RESULTS_FILE}\") (sb-ext:exit :code 1))" \
              2>&1 | tee results/validation.log
 
     - name: Validate against exact Poiseuille solution
@@ -165,6 +172,51 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: cavity-cli-results
+        path: results/
+        retention-days: 5
+
+  run-cavity-fdm-cli:
+    name: "Cavity FDM (CLI)"
+    runs-on: ubuntu-22.04
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download binaries (from triggering workflow)
+      if: ${{ github.event_name == 'workflow_run' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: streamvorti-ecl-binaries-ubuntu-22.04
+        path: bin
+        run-id: ${{ github.event.workflow_run.id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Download binaries (manual trigger - get latest)
+      if: ${{ github.event_name == 'workflow_dispatch' }}
+      uses: dawidd6/action-download-artifact@v3
+      with:
+        workflow: build-from-source-with-ecl.yml
+        name: streamvorti-ecl-binaries-ubuntu-22.04
+        path: bin
+
+    - name: Install runtime dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libsuitesparse-dev libopenmpi-dev ecl
+
+    - name: Run FDM cavity with CLI args
+      run: |
+        set -o pipefail
+        chmod +x bin/StreamVorti
+        mkdir -p results
+        cd results
+        ../bin/StreamVorti -dim 2 -nx 20 -ny 20 -method fdm -Re 100 -dt 0.005 -ft 5.0 -pv 2>&1 | tee simulation.log
+
+    - name: Upload all results
+      uses: actions/upload-artifact@v4
+      with:
+        name: cavity-fdm-cli-results
         path: results/
         retention-days: 5
 
