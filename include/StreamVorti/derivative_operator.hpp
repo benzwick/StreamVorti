@@ -41,9 +41,10 @@ namespace StreamVorti {
  *
  * Usage:
  *
- *     DerivativeOperator *op = CreateDerivativeOperator(...);
+ *     DerivativeOperator *op = ...;
  *     op->Update();
- *     const SparseMatrix &dx = op->D(0);
+ *     const SparseMatrix &dx  = op->Dx();
+ *     const SparseMatrix &dyy = op->Dyy();
  *     dx.Mult(u, dudx);
  */
 class DerivativeOperator
@@ -65,6 +66,15 @@ public:
      *  \param i  0 → d/dx, 1 → d/dy [, 2 → d/dz]
      */
     virtual const mfem::SparseMatrix & D(int i) const = 0;
+
+    // --- First derivatives ---
+    inline const mfem::SparseMatrix & Dx()  const { return D(0); }
+    inline const mfem::SparseMatrix & Dy()  const { return D(1); }
+
+    // --- Second derivatives ---
+    virtual const mfem::SparseMatrix & Dxx() const = 0;
+    virtual const mfem::SparseMatrix & Dyy() const = 0;
+    virtual const mfem::SparseMatrix & Dxy() const = 0;
 };
 
 } // namespace StreamVorti
@@ -95,6 +105,13 @@ public:
                                  const std::string &filename) const = 0;
 
     virtual const mfem::HypreParMatrix & D(int i) const = 0;
+
+    inline const mfem::HypreParMatrix & Dx()  const { return D(0); }
+    inline const mfem::HypreParMatrix & Dy()  const { return D(1); }
+
+    virtual const mfem::HypreParMatrix & Dxx() const = 0;
+    virtual const mfem::HypreParMatrix & Dyy() const = 0;
+    virtual const mfem::HypreParMatrix & Dxy() const = 0;
 };
 
 } // namespace StreamVorti

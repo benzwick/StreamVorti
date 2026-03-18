@@ -67,6 +67,10 @@ public:
     inline const mfem::SparseMatrix & ShapeFunctionDxz() const { return this->sh_func_dxz_; }
     inline const mfem::SparseMatrix & ShapeFunctionDyz() const { return this->sh_func_dyz_; }
 
+    const mfem::SparseMatrix & Dxx() const override { return this->sh_func_dxx_; }
+    const mfem::SparseMatrix & Dyy() const override { return this->sh_func_dyy_; }
+    const mfem::SparseMatrix & Dxy() const override { return this->sh_func_dxy_; }
+
 private:
     mfem::SparseMatrix sh_func_dx_;
     mfem::SparseMatrix sh_func_dy_;

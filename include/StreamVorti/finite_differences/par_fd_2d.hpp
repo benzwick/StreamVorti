@@ -71,6 +71,10 @@ public:
     inline const mfem::HypreParMatrix & ShapeFunctionDyy() const { return *sh_func_dyy_; }
     inline const mfem::HypreParMatrix & ShapeFunctionDxy() const { return *sh_func_dxy_; }
 
+    const mfem::HypreParMatrix & Dxx() const override { return *sh_func_dxx_; }
+    const mfem::HypreParMatrix & Dyy() const override { return *sh_func_dyy_; }
+    const mfem::HypreParMatrix & Dxy() const override { return *sh_func_dxy_; }
+
 private:
     mfem::HypreParMatrix *sh_func_dx_;
     mfem::HypreParMatrix *sh_func_dy_;

@@ -643,23 +643,10 @@ int main(int argc, char *argv[])
     const int num_nodes = fes.GetTrueVSize();
 
     // Get derivative matrices via the common interface
-    const mfem::HypreParMatrix& dx_matrix  = deriv_op->D(0);
-    const mfem::HypreParMatrix& dy_matrix  = deriv_op->D(1);
-
-    // 2nd derivatives via concrete type accessors
-    const mfem::HypreParMatrix* dxx_ptr = nullptr;
-    const mfem::HypreParMatrix* dyy_ptr = nullptr;
-    if (auto* fd2d = dynamic_cast<StreamVorti::ParFiniteDiff2d*>(deriv_op)) {
-        dxx_ptr = &fd2d->ShapeFunctionDxx();
-        dyy_ptr = &fd2d->ShapeFunctionDyy();
-    } else if (auto* dcpse2d = dynamic_cast<StreamVorti::ParDcpse2d*>(deriv_op)) {
-        dxx_ptr = &dcpse2d->ShapeFunctionDxx();
-        dyy_ptr = &dcpse2d->ShapeFunctionDyy();
-    } else {
-        MFEM_ABORT("Setup: Could not obtain 2nd derivative matrices.");
-    }
-    const mfem::HypreParMatrix& dxx_matrix = *dxx_ptr;
-    const mfem::HypreParMatrix& dyy_matrix = *dyy_ptr;
+    const mfem::HypreParMatrix& dx_matrix  = deriv_op->Dx();
+    const mfem::HypreParMatrix& dy_matrix  = deriv_op->Dy();
+    const mfem::HypreParMatrix& dxx_matrix = deriv_op->Dxx();
+    const mfem::HypreParMatrix& dyy_matrix = deriv_op->Dyy();
 
     std::cout << "Setup: Retrieved derivative matrices successfully." << std::endl;
 

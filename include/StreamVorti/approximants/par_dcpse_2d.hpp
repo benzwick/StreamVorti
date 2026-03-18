@@ -134,6 +134,10 @@ public:
         return *this->sh_func_dxy_;
     }
 
+    const mfem::HypreParMatrix & Dxx() const override { return *this->sh_func_dxx_; }
+    const mfem::HypreParMatrix & Dyy() const override { return *this->sh_func_dyy_; }
+    const mfem::HypreParMatrix & Dxy() const override { return *this->sh_func_dxy_; }
+
 private:
     /*!
      * \brief Build derivative matrices using extended k-NN with ghosts.

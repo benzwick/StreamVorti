@@ -393,17 +393,20 @@ int main(int argc, char *argv[])
 
     std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
-    // Save derivative matrices (DCPSE-specific: uses SaveDerivativeMatrices helper)
-    auto* dcpse_ptr = dynamic_cast<StreamVorti::Dcpse*>(deriv_op);
-    if (dcpse_ptr) {
-        SaveDerivativeMatrices(dcpse_ptr, params, dim, save_d, save_dd, dat_dir);
+    // Save derivative matrices if requested
+    if (save_d || save_dd) {
+        if (auto* dcpse = dynamic_cast<StreamVorti::Dcpse*>(deriv_op)) {
+            SaveDerivativeMatrices(dcpse, params, dim, save_d, save_dd, dat_dir);
+        }
     }
 
     // Save neighbors if requested (DCPSE only — FD has no neighbor concept)
-    if (save_neighbors && dcpse_ptr) {
-        std::cout << "main: Save neighbor indices to file... " << std::endl;
-        dcpse_ptr->SaveNeighsToFile(dcpse_ptr->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
-        std::cout << "done." << std::endl;
+    if (save_neighbors) {
+        if (auto* dcpse = dynamic_cast<StreamVorti::Dcpse*>(deriv_op)) {
+            std::cout << "main: Save neighbor indices to file... " << std::endl;
+            dcpse->SaveNeighsToFile(dcpse->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
+            std::cout << "done." << std::endl;
+        }
     }
 
 
@@ -418,24 +421,10 @@ int main(int argc, char *argv[])
     }
 
     // Get derivative matrices via the common interface
-    const mfem::SparseMatrix& dx_matrix  = deriv_op->D(0);
-    const mfem::SparseMatrix& dy_matrix  = deriv_op->D(1);
-
-    // For 2nd derivatives, use named accessors via dynamic_cast to the 2D type.
-    // Both Dcpse2d and FiniteDiff2d provide ShapeFunctionDxx/Dyy.
-    const mfem::SparseMatrix* dxx_ptr = nullptr;
-    const mfem::SparseMatrix* dyy_ptr = nullptr;
-    if (auto* fd2d = dynamic_cast<StreamVorti::FiniteDiff2d*>(deriv_op)) {
-        dxx_ptr = &fd2d->ShapeFunctionDxx();
-        dyy_ptr = &fd2d->ShapeFunctionDyy();
-    } else if (auto* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(deriv_op)) {
-        dxx_ptr = &dcpse2d->ShapeFunctionDxx();
-        dyy_ptr = &dcpse2d->ShapeFunctionDyy();
-    } else {
-        MFEM_ABORT("Setup: Could not obtain 2nd derivative matrices.");
-    }
-    const mfem::SparseMatrix& dxx_matrix = *dxx_ptr;
-    const mfem::SparseMatrix& dyy_matrix = *dyy_ptr;
+    const mfem::SparseMatrix& dx_matrix  = deriv_op->Dx();
+    const mfem::SparseMatrix& dy_matrix  = deriv_op->Dy();
+    const mfem::SparseMatrix& dxx_matrix = deriv_op->Dxx();
+    const mfem::SparseMatrix& dyy_matrix = deriv_op->Dyy();
 
     std::cout << "Setup: Retrieved derivative matrices successfully." << std::endl;
 
