@@ -612,15 +612,13 @@ int main(int argc, char *argv[])
         std::cout << "Phase 1 - Spatial method: " << spatial_method << std::endl;
 
     StreamVorti::ParDerivativeOperator* deriv_op = nullptr;
-    StreamVorti::ParDcpse2d* par_dcpse = nullptr; // for DCPSE-specific neighbor access
 
     if (spatial_method == "fdm") {
         auto* fd = new StreamVorti::ParFiniteDiff2d(gf);
         fd->Update();
         deriv_op = fd;
     } else {
-        par_dcpse = InitialiseParDCPSE(gf, dim, params.num_neighbors);
-        deriv_op = par_dcpse;
+        deriv_op = InitialiseParDCPSE(gf, dim, params.num_neighbors);
     }
 
     deriv_timer.Stop();
@@ -629,10 +627,12 @@ int main(int argc, char *argv[])
     std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
     // Save neighbors if requested (DCPSE only — FD has no neighbor concept)
-    if (save_neighbors && par_dcpse) {
-        std::cout << "main: Save neighbor indices to file... " << std::endl;
-        par_dcpse->SaveNeighsToFile(par_dcpse->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
-        std::cout << "done." << std::endl;
+    if (save_neighbors) {
+        if (auto* dcpse = dynamic_cast<StreamVorti::ParDcpse2d*>(deriv_op)) {
+            std::cout << "main: Save neighbor indices to file... " << std::endl;
+            dcpse->SaveNeighsToFile(dcpse->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
+            std::cout << "done." << std::endl;
+        }
     }
 
 
