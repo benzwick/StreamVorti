@@ -42,6 +42,8 @@
 
 #include "StreamVorti/approximants/par_dcpse.hpp"
 #include "StreamVorti/approximants/par_dcpse_2d.hpp"
+#include "StreamVorti/finite_differences/par_fd.hpp"
+#include "StreamVorti/finite_differences/par_fd_2d.hpp"
 #include "StreamVorti/support_domain/par_support_domain.hpp"
 
 /**

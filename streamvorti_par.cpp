@@ -356,16 +356,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Check for unsupported parallel methods
     std::string spatial_method(method);
-    if (spatial_method == "fdm") {
-        if (myid == 0) {
-            std::cerr << "Error: FDM (finite differences) is not yet supported in parallel.\n"
-                      << "Use the serial StreamVorti executable with -method fdm, or use -method dcpse.\n";
-        }
-        MPI_Finalize();
-        return EXIT_FAILURE;
-    }
 
     if (myid == 0) {
         args.PrintOptions(std::cout);
@@ -606,8 +597,20 @@ int main(int argc, char *argv[])
     // ================== Timing PHASE 1: DERIVATIVE COMPUTATION ==================
     mfem::StopWatch deriv_timer;
     deriv_timer.Start();
-    // Initialise parallel DCPSE derivatives
-    StreamVorti::ParDcpse2d* derivs = InitialiseParDCPSE(gf, dim, params.num_neighbors);
+
+    if (myid == 0)
+        std::cout << "Phase 1 - Spatial method: " << spatial_method << std::endl;
+
+    // Pointers for derivative objects (exactly one will be used)
+    StreamVorti::ParDcpse2d* derivs = nullptr;
+    StreamVorti::ParFiniteDiff2d* fd_derivs = nullptr;
+
+    if (spatial_method == "fdm") {
+        fd_derivs = new StreamVorti::ParFiniteDiff2d(gf);
+        fd_derivs->Update();
+    } else {
+        derivs = InitialiseParDCPSE(gf, dim, params.num_neighbors);
+    }
 
     deriv_timer.Stop();
     perf_metrics.derivative_time = deriv_timer.RealTime();
@@ -615,11 +618,10 @@ int main(int argc, char *argv[])
     std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
     // save derivs matrices
-    // TODO: SaveDerivativeMatrices not yet implemented for ParDcpse2d (HypreParMatrix output)
-    // SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
+    // TODO: SaveDerivativeMatrices not yet implemented for parallel (HypreParMatrix output)
 
-    // Save neighbors if requested
-    if (save_neighbors) {
+    // Save neighbors if requested (DCPSE only)
+    if (save_neighbors && derivs) {
         std::cout << "main: Save neighbor indices to file... " << std::endl;
         derivs->SaveNeighsToFile(derivs->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
         std::cout << "done." << std::endl;
@@ -632,13 +634,30 @@ int main(int argc, char *argv[])
 
     const int num_nodes = fes.GetTrueVSize();
 
-    // Get parallel DCPSE derivative matrices (HypreParMatrix)
-    const mfem::HypreParMatrix& dx_matrix = derivs->ShapeFunctionDx();
-    const mfem::HypreParMatrix& dy_matrix = derivs->ShapeFunctionDy();
-    const mfem::HypreParMatrix& dxx_matrix = derivs->ShapeFunctionDxx();
-    const mfem::HypreParMatrix& dyy_matrix = derivs->ShapeFunctionDyy();
+    // Extract derivative matrices from either DCPSE or FD
+    const mfem::HypreParMatrix* dx_ptr = nullptr;
+    const mfem::HypreParMatrix* dy_ptr = nullptr;
+    const mfem::HypreParMatrix* dxx_ptr = nullptr;
+    const mfem::HypreParMatrix* dyy_ptr = nullptr;
 
-    std::cout << "Setup: Retrieved parallel DCPSE derivative matrices successfully." << std::endl;
+    if (spatial_method == "fdm") {
+        dx_ptr  = &fd_derivs->ShapeFunctionDx();
+        dy_ptr  = &fd_derivs->ShapeFunctionDy();
+        dxx_ptr = &fd_derivs->ShapeFunctionDxx();
+        dyy_ptr = &fd_derivs->ShapeFunctionDyy();
+        std::cout << "Setup: Retrieved parallel FD derivative matrices successfully." << std::endl;
+    } else {
+        dx_ptr  = &derivs->ShapeFunctionDx();
+        dy_ptr  = &derivs->ShapeFunctionDy();
+        dxx_ptr = &derivs->ShapeFunctionDxx();
+        dyy_ptr = &derivs->ShapeFunctionDyy();
+        std::cout << "Setup: Retrieved parallel DCPSE derivative matrices successfully." << std::endl;
+    }
+
+    const mfem::HypreParMatrix& dx_matrix = *dx_ptr;
+    const mfem::HypreParMatrix& dy_matrix = *dy_ptr;
+    const mfem::HypreParMatrix& dxx_matrix = *dxx_ptr;
+    const mfem::HypreParMatrix& dyy_matrix = *dyy_ptr;
 
     // Identify boundary and interior nodes
     // Use the parallel-specific version which correctly handles DOF ownership.
@@ -1478,6 +1497,7 @@ int main(int argc, char *argv[])
 
     // Clean up all Hypre/MPI objects before MPI_Finalize (Hypre requires this)
     delete derivs;
+    delete fd_derivs;
     delete laplacian_matrix;
     delete linear_solver;
     delete mesh;
