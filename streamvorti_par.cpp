@@ -607,53 +607,49 @@ int main(int argc, char *argv[])
         //
         // For a velocity BC on a horizontal boundary (= y val):
         //   v = -∂ψ/∂x  →  ψ(x) = ψ_ref - ∫₀ˣ v(ξ, y₀) dξ
+        //
+        // Each node is independent — no sorting or inter-node
+        // dependencies. Uses composite Simpson's rule (nsub intervals).
+        constexpr int nsub = 20;
         for (const auto& bc : sdl_boundaries) {
             if (bc.type != "velocity") continue;
             auto it = boundary_nodes_by_attr.find(bc.attribute);
             if (it == boundary_nodes_by_attr.end()) continue;
-            const auto& nodes = it->second;
 
-            // Sort nodes by varying coordinate (tdof → vertex for GetVertex)
-            struct NodeCoord { int tdof; double coord; };
-            std::vector<NodeCoord> sorted_nodes;
-            sorted_nodes.reserve(nodes.size());
-            for (int tdof : nodes) {
+            for (int tdof : it->second) {
                 auto vit = tdof_to_vertex.find(tdof);
                 if (vit == tdof_to_vertex.end()) continue;
-                const double* v = mesh->GetVertex(vit->second);
-                double coord = (bc.predicate_axis == 'x') ? v[1] : v[0];
-                sorted_nodes.push_back({tdof, coord});
-            }
-            std::sort(sorted_nodes.begin(), sorted_nodes.end(),
-                [](const NodeCoord& a, const NodeCoord& b) { return a.coord < b.coord; });
+                const double* vtx = mesh->GetVertex(vit->second);
+                double psi_val = 0.0;
 
-            // Integrate using trapezoidal rule
-            double psi_val = 0.0;
-            if (!sorted_nodes.empty()) {
-                psi_bc[sorted_nodes[0].tdof] = 0.0;
-            }
-            for (size_t i = 1; i < sorted_nodes.size(); ++i) {
-                auto vit0 = tdof_to_vertex.find(sorted_nodes[i-1].tdof);
-                auto vit1 = tdof_to_vertex.find(sorted_nodes[i].tdof);
-                if (vit0 == tdof_to_vertex.end() || vit1 == tdof_to_vertex.end()) continue;
-                const double* v0 = mesh->GetVertex(vit0->second);
-                const double* v1 = mesh->GetVertex(vit1->second);
-                double dy = sorted_nodes[i].coord - sorted_nodes[i-1].coord;
-
-                if (bc.predicate_axis == 'x') {
+                if (bc.predicate_axis == 'x' && bc.u_function) {
                     double x0 = bc.predicate_value;
-                    double y_mid = 0.5 * (v0[1] + v1[1]);
-                    double u_mid = bc.u_function
-                        ? bc.u_function->evaluateAt(x0, y_mid, 0.0) : 0.0;
-                    psi_val += u_mid * dy;
-                } else {
+                    double y = vtx[1];
+                    double h = y / nsub;
+                    for (int k = 0; k < nsub; ++k) {
+                        double a = k * h;
+                        double b = (k + 1) * h;
+                        double m = 0.5 * (a + b);
+                        psi_val += (h / 6.0) * (
+                            bc.u_function->evaluateAt(x0, a, 0.0) +
+                            4.0 * bc.u_function->evaluateAt(x0, m, 0.0) +
+                            bc.u_function->evaluateAt(x0, b, 0.0));
+                    }
+                } else if (bc.predicate_axis == 'y' && bc.v_function) {
                     double y0 = bc.predicate_value;
-                    double x_mid = 0.5 * (v0[0] + v1[0]);
-                    double v_mid = bc.v_function
-                        ? bc.v_function->evaluateAt(x_mid, y0, 0.0) : 0.0;
-                    psi_val -= v_mid * dy;
+                    double x = vtx[0];
+                    double h = x / nsub;
+                    for (int k = 0; k < nsub; ++k) {
+                        double a = k * h;
+                        double b = (k + 1) * h;
+                        double m = 0.5 * (a + b);
+                        psi_val -= (h / 6.0) * (
+                            bc.v_function->evaluateAt(a, y0, 0.0) +
+                            4.0 * bc.v_function->evaluateAt(m, y0, 0.0) +
+                            bc.v_function->evaluateAt(b, y0, 0.0));
+                    }
                 }
-                psi_bc[sorted_nodes[i].tdof] = psi_val;
+                psi_bc[tdof] = psi_val;
             }
         }
 

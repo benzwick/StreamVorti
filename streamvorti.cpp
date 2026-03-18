@@ -459,45 +459,46 @@ int main(int argc, char *argv[])
             const auto& nodes = it->second;
 
             if (bc.type == "velocity") {
-                // Integrate velocity profile to get ψ along this boundary.
-                // Sort nodes by the varying coordinate (perpendicular to predicate_axis).
-                struct NodeCoord { int idx; double coord; };
-                std::vector<NodeCoord> sorted_nodes;
-                sorted_nodes.reserve(nodes.size());
+                // Compute ψ at each node by numerically integrating the
+                // velocity function from 0 to the node's coordinate:
+                //   Vertical boundary (= x val): ψ(y) = ∫₀ʸ u(x₀, η) dη
+                //   Horizontal boundary (= y val): ψ(x) = -∫₀ˣ v(ξ, y₀) dξ
+                //
+                // Each node is independent — no sorting or inter-node
+                // dependencies. Uses composite Simpson's rule (nsub intervals).
+                constexpr int nsub = 20;
                 for (int vi : nodes) {
-                    const double* v = mesh->GetVertex(vi);
-                    // For (= x val): boundary is vertical, ψ varies with y
-                    // For (= y val): boundary is horizontal, ψ varies with x
-                    double coord = (bc.predicate_axis == 'x') ? v[1] : v[0];
-                    sorted_nodes.push_back({vi, coord});
-                }
-                std::sort(sorted_nodes.begin(), sorted_nodes.end(),
-                    [](const NodeCoord& a, const NodeCoord& b) { return a.coord < b.coord; });
+                    const double* vtx = mesh->GetVertex(vi);
+                    double psi_val = 0.0;
 
-                // Integrate using trapezoidal rule
-                double psi_val = 0.0;
-                psi_bc[sorted_nodes[0].idx] = 0.0;
-                for (size_t i = 1; i < sorted_nodes.size(); ++i) {
-                    const double* v0 = mesh->GetVertex(sorted_nodes[i-1].idx);
-                    const double* v1 = mesh->GetVertex(sorted_nodes[i].idx);
-                    double dy = sorted_nodes[i].coord - sorted_nodes[i-1].coord;
-
-                    if (bc.predicate_axis == 'x') {
-                        // Vertical boundary: ψ(y) = ∫₀ʸ u(x₀,η) dη
+                    if (bc.predicate_axis == 'x' && bc.u_function) {
                         double x0 = bc.predicate_value;
-                        double y_mid = 0.5 * (v0[1] + v1[1]);
-                        double u_mid = bc.u_function
-                            ? bc.u_function->evaluateAt(x0, y_mid, 0.0) : 0.0;
-                        psi_val += u_mid * dy;
-                    } else {
-                        // Horizontal boundary: ψ(x) = ψ_ref - ∫₀ˣ v(ξ,y₀) dξ
+                        double y = vtx[1];
+                        double h = y / nsub;
+                        for (int k = 0; k < nsub; ++k) {
+                            double a = k * h;
+                            double b = (k + 1) * h;
+                            double m = 0.5 * (a + b);
+                            psi_val += (h / 6.0) * (
+                                bc.u_function->evaluateAt(x0, a, 0.0) +
+                                4.0 * bc.u_function->evaluateAt(x0, m, 0.0) +
+                                bc.u_function->evaluateAt(x0, b, 0.0));
+                        }
+                    } else if (bc.predicate_axis == 'y' && bc.v_function) {
                         double y0 = bc.predicate_value;
-                        double x_mid = 0.5 * (v0[0] + v1[0]);
-                        double v_mid = bc.v_function
-                            ? bc.v_function->evaluateAt(x_mid, y0, 0.0) : 0.0;
-                        psi_val -= v_mid * dy;
+                        double x = vtx[0];
+                        double h = x / nsub;
+                        for (int k = 0; k < nsub; ++k) {
+                            double a = k * h;
+                            double b = (k + 1) * h;
+                            double m = 0.5 * (a + b);
+                            psi_val -= (h / 6.0) * (
+                                bc.v_function->evaluateAt(a, y0, 0.0) +
+                                4.0 * bc.v_function->evaluateAt(m, y0, 0.0) +
+                                bc.v_function->evaluateAt(b, y0, 0.0));
+                        }
                     }
-                    psi_bc[sorted_nodes[i].idx] = psi_val;
+                    psi_bc[vi] = psi_val;
                 }
 
                 // All velocity boundary nodes are Dirichlet
