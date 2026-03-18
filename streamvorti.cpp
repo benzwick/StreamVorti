@@ -98,6 +98,7 @@ int main(int argc, char *argv[])
     const char *sdl_file = "";  // SDL file for Lisp-based configuration
     const char *lisp_path = ""; // Path to SDL Lisp source files
     int order = 1;
+    const char *method = "dcpse"; // Spatial discretization method: "dcpse" or "fdm"
 
     // Output filename prefix and extension
     std::string fname = "mfem_square10x10";
@@ -154,6 +155,8 @@ int main(int argc, char *argv[])
                    "Mesh size in y direction.");
     args.AddOption(&sz, "-sz", "--size-z",
                    "Mesh size in z direction.");
+    args.AddOption(&method, "-method", "--spatial-method",
+                   "Spatial discretization method: dcpse or fdm (default: dcpse).");
     args.AddOption(&params.num_neighbors, "-nn", "--num-neighbors",
                     "Number of neighbors for DCPSE (default: 25).");
     args.AddOption(&params.reynolds_number, "-Re", "--reynolds-number",
@@ -273,6 +276,11 @@ int main(int argc, char *argv[])
                 }
             }
 
+            // Map spatial method from SDL
+            if (!config.dcpse.method.empty()) {
+                method = config.dcpse.method == "fdm" ? "fdm" : "dcpse";
+            }
+
             // Map SDL config to SimulationParams
             params.num_neighbors = config.dcpse.num_neighbors;
             params.reynolds_number = static_cast<int>(config.physics.reynolds);
@@ -297,6 +305,7 @@ int main(int argc, char *argv[])
             std::cout << "  Reynolds number: " << params.reynolds_number << std::endl;
             std::cout << "  Timestep: " << params.dt << std::endl;
             std::cout << "  Final time: " << params.final_time << std::endl;
+            std::cout << "  Spatial method: " << method << std::endl;
             std::cout << "  DCPSE neighbors: " << params.num_neighbors << std::endl;
             std::cout << "  Solver tolerance: " << params.solver_rel_tol << std::endl;
             std::cout << "  ParaView output frequency: " << params.paraview_output_frequency << std::endl;
@@ -353,19 +362,45 @@ int main(int argc, char *argv[])
     // ================== Timing PHASE 1: DERIVATIVE COMPUTATION ==================
     mfem::StopWatch deriv_timer;
     deriv_timer.Start();
-    // Initialise DCPSE derivatives
-    StreamVorti::Dcpse* derivs = InitialiseDCPSE(gf, dim, params.num_neighbors);
+
+    // Determine spatial method
+    std::string spatial_method(method);
+    std::cout << "Phase 1 - Spatial method: " << spatial_method << std::endl;
+
+    // Pointers for derivative objects (exactly one will be used)
+    StreamVorti::Dcpse* derivs = nullptr;
+    StreamVorti::FiniteDiff* fd_derivs = nullptr;
+
+    if (spatial_method == "fdm") {
+        // Finite differences on structured grid
+        if (dim == 2) {
+            auto* fd2d = new StreamVorti::FiniteDiff2d(gf);
+            fd2d->Update();
+            fd_derivs = fd2d;
+        } else if (dim == 3) {
+            auto* fd3d = new StreamVorti::FiniteDiff3d(gf);
+            fd3d->Update();
+            fd_derivs = fd3d;
+        } else {
+            MFEM_ABORT("Unsupported dimension for FDM: " << dim);
+        }
+    } else {
+        // Default: DCPSE
+        derivs = InitialiseDCPSE(gf, dim, params.num_neighbors);
+    }
 
     deriv_timer.Stop();
     perf_metrics.derivative_time = deriv_timer.RealTime();
 
     std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
-    // save derivs matrices
-    SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
+    // save derivs matrices (DCPSE only - FD uses SaveDerivToFile directly)
+    if (derivs) {
+        SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
+    }
 
-    // Save neighbors if requested
-    if (save_neighbors) {
+    // Save neighbors if requested (DCPSE only)
+    if (save_neighbors && derivs) {
         std::cout << "main: Save neighbor indices to file... " << std::endl;
         derivs->SaveNeighsToFile(derivs->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
         std::cout << "done." << std::endl;
@@ -378,19 +413,38 @@ int main(int argc, char *argv[])
 
     const int num_nodes = mesh->GetNV();
 
-    // Ensure we have a 2D DCPSE object first
-    StreamVorti::Dcpse2d* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(derivs);
-    if (!dcpse2d) {
-        MFEM_ABORT("Setup: Only 2D simulations are currently supported.");
+    // Extract derivative matrices from either DCPSE or FD
+    const mfem::SparseMatrix* dx_ptr = nullptr;
+    const mfem::SparseMatrix* dy_ptr = nullptr;
+    const mfem::SparseMatrix* dxx_ptr = nullptr;
+    const mfem::SparseMatrix* dyy_ptr = nullptr;
+
+    if (spatial_method == "fdm") {
+        if (dim != 2) {
+            MFEM_ABORT("Setup: Only 2D FDM simulations are currently supported.");
+        }
+        auto* fd2d = dynamic_cast<StreamVorti::FiniteDiff2d*>(fd_derivs);
+        dx_ptr = &fd2d->ShapeFunctionDx();
+        dy_ptr = &fd2d->ShapeFunctionDy();
+        dxx_ptr = &fd2d->ShapeFunctionDxx();
+        dyy_ptr = &fd2d->ShapeFunctionDyy();
+        std::cout << "Setup: Retrieved FD derivative matrices successfully." << std::endl;
+    } else {
+        StreamVorti::Dcpse2d* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(derivs);
+        if (!dcpse2d) {
+            MFEM_ABORT("Setup: Only 2D simulations are currently supported.");
+        }
+        dx_ptr = &dcpse2d->ShapeFunctionDx();
+        dy_ptr = &dcpse2d->ShapeFunctionDy();
+        dxx_ptr = &dcpse2d->ShapeFunctionDxx();
+        dyy_ptr = &dcpse2d->ShapeFunctionDyy();
+        std::cout << "Setup: Retrieved DCPSE derivative matrices successfully." << std::endl;
     }
 
-    // Get DCPSE derivative matrices
-    const mfem::SparseMatrix& dx_matrix = dcpse2d->ShapeFunctionDx();
-    const mfem::SparseMatrix& dy_matrix = dcpse2d->ShapeFunctionDy();
-    const mfem::SparseMatrix& dxx_matrix = dcpse2d->ShapeFunctionDxx();
-    const mfem::SparseMatrix& dyy_matrix = dcpse2d->ShapeFunctionDyy();
-
-    std::cout << "Setup: Retrieved DCPSE derivative matrices successfully." << std::endl;
+    const mfem::SparseMatrix& dx_matrix = *dx_ptr;
+    const mfem::SparseMatrix& dy_matrix = *dy_ptr;
+    const mfem::SparseMatrix& dxx_matrix = *dxx_ptr;
+    const mfem::SparseMatrix& dyy_matrix = *dyy_ptr;
 
     // Identify boundary and interior nodes
     std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
@@ -1249,6 +1303,7 @@ int main(int argc, char *argv[])
 
     // Cleanup
     delete derivs;
+    delete fd_derivs;
     delete mesh;
     delete solver_package;  // delete both solver and preconditioner
     delete laplacian_matrix;

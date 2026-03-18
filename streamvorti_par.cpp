@@ -236,6 +236,7 @@ int main(int argc, char *argv[])
     const char *sdl_file = "";  // SDL file for Lisp-based configuration
     const char *lisp_path = ""; // Path to SDL Lisp source files
     int order = 1;
+    const char *method = "dcpse"; // Spatial discretization method: "dcpse" or "fdm"
 
     // Output filename prefix and extension
     std::string fname = "mfem_square10x10";
@@ -293,6 +294,8 @@ int main(int argc, char *argv[])
                    "Mesh size in y direction.");
     args.AddOption(&sz, "-sz", "--size-z",
                    "Mesh size in z direction.");
+    args.AddOption(&method, "-method", "--spatial-method",
+                   "Spatial discretization method: dcpse (default: dcpse). FDM not yet supported in parallel.");
     args.AddOption(&params.num_neighbors, "-nn", "--num-neighbors",
                     "Number of neighbors for DCPSE (default: 25).");
     args.AddOption(&params.reynolds_number, "-Re", "--reynolds-number",
@@ -352,6 +355,18 @@ int main(int argc, char *argv[])
         }
         return 1;
     }
+
+    // Check for unsupported parallel methods
+    std::string spatial_method(method);
+    if (spatial_method == "fdm") {
+        if (myid == 0) {
+            std::cerr << "Error: FDM (finite differences) is not yet supported in parallel.\n"
+                      << "Use the serial StreamVorti executable with -method fdm, or use -method dcpse.\n";
+        }
+        MPI_Finalize();
+        return EXIT_FAILURE;
+    }
+
     if (myid == 0) {
         args.PrintOptions(std::cout);
     }

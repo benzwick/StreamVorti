@@ -43,6 +43,9 @@
 #include "StreamVorti/approximants/dcpse.hpp"
 #include "StreamVorti/approximants/dcpse_2d.hpp"
 #include "StreamVorti/approximants/dcpse_3d.hpp"
+#include "StreamVorti/finite_differences/fd.hpp"
+#include "StreamVorti/finite_differences/fd_2d.hpp"
+#include "StreamVorti/finite_differences/fd_3d.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 
 // Standard library includes for struct definitions
