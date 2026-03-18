@@ -45,11 +45,11 @@ jobs:
             file: demo/channel.lisp
           - name: backward-step
             file: demo/backward-step.lisp
-            allow-failure: true  # ECL crash on complex Lisp lambda evaluation
-          - name: von-karman  # Expected to fail: needs external mesh with cylinder hole
+            allow-failure: true  # Compound predicates (and/or) not yet supported (issue #30)
+          - name: von-karman  # SDL::DIFFERENCE not implemented (issue #25)
             file: demo/von-karman.lisp
             allow-failure: true
-          - name: cylinder  # Expected to fail: SDL::DIFFERENCE not yet implemented (issue #17)
+          - name: cylinder  # SDL::DIFFERENCE not implemented (issue #25)
             file: demo/cylinder.lisp
             allow-failure: true
 
