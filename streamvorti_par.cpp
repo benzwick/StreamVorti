@@ -361,6 +361,7 @@ int main(int argc, char *argv[])
     bool sdl_mode = false;
     // Store SDL boundary conditions for runtime evaluation
     std::vector<StreamVorti::Lisp::BoundaryCondition> sdl_boundaries;
+    std::vector<StreamVorti::Lisp::LineProbe> sdl_probes;
     bool use_sdl_bcs = false;
 #endif
 
@@ -403,6 +404,15 @@ int main(int argc, char *argv[])
                 }
             } else {
                 std::cout << "  No SDL boundary conditions defined, using hardcoded lid-driven cavity BCs.\n";
+            }
+
+            // Store SDL line probes for post-processing
+            if (!config.probes.empty()) {
+                sdl_probes = std::move(config.probes);
+                std::cout << "  Line probes (" << sdl_probes.size() << "):\n";
+                for (const auto& p : sdl_probes) {
+                    std::cout << "    - " << p.name << " (" << p.axis << " = " << p.position << ")\n";
+                }
             }
 
             // Map SDL config to SimulationParams
@@ -1259,13 +1269,27 @@ int main(int argc, char *argv[])
 // PART 3: POST-PROCESSING
 // ====================================================================
 
-    // Extract centerlines for validation against Ghia et al. (1982)
-    ExtractCenterline(u_velocity, v_velocity, &scalar_fes,
-                      dat_dir + "/" + params.output_prefix + "_u_centerline_x0.5.dat",
-                      'x', 0.5);
-    ExtractCenterline(u_velocity, v_velocity, &scalar_fes,
-                      dat_dir + "/" + params.output_prefix + "_v_centerline_y0.5.dat",
-                      'y', 0.5);
+    // Extract line probe data for validation
+#ifdef STREAMVORTI_WITH_ECL
+    if (!sdl_probes.empty()) {
+        // Use SDL-configured probes
+        for (const auto& probe : sdl_probes) {
+            std::string filename = dat_dir + "/" + params.output_prefix
+                                   + "_" + probe.name + ".dat";
+            ExtractCenterline(u_velocity, v_velocity, &scalar_fes,
+                              filename, probe.axis, probe.position);
+        }
+    } else
+#endif
+    {
+        // Default probes for CLI mode (cavity at x=0.5, y=0.5)
+        ExtractCenterline(u_velocity, v_velocity, &scalar_fes,
+                          dat_dir + "/" + params.output_prefix + "_u_centerline_x0.5.dat",
+                          'x', 0.5);
+        ExtractCenterline(u_velocity, v_velocity, &scalar_fes,
+                          dat_dir + "/" + params.output_prefix + "_v_centerline_y0.5.dat",
+                          'y', 0.5);
+    }
 
     // Save residual history if enabled and data exists
     if (params.check_residuals && !residual_history.timesteps.empty()) {

@@ -91,6 +91,7 @@ SimulationConfig Loader::load(const std::string& path)
     config.dcpse = extractDCPSEParams(sim_obj);
     config.solver = extractSolverParams(sim_obj);
     config.output = extractOutputParams(sim_obj);
+    config.probes = extractProbes(sim_obj);
 
     return config;
 }
@@ -124,6 +125,7 @@ SimulationConfig Loader::loadFromString(const std::string& sdl_content)
     config.dcpse = extractDCPSEParams(sim_obj);
     config.solver = extractSolverParams(sim_obj);
     config.output = extractOutputParams(sim_obj);
+    config.probes = extractProbes(sim_obj);
 
     return config;
 }
@@ -348,6 +350,43 @@ OutputParams Loader::extractOutputParams(EclObject sim_obj)
     }
 
     return params;
+}
+
+std::vector<LineProbe> Loader::extractProbes(EclObject sim_obj)
+{
+    std::vector<LineProbe> probes;
+
+    EclObject probes_list = getProperty(sim_obj, "probes");
+    if (Bridge::isNil(probes_list) || !Bridge::isList(probes_list)) {
+        return probes;
+    }
+
+    // Each probe is a list: (name axis position)
+    cl_object cl_list = to_cl(probes_list);
+    while (cl_list != ECL_NIL && !Bridge::isNil(to_ecl(cl_consp(cl_list)))) {
+        EclObject probe_spec = to_ecl(cl_car(cl_list));
+
+        if (!Bridge::isNil(probe_spec) && Bridge::isList(probe_spec)) {
+            cl_object cl_spec = to_cl(probe_spec);
+            // Extract (name axis position)
+            EclObject name_obj = to_ecl(cl_car(cl_spec));
+            cl_spec = cl_cdr(cl_spec);
+            EclObject axis_obj = to_ecl(cl_car(cl_spec));
+            cl_spec = cl_cdr(cl_spec);
+            EclObject pos_obj = to_ecl(cl_car(cl_spec));
+
+            LineProbe probe;
+            probe.name = Bridge::toCppString(name_obj);
+            std::string axis_str = Bridge::toCppString(axis_obj);
+            probe.axis = axis_str.empty() ? 'x' : axis_str[0];
+            probe.position = Bridge::toCppDouble(pos_obj);
+            probes.push_back(probe);
+        }
+
+        cl_list = cl_cdr(cl_list);
+    }
+
+    return probes;
 }
 
 EclObject Loader::getProperty(EclObject plist, const std::string& key)

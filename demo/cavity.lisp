@@ -42,6 +42,11 @@
     :end 10.0
     :tolerance 1e-6)
 
+  ;; Line probes for Ghia validation
+  (probes
+    (line vertical-center   (x 0.5))
+    (line horizontal-center (y 0.5)))
+
   ;; VTK output for ParaView
   (output :vtk
     :directory "results/cavity/"

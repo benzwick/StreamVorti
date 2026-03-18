@@ -38,9 +38,14 @@
 
   (temporal :explicit-euler
     :dt 0.001
-    :end 5.0)
+    :end 20.0)
+
+  (probes
+    (line quarter-channel (x 1.0))
+    (line mid-channel     (x 2.0))
+    (line exit-channel    (x 3.0)))
 
   (output :vtk
     :directory "results/channel/"
-    :every 0.5
+    :every 1.0
     :fields (vorticity streamfunction velocity)))

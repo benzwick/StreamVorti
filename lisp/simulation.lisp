@@ -30,7 +30,7 @@
 (defstruct (sim-data (:constructor %make-sim)
                      (:conc-name sim-))
   name dim domain boundaries subdomains physics-list
-  spatial temporal output-config coupling)
+  spatial temporal output-config probes coupling)
 
 (defvar *known-physics-types*
   '(:navier-stokes :heat-conduction :stokes :euler :laplace :diffusion
@@ -383,6 +383,31 @@
                 `(:fields ',(if (listp fields) fields (list fields))))
             ,@(when probes `(:probes ',probes))))))
 
+(defun compile-sim-probes (sim-var form)
+  "Compile a (probes (line name (axis pos)) ...) form.
+
+   Each sub-form defines a named line probe along an axis-aligned line.
+   Example:
+   (probes
+     (line mid-channel (x 2.0))
+     (line horizontal  (y 0.5)))
+
+   Produces a list of (name axis position) triples stored on sim-probes."
+  (let ((probe-specs nil))
+    (dolist (spec (rest form))
+      (when (and (listp spec)
+                 (string= (string-upcase (symbol-name (car spec))) "LINE"))
+        (let* ((name (second spec))
+               (coord (third spec))
+               (axis (first coord))
+               (position (second coord)))
+          (push `(list ,(string-downcase (symbol-name name))
+                       ,(string-downcase (symbol-name axis))
+                       ,position)
+                probe-specs))))
+    `(setf (sim-probes ,sim-var)
+           (list ,@(nreverse probe-specs)))))
+
 (defun compile-sim-coupling (sim-var form)
   "Compile a (coupling name &key physics type iterations interface) form."
   (let ((name (second form))
@@ -421,6 +446,7 @@
       ((string= tag "SPATIAL")     (compile-sim-spatial sim-var form))
       ((string= tag "TEMPORAL")    (compile-sim-temporal sim-var form))
       ((string= tag "OUTPUT")      (compile-sim-output sim-var form))
+      ((string= tag "PROBES")      (compile-sim-probes sim-var form))
       ((string= tag "COUPLING")    (compile-sim-coupling sim-var form))
       (t (error "Unknown simulation form: ~A" (car form))))))
 
