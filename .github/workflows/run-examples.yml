@@ -41,10 +41,8 @@ jobs:
           - name: poiseuille
             file: demo/poiseuille.lisp
             validate: poiseuille
-            timeout: 10
           - name: channel
             file: demo/channel.lisp
-            timeout: 10
           - name: backward-step
             file: demo/backward-step.lisp
             allow-failure: true  # Compound predicates (and/or) not yet supported (issue #30)

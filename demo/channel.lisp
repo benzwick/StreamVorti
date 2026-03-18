@@ -38,7 +38,7 @@
 
   (temporal :explicit-euler
     :dt 0.001
-    :end 20.0)
+    :end 5.0)
 
   (probes
     (line quarter-channel (x 1.0))

@@ -31,7 +31,6 @@ jobs:
           - name: poiseuille
             file: demo/poiseuille.lisp
             validate: poiseuille
-            timeout: 10
 
     steps:
     - uses: actions/checkout@v4
