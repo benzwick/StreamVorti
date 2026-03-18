@@ -96,10 +96,9 @@ jobs:
       if: ${{ matrix.validate == 'ghia' }}
       run: |
         set -o pipefail
-        RESULTS_FILE="${{ matrix.ghia-results || 'results/output_dat/lid-driven-cavity_vertical-center.dat' }}"
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
-             --eval "(unless (streamvorti.validation:run-validation :results-file \"${RESULTS_FILE}\") (sb-ext:exit :code 1))" \
+             --eval '(unless (streamvorti.validation:run-validation :results-file "${{ matrix.ghia-results }}") (sb-ext:exit :code 1))' \
              2>&1 | tee results/validation.log
 
     - name: Validate against exact Poiseuille solution
