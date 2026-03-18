@@ -86,6 +86,46 @@ SimulationConfig Loader::load(const std::string& path)
     // Extract boundary conditions
     config.boundaries = extractBoundaries(sim_obj);
 
+    // Apply boundary attributes to the MFEM mesh.
+    // The SDL assigns attribute numbers (1, 2, 3, ...) to each boundary
+    // definition, but these must be applied to the actual MFEM boundary
+    // elements using the predicate (e.g. (= x 0) → all boundary edges
+    // whose center matches x=0 get the attribute).
+    if (config.mesh) {
+        for (const auto& bc : config.boundaries) {
+            if (bc.predicate_axis == '\0') {
+                throw EclException(
+                    "Boundary '" + bc.name + "' uses a compound predicate "
+                    "(and/or/not) which is not yet supported for MFEM boundary "
+                    "attribute assignment. Only simple predicates like (= x 0) "
+                    "or (= y 1) are supported.");
+            }
+            int predicate_type;
+            switch (bc.predicate_axis) {
+                case 'x': predicate_type = 0; break;
+                case 'y': predicate_type = 1; break;
+                case 'z': predicate_type = 2; break;
+                default:
+                    throw EclException(
+                        "Boundary '" + bc.name + "' has unsupported predicate "
+                        "axis '" + std::string(1, bc.predicate_axis) + "'. "
+                        "Only 'x', 'y', and 'z' are supported.");
+            }
+            int count = sv_mesh_set_boundary_attribute(
+                config.mesh.get(), predicate_type,
+                bc.predicate_value, bc.predicate_tolerance,
+                bc.attribute);
+            if (count == 0) {
+                throw EclException(
+                    "Boundary '" + bc.name + "' predicate (" +
+                    std::string(1, bc.predicate_axis) + " = " +
+                    std::to_string(bc.predicate_value) +
+                    ") matched no boundary elements on the mesh. "
+                    "Check that the predicate value matches the domain geometry.");
+            }
+        }
+    }
+
     // Extract parameters
     config.physics = extractPhysicsParams(sim_obj);
     config.dcpse = extractDCPSEParams(sim_obj);
@@ -121,6 +161,43 @@ SimulationConfig Loader::loadFromString(const std::string& sdl_content)
     config.dimension = getIntProperty(sim_obj, "dimension", 2);
     config.mesh = extractMesh(sim_obj);
     config.boundaries = extractBoundaries(sim_obj);
+
+    // Apply boundary attributes to the MFEM mesh (same as in load())
+    if (config.mesh) {
+        for (const auto& bc : config.boundaries) {
+            if (bc.predicate_axis == '\0') {
+                throw EclException(
+                    "Boundary '" + bc.name + "' uses a compound predicate "
+                    "(and/or/not) which is not yet supported for MFEM boundary "
+                    "attribute assignment. Only simple predicates like (= x 0) "
+                    "or (= y 1) are supported.");
+            }
+            int predicate_type;
+            switch (bc.predicate_axis) {
+                case 'x': predicate_type = 0; break;
+                case 'y': predicate_type = 1; break;
+                case 'z': predicate_type = 2; break;
+                default:
+                    throw EclException(
+                        "Boundary '" + bc.name + "' has unsupported predicate "
+                        "axis '" + std::string(1, bc.predicate_axis) + "'. "
+                        "Only 'x', 'y', and 'z' are supported.");
+            }
+            int count = sv_mesh_set_boundary_attribute(
+                config.mesh.get(), predicate_type,
+                bc.predicate_value, bc.predicate_tolerance,
+                bc.attribute);
+            if (count == 0) {
+                throw EclException(
+                    "Boundary '" + bc.name + "' predicate (" +
+                    std::string(1, bc.predicate_axis) + " = " +
+                    std::to_string(bc.predicate_value) +
+                    ") matched no boundary elements on the mesh. "
+                    "Check that the predicate value matches the domain geometry.");
+            }
+        }
+    }
+
     config.physics = extractPhysicsParams(sim_obj);
     config.dcpse = extractDCPSEParams(sim_obj);
     config.solver = extractSolverParams(sim_obj);
