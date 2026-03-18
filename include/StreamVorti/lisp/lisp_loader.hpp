@@ -89,14 +89,21 @@ struct BoundaryCondition {
 };
 
 /**
- * @struct DCPSEParams
- * @brief DCPSE discretization parameters from SDL
+ * @struct SpatialParams
+ * @brief Spatial discretization parameters from SDL
+ *
+ * Covers both DCPSE (meshless) and FDM (finite differences) methods.
+ * The method field determines which discretization is used.
  */
-struct DCPSEParams {
-    int num_neighbors = 25;     ///< Number of support domain neighbors
-    double cutoff_radius = 30;  ///< Cutoff radius multiplier
-    double support_radius = 5;  ///< Support radius multiplier
+struct SpatialParams {
+    std::string method = "dcpse"; ///< Spatial method: "dcpse" or "fdm"
+    int num_neighbors = 25;       ///< Number of support domain neighbors (DCPSE only)
+    double cutoff_radius = 30;    ///< Cutoff radius multiplier (DCPSE only)
+    double support_radius = 5;    ///< Support radius multiplier (DCPSE only)
 };
+
+// Backwards-compatible alias
+using DCPSEParams = SpatialParams;
 
 /**
  * @struct SolverParams

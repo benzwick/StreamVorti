@@ -341,6 +341,15 @@
 ;;; Spatial/discretization accessors
 ;;; ============================================================
 
+(defun get-spatial-type (obj)
+  "Get spatial discretization type string (e.g., 'dcpse', 'fdm')."
+  (typecase obj
+    (spatial-data
+     (if (spatial-type obj)
+         (string-downcase (symbol-name (spatial-type obj)))
+         "dcpse"))
+    (t nil)))
+
 (defun get-num-neighbors (obj)
   "Get number of neighbors from spatial config."
   (typecase obj
