@@ -346,6 +346,26 @@ void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& 
                             const std::string& dat_dir);
 
 /**
+ * @brief Print an ASCII sparsity pattern of a sparse matrix to an output stream.
+ *
+ * Maps non-zero entries onto a character canvas and prints it.
+ * Useful for quick visual inspection of matrix structure in the terminal.
+ *
+ * @param mat    The sparse matrix to visualize
+ * @param title  Label printed above the pattern
+ * @param width  Canvas width in characters (default 72)
+ * @param height Canvas height in lines (default 24)
+ * @param max_row Limit view to first max_row rows (0 = all)
+ * @param max_col Limit view to first max_col columns (0 = all)
+ * @param out    Output stream (default std::cout)
+ */
+void PrintSparsityPattern(const mfem::SparseMatrix& mat,
+                          const std::string& title = "Sparsity Pattern",
+                          int width = 72, int height = 24,
+                          int max_row = 0, int max_col = 0,
+                          std::ostream& out = std::cout);
+
+/**
  * @brief Identify boundary and interior nodes for lid-driven cavity
  *
  * Classifies mesh vertices into boundary segments (bottom, right, top, left)

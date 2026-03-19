@@ -428,6 +428,14 @@ int main(int argc, char *argv[])
 
     std::cout << "Setup: Retrieved derivative matrices successfully." << std::endl;
 
+    // Print ASCII sparsity patterns of derivative matrices
+    PrintSparsityPattern(dx_matrix,  "Dx  (d/dx) - Full View");
+    PrintSparsityPattern(dx_matrix,  "Dx  (d/dx) - Top-Left 10x10",
+                         72, 24, 10, 10);
+    PrintSparsityPattern(dxx_matrix, "Dxx (d²/dx²) - Full View");
+    PrintSparsityPattern(dxx_matrix, "Dxx (d²/dx²) - Top-Left 10x10",
+                         72, 24, 10, 10);
+
     // Identify boundary and interior nodes
     std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
     IdentifyBoundaryNodes(mesh, bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes);
@@ -1351,6 +1359,67 @@ StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int num_nei
               << timer.RealTime() << " s" << std::endl;
 
     return derivs;
+}
+
+void PrintSparsityPattern(const mfem::SparseMatrix& mat,
+                          const std::string& title,
+                          int width, int height,
+                          int max_row, int max_col,
+                          std::ostream& out) {
+    const int nrows = mat.Height();
+    const int ncols = mat.Width();
+    const int nnz   = mat.NumNonZeroElems();
+    const int view_rows = (max_row > 0 && max_row < nrows) ? max_row : nrows;
+    const int view_cols = (max_col > 0 && max_col < ncols) ? max_col : ncols;
+
+    // Canvas: row-major, height x width
+    std::vector<char> canvas(height * width, ' ');
+
+    // Map non-zero entries onto canvas
+    int plotted = 0;
+    for (int r = 0; r < view_rows; ++r) {
+        const int* cols_r = mat.GetRowColumns(r);
+        const int  row_nnz = mat.RowSize(r);
+        int cy = static_cast<int>(static_cast<double>(r) / view_rows * height);
+        if (cy >= height) cy = height - 1;
+        for (int k = 0; k < row_nnz; ++k) {
+            int c = cols_r[k];
+            if (c >= view_cols) continue;
+            int cx = static_cast<int>(static_cast<double>(c) / view_cols * width);
+            if (cx >= width) cx = width - 1;
+            canvas[cy * width + cx] = '.';
+            ++plotted;
+        }
+    }
+
+    // Print header
+    out << "\n" << title << "\n";
+    out << "Matrix: " << nrows << "x" << ncols << ", nnz=" << nnz;
+    if (max_row > 0 || max_col > 0)
+        out << " (showing " << view_rows << "x" << view_cols << ")";
+    out << "\n";
+
+    // Column axis
+    out << "     0";
+    for (int i = 6; i < width + 5; ++i) out << " ";
+    out << view_cols - 1 << "\n";
+
+    // Canvas rows
+    for (int row = 0; row < height; ++row) {
+        int matrix_row = static_cast<int>(
+            static_cast<double>(row) / height * view_rows);
+        out << std::setw(4) << matrix_row << " |";
+        for (int col = 0; col < width; ++col) {
+            out << canvas[row * width + col];
+        }
+        out << "|\n";
+    }
+
+    // Bottom border
+    out << std::setw(4) << (view_rows - 1) << " +";
+    for (int i = 0; i < width; ++i) out << "-";
+    out << "+\n";
+    out << "     Plotted " << plotted << "/" << nnz << " non-zeros in view\n\n";
 }
 
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
