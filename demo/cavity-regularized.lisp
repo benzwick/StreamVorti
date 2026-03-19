@@ -40,6 +40,11 @@
     :dt 0.001
     :end 10.0)
 
+  ;; Line probes for centerline comparison
+  (probes
+    (line vertical-center   (x 0.5))
+    (line horizontal-center (y 0.5)))
+
   (output :vtk
     :directory "results/regularized/"
     :every 0.1

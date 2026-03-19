@@ -39,6 +39,11 @@
     :end 30.0
     :tolerance 1e-6)
 
+  ;; Line probes for Ghia validation
+  (probes
+    (line vertical-center   (x 0.5))
+    (line horizontal-center (y 0.5)))
+
   (output :vtk
     :directory "results/cavity-re1000/"
     :every 1.0
