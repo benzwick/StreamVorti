@@ -337,8 +337,8 @@ TEST_F(FiniteDiff2dOrder4Test, LaplacianBetterThan2ndOrder) {
         }
     }
 
-    // 4th-order on 20x20 should be significantly more accurate than 2nd-order on 10x10
-    EXPECT_LT(max_err_o4, 0.01) << "4th-order Laplacian error too large on 20x20 grid";
+    // 4th-order on 20x20 should be significantly more accurate than 2nd-order
+    EXPECT_LT(max_err_o4, 1e-3) << "4th-order Laplacian error too large on 20x20 grid";
 }
 
 // =====================================================================
