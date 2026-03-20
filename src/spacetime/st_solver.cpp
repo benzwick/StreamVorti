@@ -474,8 +474,8 @@ void STNavierStokesSolver::SolveTimeSlab(double t_start, double t_end,
     if (config_.spatial_dim == 2 && vorticity_gf_)
     {
         // ω = ∂v/∂x - ∂u/∂y
-        // Use MFEM's CurlGridFunctionCoefficient or manual computation
-        velocity_gf_->ComputeCurl2D(*vorticity_gf_);
+        mfem::CurlGridFunctionCoefficient curl_coeff(velocity_gf_);
+        vorticity_gf_->ProjectCoefficient(curl_coeff);
     }
 
     // 7. Update initial condition for next slab
