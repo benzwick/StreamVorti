@@ -216,7 +216,7 @@ void STDiffusionIntegrator::AssembleElementMatrix(
 // STPressureGradientIntegrator
 // =========================================================================
 
-void STPressureGradientIntegrator::AssembleElementMatrix(
+void STPressureGradientIntegrator::AssembleElementMatrix2(
     const mfem::FiniteElement &trial_el,  // pressure
     const mfem::FiniteElement &test_el,   // velocity
     mfem::ElementTransformation &Trans,
@@ -267,7 +267,7 @@ void STPressureGradientIntegrator::AssembleElementMatrix(
 // STDivergenceIntegrator
 // =========================================================================
 
-void STDivergenceIntegrator::AssembleElementMatrix(
+void STDivergenceIntegrator::AssembleElementMatrix2(
     const mfem::FiniteElement &trial_el,  // velocity
     const mfem::FiniteElement &test_el,   // pressure
     mfem::ElementTransformation &Trans,
@@ -411,7 +411,7 @@ void STSUPGIntegrator::AssembleElementMatrix(
 // STPSPGIntegrator
 // =========================================================================
 
-void STPSPGIntegrator::AssembleElementMatrix(
+void STPSPGIntegrator::AssembleElementMatrix2(
     const mfem::FiniteElement &trial_el,  // velocity
     const mfem::FiniteElement &test_el,   // pressure
     mfem::ElementTransformation &Trans,

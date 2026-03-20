@@ -120,10 +120,10 @@ class STPressureGradientIntegrator : public mfem::BilinearFormIntegrator
 public:
     STPressureGradientIntegrator() {}
 
-    void AssembleElementMatrix(const mfem::FiniteElement &trial_el,
-                               const mfem::FiniteElement &test_el,
-                               mfem::ElementTransformation &Trans,
-                               mfem::DenseMatrix &elmat) override;
+    void AssembleElementMatrix2(const mfem::FiniteElement &trial_el,
+                                const mfem::FiniteElement &test_el,
+                                mfem::ElementTransformation &Trans,
+                                mfem::DenseMatrix &elmat) override;
     // Single-element version (not used for mixed)
     void AssembleElementMatrix(const mfem::FiniteElement &el,
                                mfem::ElementTransformation &Trans,
@@ -138,10 +138,10 @@ class STDivergenceIntegrator : public mfem::BilinearFormIntegrator
 public:
     STDivergenceIntegrator() {}
 
-    void AssembleElementMatrix(const mfem::FiniteElement &trial_el,
-                               const mfem::FiniteElement &test_el,
-                               mfem::ElementTransformation &Trans,
-                               mfem::DenseMatrix &elmat) override;
+    void AssembleElementMatrix2(const mfem::FiniteElement &trial_el,
+                                const mfem::FiniteElement &test_el,
+                                mfem::ElementTransformation &Trans,
+                                mfem::DenseMatrix &elmat) override;
 
     void AssembleElementMatrix(const mfem::FiniteElement &el,
                                mfem::ElementTransformation &Trans,
@@ -186,10 +186,10 @@ public:
                      const StabilizationParams &params)
         : velocity_coeff_(velocity), rho_(rho), mu_(mu), params_(params) {}
 
-    void AssembleElementMatrix(const mfem::FiniteElement &trial_el,
-                               const mfem::FiniteElement &test_el,
-                               mfem::ElementTransformation &Trans,
-                               mfem::DenseMatrix &elmat) override;
+    void AssembleElementMatrix2(const mfem::FiniteElement &trial_el,
+                                const mfem::FiniteElement &test_el,
+                                mfem::ElementTransformation &Trans,
+                                mfem::DenseMatrix &elmat) override;
 
     void AssembleElementMatrix(const mfem::FiniteElement &el,
                                mfem::ElementTransformation &Trans,
