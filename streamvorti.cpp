@@ -701,7 +701,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    // STEP 2: Dirichlet rows — replace with identity (ψ_i = ψ_bc_i)
+    // STEP 2: Dirichlet rows — replace with identity (ψ_i = ψ_bc_i).
+    // Row-only elimination (no column elimination) because DCPSE matrices
+    // have non-symmetric sparsity and SparseMatrix::EliminateRowsCols
+    // assumes symmetric sparsity. The parallel solver uses OperatorHandle
+    // with HypreParMatrix::EliminateRowsCols, which handles non-symmetric
+    // matrices correctly.
     for (int idx : dirichlet_psi_nodes) {
         laplacian_matrix->EliminateRow(idx);
         laplacian_matrix->Set(idx, idx, 1.0);

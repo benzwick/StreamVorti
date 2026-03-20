@@ -167,6 +167,13 @@ nodes (where two boundary attributes share a vertex). The RHS is set
 in the same order: Neumann nodes to 0 first, then Dirichlet nodes to
 ψ_prescribed.
 
+The serial solver uses row-only elimination (no column elimination)
+because DCPSE matrices have non-symmetric sparsity and
+`SparseMatrix::EliminateRowsCols` assumes symmetric sparsity. The
+parallel solver uses `OperatorHandle::EliminateRowsCols` with
+`HypreParMatrix`, which handles non-symmetric matrices correctly
+(see [Parallel Implementation Notes](#parallel-implementation-notes) below).
+
 ### Corner Node Handling
 
 MFEM assigns boundary attributes to boundary *elements* (edges in 2D),
