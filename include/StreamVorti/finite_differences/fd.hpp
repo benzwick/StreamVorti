@@ -90,17 +90,6 @@ public:
 
     inline int StencilOrder() const { return stencil_order_; }
 
-protected:
-    /*!
-     * \brief Extract node coordinates from the GridFunction's FE space.
-     *
-     * Uses the GridFunction nodal values (not mesh vertices) so that
-     * higher-order mesh representations are handled correctly.
-     *
-     * \param[out] coords Vector of coordinate vectors [x_coords, y_coords, ...]
-     */
-    void ExtractNodeCoordinates(std::vector<std::vector<double>> &coords) const;
-
     /*!
      * \brief Find unique sorted coordinate values along one axis.
      *
@@ -140,6 +129,17 @@ protected:
     static int CoordinateToIndex(double value,
                                  const std::vector<double> &unique,
                                  double tol);
+
+protected:
+    /*!
+     * \brief Extract node coordinates from the GridFunction's FE space.
+     *
+     * Uses the GridFunction nodal values (not mesh vertices) so that
+     * higher-order mesh representations are handled correctly.
+     *
+     * \param[out] coords Vector of coordinate vectors [x_coords, y_coords, ...]
+     */
+    void ExtractNodeCoordinates(std::vector<std::vector<double>> &coords) const;
 
     mfem::GridFunction *gf_;
     int nnodes_;
