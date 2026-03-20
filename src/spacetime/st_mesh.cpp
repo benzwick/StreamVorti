@@ -85,22 +85,25 @@ void SpaceTimeMesh::BuildSimplexMesh(double t_start, double t_end,
     // Each spatial triangle is extruded into a prism, then split into
     // 3 tetrahedra using Bey's algorithm (consistent diagonal choice).
     //
-    // For a 3D spatial mesh, tetrahedra are extruded into pentahedra,
-    // then split into pentatopes (4-simplices). However, MFEM only
-    // supports up to 3D meshes, so for 3D+t we use a different approach
-    // (multiple 3D spatial solves with DG coupling in time).
+    // For a 3D spatial mesh, a true 4D space-time mesh would require
+    // pentatopes (4-simplices) or tesseracts (4-cubes). However, MFEM's
+    // element geometry types are limited to topological dimension <= 3
+    // (Geometry::MaxDim = 3), so 4D elements cannot be represented.
+    // Instead, 3D+t problems use semi-discrete DG time-stepping: the
+    // spatial mesh is returned as-is and the solver handles time
+    // externally via discontinuous Galerkin coupling between slabs.
 
     const int st_dim = spatial_dim_ + 1;
 
     if (st_dim > 3)
     {
-        // MFEM supports up to 3D. For 3D+t, we handle time-stepping
-        // externally and only build 3D spatial meshes.
-        std::cerr << "Warning: MFEM supports up to 3D meshes. "
-                  << "For 3D spatial problems, time will be handled "
-                  << "via semi-discrete DG coupling between time slabs."
-                  << std::endl;
-        // Just copy the spatial mesh
+        // MFEM's Geometry::MaxDim = 3, so no 4D element types exist.
+        // Fall back to semi-discrete DG: return spatial mesh as-is,
+        // time-stepping handled externally by the solver.
+        std::cerr << "Warning: MFEM element types limited to dim <= 3 "
+                  << "(Geometry::MaxDim = 3). Cannot build 4D space-time "
+                  << "mesh. Using semi-discrete DG time-stepping for "
+                  << "3D spatial problems." << std::endl;
         st_mesh_ = new mfem::Mesh(spatial_mesh_, true);
         return;
     }
@@ -298,10 +301,10 @@ void SpaceTimeMesh::BuildTensorProductMesh(double t_start, double t_end,
 
     if (st_dim > 3)
     {
-        std::cerr << "Warning: MFEM supports up to 3D meshes. "
-                  << "For 3D spatial problems with tensor-product elements, "
-                  << "time will be handled via DG coupling between time slabs."
-                  << std::endl;
+        std::cerr << "Warning: MFEM element types limited to dim <= 3 "
+                  << "(Geometry::MaxDim = 3). Cannot build 4D space-time "
+                  << "mesh. Using semi-discrete DG time-stepping for "
+                  << "3D spatial problems." << std::endl;
         st_mesh_ = new mfem::Mesh(spatial_mesh_, true);
         return;
     }

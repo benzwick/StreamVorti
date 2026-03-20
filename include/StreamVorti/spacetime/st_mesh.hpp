@@ -7,10 +7,28 @@
  * Constructs (d+1)-dimensional space-time slab meshes by extruding
  * a d-dimensional spatial mesh in the time direction.
  *
- * For 2D spatial problems: triangles -> tetrahedra or quads -> hexahedra
- * For 3D spatial problems: tetrahedra -> pentatopes or hexahedra -> tesseracts
+ * For 2D spatial problems (d=2): the spatial mesh is extruded into a
+ * true 3D space-time mesh. Triangles are split into tetrahedra using
+ * Bey's consistent prism subdivision; quads are extruded into hexahedra
+ * or wedges.
+ *
+ * For 3D spatial problems (d=3): a true 4D space-time mesh would require
+ * pentatopes (4-simplices) or tesseracts (4-cubes), but MFEM's element
+ * geometry types are limited to topological dimension <= 3
+ * (Geometry::MaxDim = 3). Therefore, 3D+t problems fall back to
+ * semi-discrete DG time-stepping: the solver marches through time slabs
+ * using the 3D spatial mesh directly, with discontinuous Galerkin
+ * coupling between slabs. This is equivalent to DSD/SST with a single
+ * time layer per slab.
+ *
+ * Note: MFEM's spaceDim (embedding dimension) is an unrestricted integer,
+ * so node coordinates can have arbitrarily many components. The limitation
+ * is in the supported element types (segments, triangles, quads, tets,
+ * hexes, wedges, pyramids), which are all topological dimension <= 3.
  *
  * References:
+ *   Behr (2008). "Simplex space-time meshes in finite element
+ *   simulations." IJNMF.
  *   Karyofylli, Frings, Elgeti, Behr (2018). "Simplex space-time meshes
  *   in two-phase flow simulations."
  */
@@ -24,18 +42,18 @@
 namespace StreamVorti {
 namespace SpaceTime {
 
-/// Constructs a space-time slab mesh from a spatial mesh
+/// Constructs a space-time slab mesh from a spatial mesh.
 ///
 /// Given a d-dimensional spatial mesh and a time interval [t_n, t_{n+1}],
 /// creates a (d+1)-dimensional mesh where the extra dimension is time.
 ///
-/// For simplex elements:
-///   - 2D: triangles are split into tetrahedra
-///   - 3D: tetrahedra are split into pentatopes (4-simplices)
+/// For d=2: constructs a true 3D space-time mesh.
+///   - Simplex: triangles -> tetrahedra (3 per prism, Bey's subdivision)
+///   - Tensor-product: quads -> hexahedra, triangles -> wedges
 ///
-/// For tensor-product elements:
-///   - 2D: quads are extruded into hexahedra
-///   - 3D: hexahedra are extruded into 4D hexahedra
+/// For d=3: MFEM does not support 4D element types (Geometry::MaxDim = 3),
+/// so the spatial mesh is returned as-is and time-stepping is handled
+/// externally via semi-discrete DG coupling between time slabs.
 class SpaceTimeMesh
 {
 public:
