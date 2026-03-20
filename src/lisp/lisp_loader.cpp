@@ -359,6 +359,12 @@ DCPSEParams Loader::extractDCPSEParams(EclObject sim_obj)
         return params;
     }
 
+    // Extract spatial method type (e.g., "dcpse", "fdm", "fem")
+    std::string spatial_type = getStringProperty(dcpse_spec, "spatial-type", "dcpse");
+    std::transform(spatial_type.begin(), spatial_type.end(), spatial_type.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    params.method = spatial_type;
+
     params.num_neighbors = getIntProperty(dcpse_spec, "num-neighbors", 25);
     params.cutoff_radius = getDoubleProperty(dcpse_spec, "cutoff-radius", 30.0);
     params.support_radius = getDoubleProperty(dcpse_spec, "support-radius", 5.0);

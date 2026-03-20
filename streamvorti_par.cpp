@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  * Copyright (C) 2026 Weizheng (Will) Li
  *
  * This program is free software: you can redistribute it and/or modify
@@ -236,6 +236,7 @@ int main(int argc, char *argv[])
     const char *sdl_file = "";  // SDL file for Lisp-based configuration
     const char *lisp_path = ""; // Path to SDL Lisp source files
     int order = 1;
+    const char *method = "dcpse"; // Spatial discretization method: "dcpse" or "fdm"
 
     // Output filename prefix and extension
     std::string fname = "mfem_square10x10";
@@ -293,6 +294,8 @@ int main(int argc, char *argv[])
                    "Mesh size in y direction.");
     args.AddOption(&sz, "-sz", "--size-z",
                    "Mesh size in z direction.");
+    args.AddOption(&method, "-method", "--spatial-method",
+                   "Spatial discretization method: dcpse (default: dcpse). FDM not yet supported in parallel.");
     args.AddOption(&params.num_neighbors, "-nn", "--num-neighbors",
                     "Number of neighbors for DCPSE (default: 25).");
     args.AddOption(&params.reynolds_number, "-Re", "--reynolds-number",
@@ -352,6 +355,9 @@ int main(int argc, char *argv[])
         }
         return 1;
     }
+
+    std::string spatial_method(method);
+
     if (myid == 0) {
         args.PrintOptions(std::cout);
     }
@@ -591,23 +597,42 @@ int main(int argc, char *argv[])
     // ================== Timing PHASE 1: DERIVATIVE COMPUTATION ==================
     mfem::StopWatch deriv_timer;
     deriv_timer.Start();
-    // Initialise parallel DCPSE derivatives
-    StreamVorti::ParDcpse2d* derivs = InitialiseParDCPSE(gf, dim, params.num_neighbors);
+
+    // Validate spatial method
+    if (spatial_method != "dcpse" && spatial_method != "fdm") {
+        if (myid == 0) {
+            std::cerr << "Error: Unknown spatial method: '" << spatial_method
+                      << "'. Supported methods: dcpse, fdm." << std::endl;
+        }
+        MPI_Finalize();
+        return EXIT_FAILURE;
+    }
+
+    if (myid == 0)
+        std::cout << "Phase 1 - Spatial method: " << spatial_method << std::endl;
+
+    StreamVorti::ParDerivativeOperator* deriv_op = nullptr;
+
+    if (spatial_method == "fdm") {
+        auto* fd = new StreamVorti::ParFiniteDiff2d(gf);
+        fd->Update();
+        deriv_op = fd;
+    } else {
+        deriv_op = InitialiseParDCPSE(gf, dim, params.num_neighbors);
+    }
 
     deriv_timer.Stop();
     perf_metrics.derivative_time = deriv_timer.RealTime();
 
     std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
-    // save derivs matrices
-    // TODO: SaveDerivativeMatrices not yet implemented for ParDcpse2d (HypreParMatrix output)
-    // SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
-
-    // Save neighbors if requested
+    // Save neighbors if requested (DCPSE only — FD has no neighbor concept)
     if (save_neighbors) {
-        std::cout << "main: Save neighbor indices to file... " << std::endl;
-        derivs->SaveNeighsToFile(derivs->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
-        std::cout << "done." << std::endl;
+        if (auto* dcpse = dynamic_cast<StreamVorti::ParDcpse2d*>(deriv_op)) {
+            std::cout << "main: Save neighbor indices to file... " << std::endl;
+            dcpse->SaveNeighsToFile(dcpse->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
+            std::cout << "done." << std::endl;
+        }
     }
 
 
@@ -617,13 +642,13 @@ int main(int argc, char *argv[])
 
     const int num_nodes = fes.GetTrueVSize();
 
-    // Get parallel DCPSE derivative matrices (HypreParMatrix)
-    const mfem::HypreParMatrix& dx_matrix = derivs->ShapeFunctionDx();
-    const mfem::HypreParMatrix& dy_matrix = derivs->ShapeFunctionDy();
-    const mfem::HypreParMatrix& dxx_matrix = derivs->ShapeFunctionDxx();
-    const mfem::HypreParMatrix& dyy_matrix = derivs->ShapeFunctionDyy();
+    // Get derivative matrices via the common interface
+    const mfem::HypreParMatrix& dx_matrix  = deriv_op->Dx();
+    const mfem::HypreParMatrix& dy_matrix  = deriv_op->Dy();
+    const mfem::HypreParMatrix& dxx_matrix = deriv_op->Dxx();
+    const mfem::HypreParMatrix& dyy_matrix = deriv_op->Dyy();
 
-    std::cout << "Setup: Retrieved parallel DCPSE derivative matrices successfully." << std::endl;
+    std::cout << "Setup: Retrieved derivative matrices successfully." << std::endl;
 
     // Identify boundary and interior nodes
     // Use the parallel-specific version which correctly handles DOF ownership.
@@ -1462,7 +1487,7 @@ int main(int argc, char *argv[])
     }
 
     // Clean up all Hypre/MPI objects before MPI_Finalize (Hypre requires this)
-    delete derivs;
+    delete deriv_op;
     delete laplacian_matrix;
     delete linear_solver;
     delete mesh;

@@ -1,7 +1,6 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
- * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2026 Benjamin F. Zwick
+ * Copyright (C) 2026 Benjamin F. Zwick
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,27 +21,45 @@
  *      Benjamin F. ZWICK
  */
 
-#ifndef STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
-#define STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
+#ifndef STREAMVORTI_FINITE_DIFFERENCES_FD_2D_HPP_
+#define STREAMVORTI_FINITE_DIFFERENCES_FD_2D_HPP_
 
-#include "StreamVorti/approximants/dcpse.hpp"
+#include "StreamVorti/finite_differences/fd.hpp"
 
 #include "mfem.hpp"
 
 namespace StreamVorti {
 
 /*!
- * \class Dcpse2d
- * \brief DC PSE derivatives in 2D.
+ * \class FiniteDiff2d
+ * \brief Finite difference derivatives on 2D structured grids.
+ *
+ * Builds sparse derivative matrices for a 2D Cartesian grid.
+ *
+ * Supported stencil orders (set via constructor):
+ *
+ * Order 2 (default):
+ *   1st deriv interior: central 3-point     (-1, 0, 1) / 2h
+ *   1st deriv boundary: one-sided 3-point   (-3, 4, -1) / 2h
+ *   2nd deriv interior: central 3-point     (1, -2, 1) / h²
+ *   2nd deriv boundary: one-sided 4-point   (2, -5, 4, -1) / h²
+ *
+ * Order 4:
+ *   1st deriv interior: central 5-point     (1, -8, 0, 8, -1) / 12h
+ *   1st deriv boundary: one-sided 5-point   (-25, 48, -36, 16, -3) / 12h
+ *   2nd deriv interior: central 5-point     (-1, 16, -30, 16, -1) / 12h²
+ *   2nd deriv boundary: one-sided 6-point   (45, -154, 214, -156, 61, -10) / 12h²
  */
-class Dcpse2d: public Dcpse
+class FiniteDiff2d: public FiniteDiff
 {
 public:
     /*!
-     * \brief Dcpse2d constructor to match nodes of an MFEM H1 GridFunction.
+     * \brief Construct 2D FD operator.
+     * \param gf GridFunction on an H1 FE space over a structured mesh.
+     * \param stencil_order Accuracy order: 2 or 4 (default 2).
      */
-    Dcpse2d(mfem::GridFunction &gf, int NumNeighbors)
-        : Dcpse(gf, NumNeighbors) {}
+    FiniteDiff2d(mfem::GridFunction &gf, int stencil_order = 2)
+        : FiniteDiff(gf, stencil_order) {}
 
     void Update();
 
@@ -68,13 +85,13 @@ public:
     const mfem::SparseMatrix & Dxy() const override { return this->sh_func_dxy_; }
 
 private:
-    mfem::SparseMatrix sh_func_dx_; /*!< The shape function 1st x derivative matrix. */
-    mfem::SparseMatrix sh_func_dy_; /*!< The shape function 1st y derivative matrix. */
-    mfem::SparseMatrix sh_func_dxx_; /*!< The shape function 2nd xx derivative matrix. */
-    mfem::SparseMatrix sh_func_dyy_; /*!< The shape function 2nd yy derivative matrix. */
-    mfem::SparseMatrix sh_func_dxy_; /*!< The shape function 2nd xy derivative matrix. */
+    mfem::SparseMatrix sh_func_dx_;  /*!< 1st x derivative matrix */
+    mfem::SparseMatrix sh_func_dy_;  /*!< 1st y derivative matrix */
+    mfem::SparseMatrix sh_func_dxx_; /*!< 2nd xx derivative matrix */
+    mfem::SparseMatrix sh_func_dyy_; /*!< 2nd yy derivative matrix */
+    mfem::SparseMatrix sh_func_dxy_; /*!< 2nd xy derivative matrix */
 };
 
 } // namespace StreamVorti
 
-#endif // STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
+#endif // STREAMVORTI_FINITE_DIFFERENCES_FD_2D_HPP_

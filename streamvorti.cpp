@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  * Copyright (C) 2025 Weizheng Li
  *
  * This program is free software: you can redistribute it and/or modify
@@ -98,6 +98,7 @@ int main(int argc, char *argv[])
     const char *sdl_file = "";  // SDL file for Lisp-based configuration
     const char *lisp_path = ""; // Path to SDL Lisp source files
     int order = 1;
+    const char *method = "dcpse"; // Spatial discretization method: "dcpse" or "fdm"
 
     // Output filename prefix and extension
     std::string fname = "mfem_square10x10";
@@ -154,6 +155,8 @@ int main(int argc, char *argv[])
                    "Mesh size in y direction.");
     args.AddOption(&sz, "-sz", "--size-z",
                    "Mesh size in z direction.");
+    args.AddOption(&method, "-method", "--spatial-method",
+                   "Spatial discretization method: dcpse or fdm (default: dcpse).");
     args.AddOption(&params.num_neighbors, "-nn", "--num-neighbors",
                     "Number of neighbors for DCPSE (default: 25).");
     args.AddOption(&params.reynolds_number, "-Re", "--reynolds-number",
@@ -273,6 +276,11 @@ int main(int argc, char *argv[])
                 }
             }
 
+            // Map spatial method from SDL
+            if (!config.dcpse.method.empty()) {
+                method = config.dcpse.method == "fdm" ? "fdm" : "dcpse";
+            }
+
             // Map SDL config to SimulationParams
             params.num_neighbors = config.dcpse.num_neighbors;
             params.reynolds_number = static_cast<int>(config.physics.reynolds);
@@ -297,6 +305,7 @@ int main(int argc, char *argv[])
             std::cout << "  Reynolds number: " << params.reynolds_number << std::endl;
             std::cout << "  Timestep: " << params.dt << std::endl;
             std::cout << "  Final time: " << params.final_time << std::endl;
+            std::cout << "  Spatial method: " << method << std::endl;
             std::cout << "  DCPSE neighbors: " << params.num_neighbors << std::endl;
             std::cout << "  Solver tolerance: " << params.solver_rel_tol << std::endl;
             std::cout << "  ParaView output frequency: " << params.paraview_output_frequency << std::endl;
@@ -353,22 +362,51 @@ int main(int argc, char *argv[])
     // ================== Timing PHASE 1: DERIVATIVE COMPUTATION ==================
     mfem::StopWatch deriv_timer;
     deriv_timer.Start();
-    // Initialise DCPSE derivatives
-    StreamVorti::Dcpse* derivs = InitialiseDCPSE(gf, dim, params.num_neighbors);
+
+    // Validate and determine spatial method
+    std::string spatial_method(method);
+    if (spatial_method != "dcpse" && spatial_method != "fdm") {
+        MFEM_ABORT("Unknown spatial method: '" << spatial_method
+                   << "'. Supported methods: dcpse, fdm.");
+    }
+    std::cout << "Phase 1 - Spatial method: " << spatial_method << std::endl;
+
+    StreamVorti::DerivativeOperator* deriv_op = nullptr;
+
+    if (spatial_method == "fdm") {
+        StreamVorti::FiniteDiff* fd = nullptr;
+        if (dim == 2) {
+            fd = new StreamVorti::FiniteDiff2d(gf);
+        } else if (dim == 3) {
+            fd = new StreamVorti::FiniteDiff3d(gf);
+        } else {
+            MFEM_ABORT("Unsupported dimension for FDM: " << dim);
+        }
+        fd->Update();
+        deriv_op = fd;
+    } else {
+        deriv_op = InitialiseDCPSE(gf, dim, params.num_neighbors);
+    }
 
     deriv_timer.Stop();
     perf_metrics.derivative_time = deriv_timer.RealTime();
 
     std::cout << "Phase 1 - Derivatives computation: " << perf_metrics.derivative_time << " s" << std::endl;
 
-    // save derivs matrices
-    SaveDerivativeMatrices(derivs, params, dim, save_d, save_dd, dat_dir);
+    // Save derivative matrices if requested
+    if (save_d || save_dd) {
+        if (auto* dcpse = dynamic_cast<StreamVorti::Dcpse*>(deriv_op)) {
+            SaveDerivativeMatrices(dcpse, params, dim, save_d, save_dd, dat_dir);
+        }
+    }
 
-    // Save neighbors if requested
+    // Save neighbors if requested (DCPSE only — FD has no neighbor concept)
     if (save_neighbors) {
-        std::cout << "main: Save neighbor indices to file... " << std::endl;
-        derivs->SaveNeighsToFile(derivs->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
-        std::cout << "done." << std::endl;
+        if (auto* dcpse = dynamic_cast<StreamVorti::Dcpse*>(deriv_op)) {
+            std::cout << "main: Save neighbor indices to file... " << std::endl;
+            dcpse->SaveNeighsToFile(dcpse->NeighborIndices(), dat_dir + "/" + params.output_prefix + ".neighbors" + params.output_extension);
+            std::cout << "done." << std::endl;
+        }
     }
 
 
@@ -378,19 +416,25 @@ int main(int argc, char *argv[])
 
     const int num_nodes = mesh->GetNV();
 
-    // Ensure we have a 2D DCPSE object first
-    StreamVorti::Dcpse2d* dcpse2d = dynamic_cast<StreamVorti::Dcpse2d*>(derivs);
-    if (!dcpse2d) {
+    if (dim != 2) {
         MFEM_ABORT("Setup: Only 2D simulations are currently supported.");
     }
 
-    // Get DCPSE derivative matrices
-    const mfem::SparseMatrix& dx_matrix = dcpse2d->ShapeFunctionDx();
-    const mfem::SparseMatrix& dy_matrix = dcpse2d->ShapeFunctionDy();
-    const mfem::SparseMatrix& dxx_matrix = dcpse2d->ShapeFunctionDxx();
-    const mfem::SparseMatrix& dyy_matrix = dcpse2d->ShapeFunctionDyy();
+    // Get derivative matrices via the common interface
+    const mfem::SparseMatrix& dx_matrix  = deriv_op->Dx();
+    const mfem::SparseMatrix& dy_matrix  = deriv_op->Dy();
+    const mfem::SparseMatrix& dxx_matrix = deriv_op->Dxx();
+    const mfem::SparseMatrix& dyy_matrix = deriv_op->Dyy();
 
-    std::cout << "Setup: Retrieved DCPSE derivative matrices successfully." << std::endl;
+    std::cout << "Setup: Retrieved derivative matrices successfully." << std::endl;
+
+    // Print ASCII sparsity patterns of derivative matrices
+    PrintSparsityPattern(dx_matrix,  "Dx  (d/dx) - Full View");
+    PrintSparsityPattern(dx_matrix,  "Dx  (d/dx) - Top-Left 10x10",
+                         72, 24, 10, 10);
+    PrintSparsityPattern(dxx_matrix, "Dxx (d²/dx²) - Full View");
+    PrintSparsityPattern(dxx_matrix, "Dxx (d²/dx²) - Top-Left 10x10",
+                         72, 24, 10, 10);
 
     // Identify boundary and interior nodes
     std::vector<int> bottom_nodes, right_nodes, top_nodes, left_nodes, interior_nodes;
@@ -1248,7 +1292,7 @@ int main(int argc, char *argv[])
     std::cout << "  - Minimum streamfunction: " << streamfunction.Min() << std::endl;
 
     // Cleanup
-    delete derivs;
+    delete deriv_op;
     delete mesh;
     delete solver_package;  // delete both solver and preconditioner
     delete laplacian_matrix;
@@ -1315,6 +1359,67 @@ StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int num_nei
               << timer.RealTime() << " s" << std::endl;
 
     return derivs;
+}
+
+void PrintSparsityPattern(const mfem::SparseMatrix& mat,
+                          const std::string& title,
+                          int width, int height,
+                          int max_row, int max_col,
+                          std::ostream& out) {
+    const int nrows = mat.Height();
+    const int ncols = mat.Width();
+    const int nnz   = mat.NumNonZeroElems();
+    const int view_rows = (max_row > 0 && max_row < nrows) ? max_row : nrows;
+    const int view_cols = (max_col > 0 && max_col < ncols) ? max_col : ncols;
+
+    // Canvas: row-major, height x width
+    std::vector<char> canvas(height * width, ' ');
+
+    // Map non-zero entries onto canvas
+    int plotted = 0;
+    for (int r = 0; r < view_rows; ++r) {
+        const int* cols_r = mat.GetRowColumns(r);
+        const int  row_nnz = mat.RowSize(r);
+        int cy = static_cast<int>(static_cast<double>(r) / view_rows * height);
+        if (cy >= height) cy = height - 1;
+        for (int k = 0; k < row_nnz; ++k) {
+            int c = cols_r[k];
+            if (c >= view_cols) continue;
+            int cx = static_cast<int>(static_cast<double>(c) / view_cols * width);
+            if (cx >= width) cx = width - 1;
+            canvas[cy * width + cx] = '.';
+            ++plotted;
+        }
+    }
+
+    // Print header
+    out << "\n" << title << "\n";
+    out << "Matrix: " << nrows << "x" << ncols << ", nnz=" << nnz;
+    if (max_row > 0 || max_col > 0)
+        out << " (showing " << view_rows << "x" << view_cols << ")";
+    out << "\n";
+
+    // Column axis
+    out << "     0";
+    for (int i = 6; i < width + 5; ++i) out << " ";
+    out << view_cols - 1 << "\n";
+
+    // Canvas rows
+    for (int row = 0; row < height; ++row) {
+        int matrix_row = static_cast<int>(
+            static_cast<double>(row) / height * view_rows);
+        out << std::setw(4) << matrix_row << " |";
+        for (int col = 0; col < width; ++col) {
+            out << canvas[row * width + col];
+        }
+        out << "|\n";
+    }
+
+    // Bottom border
+    out << std::setw(4) << (view_rows - 1) << " +";
+    for (int i = 0; i < width; ++i) out << "-";
+    out << "+\n";
+    out << "     Plotted " << plotted << "/" << nnz << " non-zeros in view\n\n";
 }
 
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,

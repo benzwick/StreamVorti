@@ -37,6 +37,11 @@
     :dt 0.001
     :end 15.0)
 
+  ;; Line probes for symmetry validation
+  (probes
+    (line vertical-center   (x 0.5))
+    (line horizontal-center (y 0.5)))
+
   (output :vtk
     :directory "results/double-lid/"
     :every 0.5

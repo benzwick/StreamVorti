@@ -8,6 +8,7 @@ include(GoogleTest)
 # Test sources
 set(TEST_SOURCES
     test_main.cpp
+    test_finite_differences.cpp
 )
 
 # Add Lisp integration tests if ECL is enabled

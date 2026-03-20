@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  * Copyright (C) 2025 Weizheng Li
  *
  * This program is free software: you can redistribute it and/or modify
@@ -43,6 +43,9 @@
 #include "StreamVorti/approximants/dcpse.hpp"
 #include "StreamVorti/approximants/dcpse_2d.hpp"
 #include "StreamVorti/approximants/dcpse_3d.hpp"
+#include "StreamVorti/finite_differences/fd.hpp"
+#include "StreamVorti/finite_differences/fd_2d.hpp"
+#include "StreamVorti/finite_differences/fd_3d.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 
 // Standard library includes for struct definitions
@@ -341,6 +344,26 @@ StreamVorti::Dcpse* InitialiseDCPSE(mfem::GridFunction& gf, int dim, int num_nei
 void SaveDerivativeMatrices(StreamVorti::Dcpse* derivs, const SimulationParams& params,
                             int dim, bool save_d, bool save_dd,
                             const std::string& dat_dir);
+
+/**
+ * @brief Print an ASCII sparsity pattern of a sparse matrix to an output stream.
+ *
+ * Maps non-zero entries onto a character canvas and prints it.
+ * Useful for quick visual inspection of matrix structure in the terminal.
+ *
+ * @param mat    The sparse matrix to visualize
+ * @param title  Label printed above the pattern
+ * @param width  Canvas width in characters (default 72)
+ * @param height Canvas height in lines (default 24)
+ * @param max_row Limit view to first max_row rows (0 = all)
+ * @param max_col Limit view to first max_col columns (0 = all)
+ * @param out    Output stream (default std::cout)
+ */
+void PrintSparsityPattern(const mfem::SparseMatrix& mat,
+                          const std::string& title = "Sparsity Pattern",
+                          int width = 72, int height = 24,
+                          int max_row = 0, int max_col = 0,
+                          std::ostream& out = std::cout);
 
 /**
  * @brief Identify boundary and interior nodes for lid-driven cavity

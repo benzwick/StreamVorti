@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  * Copyright (C) 2026 Weizheng (Will) Li
  *
  * This program is free software: you can redistribute it and/or modify
@@ -27,6 +27,7 @@
 #ifndef STREAMVORTI_APPROXIMANTS_PAR_DCPSE_HPP_
 #define STREAMVORTI_APPROXIMANTS_PAR_DCPSE_HPP_
 
+#include "StreamVorti/derivative_operator.hpp"
 #include "StreamVorti/support_domain/par_support_domain.hpp"
 
 #ifdef MFEM_USE_MPI
@@ -56,7 +57,7 @@ namespace StreamVorti {
  *     ParGridFunction dudx_dcpse(par_fespace);
  *     dx.Mult(u_gf, dudx_dcpse);
  */
-class ParDcpse : public ParSupportDomain
+class ParDcpse : public ParSupportDomain, public ParDerivativeOperator
 {
 public:
     /*!

@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  * Copyright (C) 2025 Weizheng Li
  *
  * This program is free software: you can redistribute it and/or modify
@@ -42,6 +42,8 @@
 
 #include "StreamVorti/approximants/par_dcpse.hpp"
 #include "StreamVorti/approximants/par_dcpse_2d.hpp"
+#include "StreamVorti/finite_differences/par_fd.hpp"
+#include "StreamVorti/finite_differences/par_fd_2d.hpp"
 #include "StreamVorti/support_domain/par_support_domain.hpp"
 
 /**

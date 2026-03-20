@@ -1,7 +1,6 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
- * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2026 Benjamin F. Zwick
+ * Copyright (C) 2026 Benjamin F. Zwick
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,27 +21,26 @@
  *      Benjamin F. ZWICK
  */
 
-#ifndef STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
-#define STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
+#ifndef STREAMVORTI_FINITE_DIFFERENCES_FD_3D_HPP_
+#define STREAMVORTI_FINITE_DIFFERENCES_FD_3D_HPP_
 
-#include "StreamVorti/approximants/dcpse.hpp"
+#include "StreamVorti/finite_differences/fd.hpp"
 
 #include "mfem.hpp"
 
 namespace StreamVorti {
 
 /*!
- * \class Dcpse2d
- * \brief DC PSE derivatives in 2D.
+ * \class FiniteDiff3d
+ * \brief Finite difference derivatives on 3D structured grids.
+ *
+ * Same stencil options as FiniteDiff2d, extended to three dimensions.
  */
-class Dcpse2d: public Dcpse
+class FiniteDiff3d: public FiniteDiff
 {
 public:
-    /*!
-     * \brief Dcpse2d constructor to match nodes of an MFEM H1 GridFunction.
-     */
-    Dcpse2d(mfem::GridFunction &gf, int NumNeighbors)
-        : Dcpse(gf, NumNeighbors) {}
+    FiniteDiff3d(mfem::GridFunction &gf, int stencil_order = 2)
+        : FiniteDiff(gf, stencil_order) {}
 
     void Update();
 
@@ -53,28 +51,37 @@ public:
         {
         case 0: return this->sh_func_dx_;
         case 1: return this->sh_func_dy_;
+        case 2: return this->sh_func_dz_;
         }
         MFEM_ABORT( "Index " << i << " out of bounds." );
     }
 
     inline const mfem::SparseMatrix & ShapeFunctionDx() const { return this->sh_func_dx_; }
     inline const mfem::SparseMatrix & ShapeFunctionDy() const { return this->sh_func_dy_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDz() const { return this->sh_func_dz_; }
     inline const mfem::SparseMatrix & ShapeFunctionDxx() const { return this->sh_func_dxx_; }
     inline const mfem::SparseMatrix & ShapeFunctionDyy() const { return this->sh_func_dyy_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDzz() const { return this->sh_func_dzz_; }
     inline const mfem::SparseMatrix & ShapeFunctionDxy() const { return this->sh_func_dxy_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDxz() const { return this->sh_func_dxz_; }
+    inline const mfem::SparseMatrix & ShapeFunctionDyz() const { return this->sh_func_dyz_; }
 
     const mfem::SparseMatrix & Dxx() const override { return this->sh_func_dxx_; }
     const mfem::SparseMatrix & Dyy() const override { return this->sh_func_dyy_; }
     const mfem::SparseMatrix & Dxy() const override { return this->sh_func_dxy_; }
 
 private:
-    mfem::SparseMatrix sh_func_dx_; /*!< The shape function 1st x derivative matrix. */
-    mfem::SparseMatrix sh_func_dy_; /*!< The shape function 1st y derivative matrix. */
-    mfem::SparseMatrix sh_func_dxx_; /*!< The shape function 2nd xx derivative matrix. */
-    mfem::SparseMatrix sh_func_dyy_; /*!< The shape function 2nd yy derivative matrix. */
-    mfem::SparseMatrix sh_func_dxy_; /*!< The shape function 2nd xy derivative matrix. */
+    mfem::SparseMatrix sh_func_dx_;
+    mfem::SparseMatrix sh_func_dy_;
+    mfem::SparseMatrix sh_func_dz_;
+    mfem::SparseMatrix sh_func_dxx_;
+    mfem::SparseMatrix sh_func_dyy_;
+    mfem::SparseMatrix sh_func_dzz_;
+    mfem::SparseMatrix sh_func_dxy_;
+    mfem::SparseMatrix sh_func_dxz_;
+    mfem::SparseMatrix sh_func_dyz_;
 };
 
 } // namespace StreamVorti
 
-#endif // STREAMVORTI_APPROXIMANTS_DCPSE_2D_HPP_
+#endif // STREAMVORTI_FINITE_DIFFERENCES_FD_3D_HPP_
