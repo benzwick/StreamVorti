@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  * Copyright (C) 2025 Weizheng Li
  *
  * This program is free software: you can redistribute it and/or modify
