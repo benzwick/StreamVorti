@@ -189,6 +189,9 @@ IF(STREAMVORTI_WITH_ECL)
     ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/lisp)
 ENDIF()
 
+# Add Space-Time Navier-Stokes module
+ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/src/spacetime)
+
 
 # Compilation of the shared library.
 IF( STREAMVORTI_BUILD_SHARED_LIBS )
@@ -312,8 +315,61 @@ IF(MFEM_USE_MPI)
     INSTALL(TARGETS StreamVorti_par RUNTIME DESTINATION bin/StreamVorti)
 ENDIF()
 
+# Space-Time Navier-Stokes executable.
+ADD_EXECUTABLE(SpaceTimeNS spacetime_navier_stokes.cpp)
+
+target_link_libraries(SpaceTimeNS CGAL::CGAL CGAL::CGAL_Core)
+
+IF(OpenMP_CXX_FOUND)
+    TARGET_LINK_LIBRARIES(SpaceTimeNS OpenMP::OpenMP_CXX)
+ENDIF()
+
+# Link with space-time objects and the main library
+TARGET_LINK_LIBRARIES(SpaceTimeNS $<TARGET_OBJECTS:SpaceTime>)
+
+IF(STREAMVORTI_BUILD_SHARED_LIBS)
+    TARGET_LINK_LIBRARIES(SpaceTimeNS ${PROJECT_NAME})
+ELSE()
+    TARGET_LINK_LIBRARIES(SpaceTimeNS ${PROJECT_NAME}_static)
+ENDIF()
+
+TARGET_LINK_LIBRARIES(SpaceTimeNS ${MFEM_LIBRARIES})
+
+INSTALL(TARGETS SpaceTimeNS RUNTIME DESTINATION bin/StreamVorti)
+
+# Parallel Space-Time NS executable
+IF(MFEM_USE_MPI)
+    ADD_EXECUTABLE(SpaceTimeNS_par spacetime_navier_stokes.cpp)
+
+    target_link_libraries(SpaceTimeNS_par CGAL::CGAL CGAL::CGAL_Core)
+
+    IF(OpenMP_CXX_FOUND)
+        TARGET_LINK_LIBRARIES(SpaceTimeNS_par OpenMP::OpenMP_CXX)
+    ENDIF()
+
+    TARGET_LINK_LIBRARIES(SpaceTimeNS_par $<TARGET_OBJECTS:SpaceTime>)
+
+    IF(STREAMVORTI_BUILD_SHARED_LIBS)
+        TARGET_LINK_LIBRARIES(SpaceTimeNS_par ${PROJECT_NAME})
+    ELSE()
+        TARGET_LINK_LIBRARIES(SpaceTimeNS_par ${PROJECT_NAME}_static)
+    ENDIF()
+
+    TARGET_LINK_LIBRARIES(SpaceTimeNS_par ${MFEM_LIBRARIES})
+
+    INSTALL(TARGETS SpaceTimeNS_par RUNTIME DESTINATION bin/StreamVorti)
+ENDIF()
+
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
 INSTALL(FILES ${HEADERS} DESTINATION include/StreamVorti)
+
+# Install Space-Time headers
+INSTALL(FILES
+    ${CMAKE_SOURCE_DIR}/include/StreamVorti/spacetime/st_config.hpp
+    ${CMAKE_SOURCE_DIR}/include/StreamVorti/spacetime/st_mesh.hpp
+    ${CMAKE_SOURCE_DIR}/include/StreamVorti/spacetime/st_integrators.hpp
+    ${CMAKE_SOURCE_DIR}/include/StreamVorti/spacetime/st_solver.hpp
+    DESTINATION include/StreamVorti/spacetime)
 
 # Install Lisp headers if ECL is enabled
 IF(STREAMVORTI_WITH_ECL)
@@ -339,7 +395,17 @@ IF(STREAMVORTI_WITH_ECL)
     INSTALL(FILES
         ${CMAKE_SOURCE_DIR}/demo/cavity.lisp
         ${CMAKE_SOURCE_DIR}/demo/channel.lisp
+        ${CMAKE_SOURCE_DIR}/demo/st_cylinder.lisp
+        ${CMAKE_SOURCE_DIR}/demo/st_cavity.lisp
+        ${CMAKE_SOURCE_DIR}/demo/st_channel.lisp
         DESTINATION share/streamvorti/demo)
+
+    # Install Gmsh geometry files
+    INSTALL(FILES
+        ${CMAKE_SOURCE_DIR}/demo/meshes/cylinder_in_channel.geo
+        ${CMAKE_SOURCE_DIR}/demo/meshes/cylinder_in_channel_hex.geo
+        ${CMAKE_SOURCE_DIR}/demo/meshes/cavity_quad.mesh
+        DESTINATION share/streamvorti/demo/meshes)
 ENDIF()
 
 # -------------------------
