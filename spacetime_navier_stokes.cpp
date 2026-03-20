@@ -17,12 +17,16 @@
  * For 2D spatial problems, the space-time domain is 3D (x, y, t),
  * discretized with tetrahedra (simplex) or hexahedra (tensor-product).
  *
- * Usage:
- *   CLI mode:
- *     ./SpaceTimeNS -m mesh.mesh -Re 100 -dt 0.1 -tf 10.0 -o 2 -pv
+ * Problem definitions (boundary conditions, physics, mesh) are specified
+ * via SDL files — there are no hardcoded benchmark setups.
  *
+ * Usage:
  *   SDL mode (requires ECL):
+ *     ./SpaceTimeNS -f demo/st_cavity.lisp -lp lisp -pv
  *     ./SpaceTimeNS -f demo/st_cylinder.lisp -lp lisp -pv
+ *
+ *   CLI overrides (combined with SDL file):
+ *     ./SpaceTimeNS -f demo/st_cavity.lisp -lp lisp -Re 1000 -dt 0.05 -pv
  *
  * Contributors:
  *     Benjamin F. ZWICK
@@ -46,58 +50,84 @@
 using namespace StreamVorti::SpaceTime;
 
 // =========================================================================
-// Boundary condition functions for standard benchmark problems
+// SDL to SolverConfig conversion
 // =========================================================================
 
-namespace BenchmarkBC {
+#ifdef STREAMVORTI_WITH_ECL
 
-/// Parabolic inflow profile for channel flow
-/// u(y) = U_max * 4 * y * (H - y) / H^2
-struct ParabolicInflow
+/// Map SDL BC type string to SpaceTime::BCType enum
+static BCType SDLTypeToBC(const std::string &type)
 {
-    double U_max;    ///< Maximum centerline velocity
-    double H;        ///< Channel height
-    int flow_dir;    ///< Flow direction (0=x, 1=y)
-    int normal_dir;  ///< Wall-normal direction
+    if (type == "no-slip")   return BCType::NoSlip;
+    if (type == "velocity")  return BCType::Dirichlet;
+    if (type == "inflow")    return BCType::Inflow;
+    if (type == "outflow")   return BCType::Outflow;
+    if (type == "pressure")  return BCType::Pressure;
+    if (type == "slip")      return BCType::Slip;
+    if (type == "neumann")   return BCType::Neumann;
+    if (type == "periodic")  return BCType::Periodic;
 
-    void operator()(const double *x, double t, double *v) const
-    {
-        double y = x[normal_dir];
-        double u_profile = U_max * 4.0 * y * (H - y) / (H * H);
-
-        for (int d = 0; d < 3; ++d) v[d] = 0.0;
-        v[flow_dir] = u_profile;
-    }
-};
-
-/// Uniform inflow
-struct UniformInflow
-{
-    double U;
-    int flow_dir;
-
-    void operator()(const double *x, double t, double *v) const
-    {
-        for (int d = 0; d < 3; ++d) v[d] = 0.0;
-        v[flow_dir] = U;
-    }
-};
-
-/// No-slip wall (zero velocity)
-void NoSlip(const double *x, double t, double *v)
-{
-    v[0] = 0.0;
-    v[1] = 0.0;
+    std::cerr << "Warning: unknown SDL BC type '" << type
+              << "', defaulting to Dirichlet." << std::endl;
+    return BCType::Dirichlet;
 }
 
-/// Lid-driven cavity top wall
-void LidVelocity(const double *x, double t, double *v)
+/// Build a VelocityFunction from SDL boundary condition's Lisp functions.
+/// Returns a callable (x, t) -> v or nullptr if no velocity functions exist.
+static VelocityFunction MakeVelocityFn(
+    const StreamVorti::Lisp::BoundaryCondition &sdl_bc)
 {
-    v[0] = 1.0;
-    v[1] = 0.0;
+    // Capture raw pointers; the SDL config must outlive the solver run.
+    auto *u_fn = sdl_bc.u_function.get();
+    auto *v_fn = sdl_bc.v_function.get();
+    auto *w_fn = sdl_bc.w_function.get();
+    auto *scalar_fn = sdl_bc.function.get();
+
+    if (u_fn || v_fn || w_fn)
+    {
+        return [u_fn, v_fn, w_fn](const double *x, double t, double *v)
+        {
+            v[0] = u_fn ? u_fn->evaluateAt(x[0], x[1], 0.0) : 0.0;
+            v[1] = v_fn ? v_fn->evaluateAt(x[0], x[1], 0.0) : 0.0;
+            v[2] = w_fn ? w_fn->evaluateAt(x[0], x[1], 0.0) : 0.0;
+        };
+    }
+    if (scalar_fn)
+    {
+        return [scalar_fn](const double *x, double t, double *v)
+        {
+            v[0] = scalar_fn->evaluateAt(x[0], x[1], 0.0);
+            v[1] = 0.0;
+            v[2] = 0.0;
+        };
+    }
+    return nullptr;
 }
 
-} // namespace BenchmarkBC
+/// Populate SolverConfig from a loaded SDL SimulationConfig
+static void LoadSDLConfig(const StreamVorti::Lisp::SimulationConfig &sdl,
+                          SolverConfig &config)
+{
+    // Physics
+    config.spatial_dim = sdl.dimension;
+    config.reynolds = sdl.physics.reynolds;
+    config.density = sdl.physics.density;
+
+    // Boundary conditions
+    config.boundary_conditions.clear();
+    for (const auto &sdl_bc : sdl.boundaries)
+    {
+        BoundaryCondition bc;
+        bc.attribute = sdl_bc.attribute;
+        bc.type = SDLTypeToBC(sdl_bc.type);
+        bc.name = sdl_bc.name;
+        bc.vel_fn = MakeVelocityFn(sdl_bc);
+        bc.pressure = 0.0;
+        config.boundary_conditions.push_back(std::move(bc));
+    }
+}
+
+#endif // STREAMVORTI_WITH_ECL
 
 // =========================================================================
 // VelocityCoefficient wrapper for boundary conditions
@@ -127,7 +157,9 @@ private:
 // Parse command-line arguments
 // =========================================================================
 
-SolverConfig ParseCommandLine(int argc, char *argv[])
+SolverConfig ParseCommandLine(int argc, char *argv[],
+                              std::string &sdl_file_out,
+                              std::string &lisp_path_out)
 {
     SolverConfig config;
 
@@ -340,96 +372,12 @@ SolverConfig ParseCommandLine(int argc, char *argv[])
         config.output.save_vorticity = true;
     }
 
+    sdl_file_out = sdl_file;
+    lisp_path_out = lisp_path;
+
     return config;
 }
 
-// =========================================================================
-// Setup boundary conditions for known benchmark problems
-// =========================================================================
-
-void SetupCylinderBCs(SolverConfig &config, double H, double U_max)
-{
-    // Cylinder in channel benchmark (Schafer & Turek, 1996)
-    //
-    // Boundary attributes (from Gmsh):
-    //   1 = inlet
-    //   2 = outlet
-    //   3 = top wall
-    //   4 = bottom wall
-    //   5 = cylinder surface
-
-    BenchmarkBC::ParabolicInflow inflow{U_max, H, 0, 1};
-
-    // Inlet: parabolic velocity profile
-    BoundaryCondition bc_inlet;
-    bc_inlet.attribute = 1;
-    bc_inlet.type = BCType::Inflow;
-    bc_inlet.vel_fn = [inflow](const double *x, double t, double *v)
-    {
-        inflow(x, t, v);
-    };
-    bc_inlet.name = "inlet";
-    config.boundary_conditions.push_back(bc_inlet);
-
-    // Outlet: stress-free
-    BoundaryCondition bc_outlet;
-    bc_outlet.attribute = 2;
-    bc_outlet.type = BCType::Outflow;
-    bc_outlet.name = "outlet";
-    config.boundary_conditions.push_back(bc_outlet);
-
-    // Top wall: no-slip
-    BoundaryCondition bc_top;
-    bc_top.attribute = 3;
-    bc_top.type = BCType::NoSlip;
-    bc_top.name = "top";
-    config.boundary_conditions.push_back(bc_top);
-
-    // Bottom wall: no-slip
-    BoundaryCondition bc_bottom;
-    bc_bottom.attribute = 4;
-    bc_bottom.type = BCType::NoSlip;
-    bc_bottom.name = "bottom";
-    config.boundary_conditions.push_back(bc_bottom);
-
-    // Cylinder: no-slip
-    BoundaryCondition bc_cyl;
-    bc_cyl.attribute = 5;
-    bc_cyl.type = BCType::NoSlip;
-    bc_cyl.name = "cylinder";
-    config.boundary_conditions.push_back(bc_cyl);
-}
-
-void SetupCavityBCs(SolverConfig &config)
-{
-    // Lid-driven cavity
-    // Attributes: 1=bottom, 2=right, 3=top(lid), 4=left
-
-    BoundaryCondition bc_bottom;
-    bc_bottom.attribute = 1;
-    bc_bottom.type = BCType::NoSlip;
-    bc_bottom.name = "bottom";
-    config.boundary_conditions.push_back(bc_bottom);
-
-    BoundaryCondition bc_right;
-    bc_right.attribute = 2;
-    bc_right.type = BCType::NoSlip;
-    bc_right.name = "right";
-    config.boundary_conditions.push_back(bc_right);
-
-    BoundaryCondition bc_lid;
-    bc_lid.attribute = 3;
-    bc_lid.type = BCType::Dirichlet;
-    bc_lid.vel_fn = BenchmarkBC::LidVelocity;
-    bc_lid.name = "lid";
-    config.boundary_conditions.push_back(bc_lid);
-
-    BoundaryCondition bc_left;
-    bc_left.attribute = 4;
-    bc_left.type = BCType::NoSlip;
-    bc_left.name = "left";
-    config.boundary_conditions.push_back(bc_left);
-}
 
 // =========================================================================
 // MAIN
@@ -444,22 +392,46 @@ int main(int argc, char *argv[])
     bool parallel = (num_procs > 1);
 
     // Parse command line
-    SolverConfig config = ParseCommandLine(argc, argv);
+    std::string sdl_file, lisp_path;
+    SolverConfig config = ParseCommandLine(argc, argv, sdl_file, lisp_path);
 
-    // Detect benchmark problem from mesh file name
-    std::string mesh_name = config.mesh_file;
-    bool is_cylinder = (mesh_name.find("cylinder") != std::string::npos);
-    bool is_cavity = (mesh_name.find("cavity") != std::string::npos);
+    // Load problem definition from SDL file.
+    // All boundary conditions, physics parameters, and mesh are defined
+    // in SDL — there are no hardcoded problem setups.
+#ifdef STREAMVORTI_WITH_ECL
+    // Keep SDL config alive for the duration of the solver run, since
+    // VelocityFunction lambdas capture pointers to its LispFunctions.
+    StreamVorti::Lisp::SimulationConfig sdl_config;
 
-    if (is_cylinder)
+    if (!sdl_file.empty())
     {
-        double H = 0.41;      // Channel height (DFG benchmark)
-        double U_max = 1.5;   // Max inflow velocity
-        SetupCylinderBCs(config, H, U_max);
+        StreamVorti::Lisp::Runtime::init(lisp_path);
+        sdl_config = StreamVorti::Lisp::Loader::load(sdl_file);
+        LoadSDLConfig(sdl_config, config);
+
+        if (myid == 0)
+        {
+            std::cout << "Loaded SDL: " << sdl_config.name << std::endl;
+            std::cout << "  Boundaries: "
+                      << config.boundary_conditions.size() << std::endl;
+        }
     }
-    else if (is_cavity)
+#endif
+
+    if (config.boundary_conditions.empty())
     {
-        SetupCavityBCs(config);
+        if (myid == 0)
+        {
+            std::cerr << "Error: no boundary conditions defined.\n"
+                      << "Use an SDL file to define the problem:\n"
+                      << "  ./SpaceTimeNS -f demo/st_cavity.lisp -lp lisp -pv\n"
+                      << "  ./SpaceTimeNS -f demo/st_cylinder.lisp -lp lisp -pv\n";
+#ifndef STREAMVORTI_WITH_ECL
+            std::cerr << "\nNote: rebuild with -DSTREAMVORTI_WITH_ECL=ON "
+                      << "to enable SDL support." << std::endl;
+#endif
+        }
+        return EXIT_FAILURE;
     }
 
     // Create and run solver
