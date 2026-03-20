@@ -450,8 +450,11 @@ int main(int argc, char *argv[])
         // For a velocity BC on a horizontal boundary (= y val):
         //   v = -∂ψ/∂x  →  ψ(x) = ψ_ref - ∫₀ˣ v(ξ, y₀) dξ
         //
-        // No-slip/slip walls: ψ = constant, determined from shared corner
-        // nodes with velocity boundaries (second pass below).
+        // No-slip/slip walls: ψ = constant, determined from boundary
+        // connectivity (second pass below).
+
+        // Number of Simpson's rule sub-intervals for ψ integration
+        constexpr int nsub = 20;
 
         for (const auto& bc : sdl_boundaries) {
             auto it = boundary_nodes_by_attr.find(bc.attribute);
@@ -466,7 +469,6 @@ int main(int argc, char *argv[])
                 //
                 // Each node is independent — no sorting or inter-node
                 // dependencies. Uses composite Simpson's rule (nsub intervals).
-                constexpr int nsub = 20;
                 for (int vi : nodes) {
                     const double* vtx = mesh->GetVertex(vi);
                     double psi_val = 0.0;
@@ -529,35 +531,93 @@ int main(int argc, char *argv[])
         }
 
         // ============================================================
-        // A2. Propagate ψ constants to no-slip/slip walls
+        // A2. Compute wall ψ constants from boundary connectivity
         // ============================================================
-        // No-slip walls have ψ = constant along the wall. The constant is
-        // determined by shared corner nodes with velocity boundaries:
-        //   bottom wall → ψ = ψ_inlet(y=0) = 0 (reference)
-        //   top wall    → ψ = ψ_inlet(y=H) = Q (total flow rate)
+        // ψ = constant on any impermeable wall (from u·n = 0).
+        // The constant is determined by mass conservation: it equals ψ
+        // at the corner where the wall meets a velocity boundary.
         //
-        // Algorithm: for each no-slip/slip BC, check if any of its nodes
-        // already have a non-zero psi_bc (from the velocity integration).
-        // If so, propagate that constant to all nodes on the wall.
-        for (const auto& bc : sdl_boundaries) {
-            if (bc.type != "no-slip" && bc.type != "slip") continue;
-            auto it = boundary_nodes_by_attr.find(bc.attribute);
-            if (it == boundary_nodes_by_attr.end()) continue;
-            const auto& nodes = it->second;
+        // Algorithm: use MFEM boundary element connectivity to discover
+        // which walls are adjacent to which velocity boundaries, then
+        // compute ψ at the shared corner vertex.
+        //
+        // Step 1: Build vertex → set of boundary attributes map
+        std::map<int, std::set<int>> vertex_attrs;
+        for (int be = 0; be < mesh->GetNBE(); ++be) {
+            int attr = mesh->GetBdrAttribute(be);
+            mfem::Array<int> verts;
+            mesh->GetBdrElementVertices(be, verts);
+            for (int j = 0; j < verts.Size(); ++j) {
+                vertex_attrs[verts[j]].insert(attr);
+            }
+        }
 
-            // Find the ψ value from corner nodes shared with velocity boundaries
+        // Step 2: Build attribute → BC map
+        std::map<int, const StreamVorti::Lisp::BoundaryCondition*> attr_to_bc;
+        for (const auto& bc : sdl_boundaries) {
+            attr_to_bc[bc.attribute] = &bc;
+        }
+
+        // Step 3: For each wall BC, find adjacent velocity BC via corner
+        // vertices and compute the wall ψ constant
+        for (const auto& wall_bc : sdl_boundaries) {
+            if (wall_bc.type != "no-slip" && wall_bc.type != "slip") continue;
+            auto wall_nodes_it = boundary_nodes_by_attr.find(wall_bc.attribute);
+            if (wall_nodes_it == boundary_nodes_by_attr.end()) continue;
+
+            // Search for corner vertices where this wall meets a velocity BC
             double wall_psi = 0.0;
             bool found = false;
-            for (int vi : nodes) {
-                if (std::abs(psi_bc[vi]) > 1e-30) {
-                    wall_psi = psi_bc[vi];
+            for (const auto& [vi, attrs] : vertex_attrs) {
+                if (attrs.find(wall_bc.attribute) == attrs.end()) continue;
+                if (attrs.size() < 2) continue;  // not a corner
+
+                // Check if any other attribute at this corner is a velocity BC
+                for (int other_attr : attrs) {
+                    if (other_attr == wall_bc.attribute) continue;
+                    auto bc_it = attr_to_bc.find(other_attr);
+                    if (bc_it == attr_to_bc.end()) continue;
+                    const auto* vel_bc = bc_it->second;
+                    if (vel_bc->type != "velocity") continue;
+
+                    // Found a velocity BC adjacent to this wall.
+                    // Compute ψ at the corner vertex coordinate using
+                    // the same Simpson's rule as velocity boundary nodes.
+                    const double* corner = mesh->GetVertex(vi);
+                    double psi_val = 0.0;
+                    if (vel_bc->predicate_axis == 'x' && vel_bc->u_function) {
+                        double x0 = vel_bc->predicate_value;
+                        double y = corner[1];
+                        double h = y / nsub;
+                        for (int k = 0; k < nsub; ++k) {
+                            double a = k * h, b = (k + 1) * h, m = 0.5 * (a + b);
+                            psi_val += (h / 6.0) * (
+                                vel_bc->u_function->evaluateAt(x0, a, 0.0) +
+                                4.0 * vel_bc->u_function->evaluateAt(x0, m, 0.0) +
+                                vel_bc->u_function->evaluateAt(x0, b, 0.0));
+                        }
+                    } else if (vel_bc->predicate_axis == 'y' && vel_bc->v_function) {
+                        double y0 = vel_bc->predicate_value;
+                        double x = corner[0];
+                        double h = x / nsub;
+                        for (int k = 0; k < nsub; ++k) {
+                            double a = k * h, b = (k + 1) * h, m = 0.5 * (a + b);
+                            psi_val -= (h / 6.0) * (
+                                vel_bc->v_function->evaluateAt(a, y0, 0.0) +
+                                4.0 * vel_bc->v_function->evaluateAt(m, y0, 0.0) +
+                                vel_bc->v_function->evaluateAt(b, y0, 0.0));
+                        }
+                    }
+                    wall_psi = psi_val;
                     found = true;
                     break;
                 }
+                if (found) break;
             }
-            // If no corner node has a prescribed ψ, use 0 (cavity default)
+
+            // Apply wall constant to all nodes on this wall
             if (found) {
-                for (int vi : nodes) {
+                for (int vi : wall_nodes_it->second) {
                     psi_bc[vi] = wall_psi;
                 }
             }

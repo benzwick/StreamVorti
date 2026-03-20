@@ -87,17 +87,33 @@ Lisp-defined velocity functions.
 
 ### Stream Function on No-Slip Walls
 
-No-slip walls have ψ = constant along the wall. The constant is
-determined by continuity with adjacent velocity boundaries at
-shared corner nodes:
+ψ = constant on any impermeable wall (from impermeability u·n = 0,
+not from no-slip). Each connected wall segment has its own constant,
+determined by mass conservation:
 
-- Bottom wall → ψ = 0 (reference, from inlet node at y=0)
-- Top wall → ψ = Q (total flow rate, from inlet node at y=H)
+    ψ(B) - ψ(A) = volumetric flow rate between points A and B
 
-where Q = ∫₀ᴴ u_inlet(y) dy is the total inlet flow rate.
+The wall constant equals ψ at the corner vertex where the wall meets
+a velocity boundary. The solver discovers this boundary topology
+using MFEM's boundary element connectivity (`GetBdrElementVertices`):
+
+1. Build a map from each vertex to the set of boundary attributes
+   meeting at that vertex
+2. Corner vertices have 2+ attributes
+3. For each wall BC, find corners shared with velocity BCs
+4. Compute ψ at the corner using the velocity function (Simpson's rule)
+5. Set all wall nodes to that constant
 
 For the lid-driven cavity (closed domain), all walls share the same
-constant ψ = 0, which is the trivial case.
+constant ψ = 0, which is the trivial case (no velocity boundaries
+to propagate from).
+
+For channel flow:
+- Bottom wall at y=0 → corner with inlet at (x₀, 0) → ψ = ∫₀⁰ u dη = 0
+- Top wall at y=H → corner with inlet at (x₀, H) → ψ = ∫₀ᴴ u dη = Q
+
+In parallel, the corner detection is performed on the serial mesh
+before partitioning, since corner vertices may not be on every rank.
 
 ### Neumann BCs for Pressure/Outflow
 
@@ -159,11 +175,25 @@ channels, corner nodes between inlet and walls get the wall's ψ value
 
 ### Parallel Limitations
 
-The parallel solver (`streamvorti_par.cpp`) uses `HypreParMatrix` for
-the Laplacian, which does not support arbitrary row replacement.
-Neumann BCs are not yet implemented in parallel — pressure/outflow
-outlets fall back to Dirichlet ψ = 0. Non-zero Dirichlet ψ at
-inlet/walls is fully supported in parallel.
+1. **Neumann BCs not implemented** — `HypreParMatrix` does not support
+   arbitrary row replacement. Pressure/outflow outlets fall back to
+   Dirichlet ψ = 0. This causes instability for open-domain problems
+   (channels). See issue #24.
+
+2. **Wall ψ constants** — computed on the serial mesh before partitioning
+   using MFEM boundary element connectivity. This avoids the problem
+   of corner vertices being on different ranks.
+
+3. **Per-node ψ integration** — each rank computes ψ at its own inlet
+   nodes independently using Simpson's rule. No MPI communication needed.
+
+### Simply Connected Domains Only
+
+Multiply connected domains (e.g., channel with internal cylinder
+obstacle) require additional pressure single-valuedness equations per
+internal boundary. The ψ value on an internal boundary is an unknown
+determined by the constraint that pressure must be single-valued
+around the obstacle. This is not yet implemented. See issue #25.
 
 ## SDL Examples
 
