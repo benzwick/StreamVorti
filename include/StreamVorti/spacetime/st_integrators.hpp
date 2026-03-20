@@ -1,6 +1,6 @@
 /*
  * StreamVorti - Adaptive Space-Time Navier-Stokes Solver
- * Copyright (C) 2020-2026 Benjamin F. Zwick
+ * Copyright (C) 2026 Benjamin F. Zwick
  *
  * Space-time finite element integrators for incompressible Navier-Stokes.
  *
