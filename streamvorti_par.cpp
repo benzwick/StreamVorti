@@ -52,6 +52,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -476,6 +477,88 @@ int main(int argc, char *argv[])
     }
     perf_metrics.grid_size = nx;
 
+#ifdef STREAMVORTI_WITH_ECL
+    // ================================================================
+    // Compute wall ψ constants using serial mesh boundary connectivity.
+    // This must happen BEFORE delete serial_mesh, while the global mesh
+    // is still available (same algorithm as serial streamvorti.cpp).
+    // ================================================================
+    std::map<int, double> wall_psi_by_attr;
+    if (use_sdl_bcs) {
+        // Build vertex → set of boundary attributes map
+        std::map<int, std::set<int>> vertex_attrs;
+        for (int be = 0; be < serial_mesh->GetNBE(); ++be) {
+            int attr = serial_mesh->GetBdrAttribute(be);
+            mfem::Array<int> verts;
+            serial_mesh->GetBdrElementVertices(be, verts);
+            for (int j = 0; j < verts.Size(); ++j) {
+                vertex_attrs[verts[j]].insert(attr);
+            }
+        }
+
+        // Build attribute → BC map
+        std::map<int, const StreamVorti::Lisp::BoundaryCondition*> attr_to_bc;
+        for (const auto& bc : sdl_boundaries) {
+            attr_to_bc[bc.attribute] = &bc;
+        }
+
+        // For each wall BC, find adjacent velocity BC via corner vertices
+        constexpr int nsub_wall = 20;
+        for (const auto& wall_bc : sdl_boundaries) {
+            if (wall_bc.type != "no-slip" && wall_bc.type != "slip") continue;
+
+            double wall_psi = 0.0;
+            bool found = false;
+            for (const auto& [vi, attrs] : vertex_attrs) {
+                if (attrs.find(wall_bc.attribute) == attrs.end()) continue;
+                if (attrs.size() < 2) continue;  // not a corner
+
+                for (int other_attr : attrs) {
+                    if (other_attr == wall_bc.attribute) continue;
+                    auto bc_it = attr_to_bc.find(other_attr);
+                    if (bc_it == attr_to_bc.end()) continue;
+                    const auto* vel_bc = bc_it->second;
+                    if (vel_bc->type != "velocity") continue;
+
+                    const double* corner = serial_mesh->GetVertex(vi);
+                    double psi_val = 0.0;
+                    if (vel_bc->predicate_axis == 'x' && vel_bc->u_function) {
+                        double x0 = vel_bc->predicate_value;
+                        double y = corner[1];
+                        double h = y / nsub_wall;
+                        for (int k = 0; k < nsub_wall; ++k) {
+                            double a = k * h, b = (k + 1) * h, m = 0.5 * (a + b);
+                            psi_val += (h / 6.0) * (
+                                vel_bc->u_function->evaluateAt(x0, a, 0.0) +
+                                4.0 * vel_bc->u_function->evaluateAt(x0, m, 0.0) +
+                                vel_bc->u_function->evaluateAt(x0, b, 0.0));
+                        }
+                    } else if (vel_bc->predicate_axis == 'y' && vel_bc->v_function) {
+                        double y0 = vel_bc->predicate_value;
+                        double x = corner[0];
+                        double h = x / nsub_wall;
+                        for (int k = 0; k < nsub_wall; ++k) {
+                            double a = k * h, b = (k + 1) * h, m = 0.5 * (a + b);
+                            psi_val -= (h / 6.0) * (
+                                vel_bc->v_function->evaluateAt(a, y0, 0.0) +
+                                4.0 * vel_bc->v_function->evaluateAt(m, y0, 0.0) +
+                                vel_bc->v_function->evaluateAt(b, y0, 0.0));
+                        }
+                    }
+                    wall_psi = psi_val;
+                    found = true;
+                    break;
+                }
+                if (found) break;
+            }
+
+            if (found) {
+                wall_psi_by_attr[wall_bc.attribute] = wall_psi;
+            }
+        }
+    }
+#endif
+
     // Convert serial mesh to parallel mesh (distributed across MPI ranks)
     mfem::ParMesh* mesh = new mfem::ParMesh(MPI_COMM_WORLD, *serial_mesh);
     delete serial_mesh;  // No longer needed after creating ParMesh
@@ -577,19 +660,13 @@ int main(int argc, char *argv[])
     // (negated for positive definiteness with CG/direct solvers).
     //
     // Boundary conditions on ψ depend on BC type:
-    //   no-slip/slip:  Dirichlet ψ = constant (determined by flow rate)
-    //   velocity:      Dirichlet ψ = ∫u dy  (integrated from velocity profile)
-    //   pressure/outflow: Neumann ∂ψ/∂n = 0 (natural outflow)
+    //   no-slip/slip:      Dirichlet ψ = constant (determined by flow rate)
+    //   velocity:          Dirichlet ψ = ∫u dy  (integrated from velocity profile)
+    //   pressure/outflow:  Neumann ∂ψ/∂n = 0 (natural outflow)
     //
-    // For Dirichlet nodes, the matrix row is replaced with identity: ψ_i = ψ_bc_i
-    // For Neumann nodes, the matrix row is replaced with the normal derivative
-    // operator: (∂ψ/∂n)_i = 0
-    //
-    // Limitation: HypreParMatrix does not support row replacement, so
-    // Neumann BCs are not yet implemented in the parallel version.
-    // Pressure/outflow outlets are treated as Dirichlet ψ = 0.
-    //
-    // Reference: von Karman cylinder code (ns_solver.cpp)
+    // For Dirichlet nodes, EliminateRowsCols replaces the row with identity.
+    // For Neumann nodes, the row is replaced with the normal derivative
+    // operator via GetDiag/GetOffd: (∂ψ/∂n)_i = 0
 
     // Prescribed stream function values at boundary nodes.
     // Initialized to 0 (backward-compatible with cavity where ψ=0 everywhere).
@@ -597,109 +674,152 @@ int main(int argc, char *argv[])
     mfem::Vector psi_bc(num_true_dofs);
     psi_bc = 0.0;
 
+    // Lists of Dirichlet and Neumann boundary nodes for the ψ equation.
+    std::vector<int> dirichlet_psi_nodes;
+    std::vector<std::pair<int, char>> neumann_psi_info;  // (tdof_idx, axis)
+
 #ifdef STREAMVORTI_WITH_ECL
     if (use_sdl_bcs) {
         // ============================================================
-        // Compute ψ at velocity (inlet) boundaries
+        // Classify boundary nodes and compute ψ values
         // ============================================================
-        // For a velocity BC on a vertical boundary (= x val):
-        //   u = ∂ψ/∂y  →  ψ(y) = ∫₀ʸ u(x₀, η) dη
-        //
-        // For a velocity BC on a horizontal boundary (= y val):
-        //   v = -∂ψ/∂x  →  ψ(x) = ψ_ref - ∫₀ˣ v(ξ, y₀) dξ
-        //
-        // Each node is independent — no sorting or inter-node
-        // dependencies. Uses composite Simpson's rule (nsub intervals).
         constexpr int nsub = 20;
         for (const auto& bc : sdl_boundaries) {
-            if (bc.type != "velocity") continue;
-            auto it = boundary_nodes_by_attr.find(bc.attribute);
-            if (it == boundary_nodes_by_attr.end()) continue;
-
-            for (int tdof : it->second) {
-                auto vit = tdof_to_vertex.find(tdof);
-                if (vit == tdof_to_vertex.end()) continue;
-                const double* vtx = mesh->GetVertex(vit->second);
-                double psi_val = 0.0;
-
-                if (bc.predicate_axis == 'x' && bc.u_function) {
-                    double x0 = bc.predicate_value;
-                    double y = vtx[1];
-                    double h = y / nsub;
-                    for (int k = 0; k < nsub; ++k) {
-                        double a = k * h;
-                        double b = (k + 1) * h;
-                        double m = 0.5 * (a + b);
-                        psi_val += (h / 6.0) * (
-                            bc.u_function->evaluateAt(x0, a, 0.0) +
-                            4.0 * bc.u_function->evaluateAt(x0, m, 0.0) +
-                            bc.u_function->evaluateAt(x0, b, 0.0));
-                    }
-                } else if (bc.predicate_axis == 'y' && bc.v_function) {
-                    double y0 = bc.predicate_value;
-                    double x = vtx[0];
-                    double h = x / nsub;
-                    for (int k = 0; k < nsub; ++k) {
-                        double a = k * h;
-                        double b = (k + 1) * h;
-                        double m = 0.5 * (a + b);
-                        psi_val -= (h / 6.0) * (
-                            bc.v_function->evaluateAt(a, y0, 0.0) +
-                            4.0 * bc.v_function->evaluateAt(m, y0, 0.0) +
-                            bc.v_function->evaluateAt(b, y0, 0.0));
-                    }
-                }
-                psi_bc[tdof] = psi_val;
-            }
-        }
-
-        // ============================================================
-        // Propagate ψ constants to no-slip/slip walls
-        // ============================================================
-        // No-slip walls have ψ = constant along the wall. The constant is
-        // determined by shared corner nodes with velocity boundaries:
-        //   bottom wall → ψ = ψ_inlet(y=0) = 0 (reference)
-        //   top wall    → ψ = ψ_inlet(y=H) = Q (total flow rate)
-        for (const auto& bc : sdl_boundaries) {
-            if (bc.type != "no-slip" && bc.type != "slip") continue;
             auto it = boundary_nodes_by_attr.find(bc.attribute);
             if (it == boundary_nodes_by_attr.end()) continue;
             const auto& nodes = it->second;
 
-            double wall_psi = 0.0;
-            bool found = false;
-            for (int tdof : nodes) {
-                if (std::abs(psi_bc[tdof]) > 1e-30) {
-                    wall_psi = psi_bc[tdof];
-                    found = true;
-                    break;
-                }
-            }
-            if (found) {
+            if (bc.type == "velocity") {
+                // Compute ψ at each node by numerically integrating the
+                // velocity function from 0 to the node's coordinate.
                 for (int tdof : nodes) {
-                    psi_bc[tdof] = wall_psi;
+                    auto vit = tdof_to_vertex.find(tdof);
+                    if (vit == tdof_to_vertex.end()) continue;
+                    const double* vtx = mesh->GetVertex(vit->second);
+                    double psi_val = 0.0;
+
+                    if (bc.predicate_axis == 'x' && bc.u_function) {
+                        double x0 = bc.predicate_value;
+                        double y = vtx[1];
+                        double h = y / nsub;
+                        for (int k = 0; k < nsub; ++k) {
+                            double a = k * h;
+                            double b = (k + 1) * h;
+                            double m = 0.5 * (a + b);
+                            psi_val += (h / 6.0) * (
+                                bc.u_function->evaluateAt(x0, a, 0.0) +
+                                4.0 * bc.u_function->evaluateAt(x0, m, 0.0) +
+                                bc.u_function->evaluateAt(x0, b, 0.0));
+                        }
+                    } else if (bc.predicate_axis == 'y' && bc.v_function) {
+                        double y0 = bc.predicate_value;
+                        double x = vtx[0];
+                        double h = x / nsub;
+                        for (int k = 0; k < nsub; ++k) {
+                            double a = k * h;
+                            double b = (k + 1) * h;
+                            double m = 0.5 * (a + b);
+                            psi_val -= (h / 6.0) * (
+                                bc.v_function->evaluateAt(a, y0, 0.0) +
+                                4.0 * bc.v_function->evaluateAt(m, y0, 0.0) +
+                                bc.v_function->evaluateAt(b, y0, 0.0));
+                        }
+                    }
+                    psi_bc[tdof] = psi_val;
+                }
+
+                for (int tdof : nodes) {
+                    dirichlet_psi_nodes.push_back(tdof);
+                }
+            } else if (bc.type == "pressure" || bc.type == "outflow") {
+                // Neumann ∂ψ/∂n = 0: natural outflow condition.
+                char axis = bc.predicate_axis;
+                if (axis == '\0') {
+                    MFEM_ABORT("Pressure/outflow BC '" << bc.name
+                               << "' requires a simple predicate (= x val) or (= y val) "
+                               << "to determine the normal direction for Neumann ∂ψ/∂n = 0");
+                }
+                for (int tdof : nodes) {
+                    neumann_psi_info.push_back({tdof, axis});
+                }
+            } else {
+                // no-slip, slip: Dirichlet ψ = constant
+                for (int tdof : nodes) {
+                    dirichlet_psi_nodes.push_back(tdof);
                 }
             }
         }
-    }
-#endif
 
-    // Create parallel Laplacian matrix for streamfunction equation
-    // Laplacian = dxx + dyy, then negate for positive definiteness
+        // Apply wall ψ constants computed from serial mesh boundary connectivity
+        for (const auto& bc : sdl_boundaries) {
+            if (bc.type != "no-slip" && bc.type != "slip") continue;
+            auto wit = wall_psi_by_attr.find(bc.attribute);
+            if (wit == wall_psi_by_attr.end()) continue;
+            auto nit = boundary_nodes_by_attr.find(bc.attribute);
+            if (nit == boundary_nodes_by_attr.end()) continue;
+            for (int tdof : nit->second) {
+                psi_bc[tdof] = wit->second;
+            }
+        }
+    } else
+#endif
+    {
+        // CLI mode: all boundary nodes are Dirichlet with ψ = 0 (cavity)
+        dirichlet_psi_nodes = all_boundary_nodes;
+    }
+
+    // ================================================================
+    // LAPLACIAN MATRIX ASSEMBLY
+    // ================================================================
     mfem::HypreParMatrix* laplacian_matrix = mfem::ParAdd(&dxx_matrix, &dyy_matrix);
     *laplacian_matrix *= -1.0;
 
-    // Apply Dirichlet boundary conditions to all boundary nodes.
-    // Note: pressure/outflow outlets ideally need Neumann ∂ψ/∂n = 0,
-    // but HypreParMatrix doesn't support row replacement. All boundary
-    // nodes are treated as Dirichlet here. The serial version handles
-    // Neumann correctly via SparseMatrix row replacement.
-    mfem::Array<int> ess_tdof_list;
-    for (int idx : all_boundary_nodes) {
-        ess_tdof_list.Append(idx);
+    // STEP 1: Replace Neumann rows with derivative operators FIRST
+    // (before Dirichlet column elimination).
+    // For outlet at x=const: row ← dx_matrix row (enforces ∂ψ/∂x = 0)
+    // For outlet at y=const: row ← dy_matrix row (enforces ∂ψ/∂y = 0)
+    if (!neumann_psi_info.empty()) {
+        mfem::Array<int> neumann_rows;
+        for (const auto& [idx, axis] : neumann_psi_info) {
+            neumann_rows.Append(idx);
+        }
+        laplacian_matrix->EliminateRows(neumann_rows);
+
+        // Replace zeroed rows with derivative operators via GetDiag/GetOffd.
+        // All DCPSE matrices share identical sparsity, so SetRow always
+        // matches GetRow column count.
+        for (const auto& [idx, axis] : neumann_psi_info) {
+            const mfem::HypreParMatrix& deriv = (axis == 'x') ? dx_matrix : dy_matrix;
+
+            // Diagonal block
+            mfem::SparseMatrix A_diag, D_diag;
+            laplacian_matrix->GetDiag(A_diag);
+            deriv.GetDiag(D_diag);
+            mfem::Array<int> cols;
+            mfem::Vector vals;
+            D_diag.GetRow(idx, cols, vals);
+            A_diag.SetRow(idx, cols, vals);
+
+            // Off-diagonal block
+            mfem::SparseMatrix A_offd, D_offd;
+            HYPRE_BigInt *cmap_A, *cmap_D;
+            laplacian_matrix->GetOffd(A_offd, cmap_A);
+            deriv.GetOffd(D_offd, cmap_D);
+            D_offd.GetRow(idx, cols, vals);
+            A_offd.SetRow(idx, cols, vals);
+        }
     }
 
-    laplacian_matrix->EliminateRowsCols(ess_tdof_list);
+    // STEP 2: Eliminate Dirichlet DOFs via OperatorHandle.
+    // EliminateRowsCols zeroes Dirichlet rows/columns in laplacian_matrix
+    // and stores the eliminated column entries in Ae_h (used each time
+    // step by EliminateBC to correct the RHS for known boundary values).
+    mfem::Array<int> ess_tdof_list;
+    for (int idx : dirichlet_psi_nodes) ess_tdof_list.Append(idx);
+
+    mfem::OperatorHandle A_h(laplacian_matrix, false);
+    mfem::OperatorHandle Ae_h;
+    Ae_h.EliminateRowsCols(A_h, ess_tdof_list);
 
     std::cout << "Setup: Created parallel Laplacian matrix with boundary conditions." << std::endl;
 
@@ -895,11 +1015,14 @@ int main(int argc, char *argv[])
         // Solve -∇²ψ = ω instead ∇²ψ = -ω, so that RHS stays positive for linear solvers (cg)
         rhs = vorticity;
 
-        // Apply Dirichlet boundary conditions to RHS:
-        //   rhs = ψ_prescribed (0 for cavity walls, ∫u dy for inlet)
-        for (int idx : all_boundary_nodes) {
-            rhs[idx] = psi_bc[idx];
+        // Apply boundary conditions to Poisson RHS:
+        //   Neumann nodes: rhs = 0 (∂ψ/∂n = 0, natural outflow)
+        //   Dirichlet nodes: EliminateBC sets rhs = psi_bc and corrects
+        //   interior RHS for eliminated column contributions.
+        for (const auto& [idx, axis] : neumann_psi_info) {
+            rhs[idx] = 0.0;
         }
+        A_h.EliminateBC(Ae_h, ess_tdof_list, psi_bc, rhs);
 
         linear_solver->Mult(rhs, streamfunction);
 

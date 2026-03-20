@@ -246,7 +246,8 @@ ParFiniteElementSpace fes (H1, order 1, scalar)
 ParGridFunction coords_gf → passed to ParDcpse2d
 InitialiseParDCPSE → ParDcpse2d::Update() → ghost exchange + matrix assembly
 Build Laplacian: laplacian_matrix = ParAdd(&dxx_matrix, &dyy_matrix)
-                 EliminateRowsCols(ess_tdof_list)
+                 EliminateRows(neumann_rows) + SetRow via GetDiag/GetOffd
+                 OperatorHandle::EliminateRowsCols(dirichlet_tdof_list)
 Create HypreGMRES solver on laplacian_matrix
 IdentifyBoundaryNodesPar → boundary/interior node lists (true DOF indices)
 ```
@@ -275,7 +276,9 @@ STEP 2 — Update vorticity (interior nodes only, local loop):
 
 STEP 3 — Solve Poisson equation (parallel, GMRES):
     −∇²ψ = ω  →  laplacian_matrix × ψ = rhs
-    (boundary DOFs zeroed in rhs; eliminated from matrix during setup)
+    Neumann RHS: rhs[neumann] = 0  (∂ψ/∂n = 0)
+    Dirichlet RHS: EliminateBC corrects rhs for boundary values and
+                   eliminated column contributions
 
 STEP 4 — Apply velocity boundary conditions (local loop):
     u_velocity = dy_matrix.Mult(ψ)
@@ -294,19 +297,39 @@ block.
 
 ### 5.3 Parallel Laplacian and boundary conditions
 
+The Poisson system uses mixed Dirichlet/Neumann BCs. Neumann rows are
+replaced first (before Dirichlet column elimination):
+
 ```cpp
 // Sum DCPSE second-derivative matrices
 HypreParMatrix* laplacian_matrix = mfem::ParAdd(&dxx_matrix, &dyy_matrix);
+*laplacian_matrix *= -1.0;
 
-// Eliminate rows and columns for essential (Dirichlet) BCs.
-// Boundary DOF rows become identity rows; columns become zero.
+// STEP 1: Replace Neumann rows with derivative operators.
+// EliminateRows zeros the rows; then SetRow on GetDiag/GetOffd views
+// writes the derivative stencil through to the HYPRE internal data.
+laplacian_matrix->EliminateRows(neumann_rows);
+for (auto& [idx, axis] : neumann_psi_info) {
+    // Diagonal block: GetDiag → SetRow writes through
+    // Off-diagonal block: GetOffd → SetRow writes through
+}
+
+// STEP 2: Eliminate Dirichlet DOFs via OperatorHandle.
+// Stores eliminated column entries in Ae_h for per-timestep RHS correction.
 mfem::Array<int> ess_tdof_list;
-for (int idx : all_boundary_nodes) ess_tdof_list.Append(idx);
-laplacian_matrix->EliminateRowsCols(ess_tdof_list);
+for (int idx : dirichlet_psi_nodes) ess_tdof_list.Append(idx);
+mfem::OperatorHandle A_h(laplacian_matrix, false);
+mfem::OperatorHandle Ae_h;
+Ae_h.EliminateRowsCols(A_h, ess_tdof_list);
 ```
 
-`all_boundary_nodes` contains **true DOF** indices, which is consistent with
-the solver vector indexing (`mfem::Vector` of size `TrueVSize`).
+`dirichlet_psi_nodes` and `neumann_psi_info` contain **true DOF** indices,
+consistent with solver vector indexing (`mfem::Vector` of size `TrueVSize`).
+
+Wall ψ constants are computed on the serial mesh before partitioning (using
+MFEM boundary element connectivity), then applied to local nodes after
+`ParMesh` creation. This ensures correct ψ propagation regardless of which
+rank owns the wall-inlet corner vertices.
 
 ---
 
@@ -321,7 +344,7 @@ the solver vector indexing (`mfem::Vector` of size `TrueVSize`).
 
 domega_*, dpsi_*  ──→  local Euler loop (interior nodes)  ──→  ω_new
 
-rhs = ω_new (BCs zeroed)
+rhs = ω_new; rhs[neumann] = 0; EliminateBC(Ae, ess, psi_bc, rhs)
 HypreGMRES.Mult(rhs, ψ_new)  ──→  ψ_new
 (~80–100 GMRES iterations; global all-reduce per iteration)
 

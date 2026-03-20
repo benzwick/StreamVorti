@@ -127,8 +127,14 @@ derivative direction.
 ### 5. Parallel Poisson solve: HypreGMRES
 
 The DCPSE Laplacian (`dxx + dyy`) is assembled via `mfem::ParAdd` and boundary
-rows/columns are eliminated with `HypreParMatrix::EliminateRowsCols`. The
-resulting distributed matrix is solved with `HypreGMRES`.
+conditions are applied in two steps:
+
+1. **Neumann rows** (pressure/outflow boundaries) are replaced with the normal
+   derivative operator via `GetDiag`/`GetOffd` CSR block access.
+2. **Dirichlet rows/columns** are eliminated via `OperatorHandle::EliminateRowsCols`,
+   which stores the eliminated column entries for per-timestep RHS correction.
+
+The resulting distributed matrix is solved with `HypreGMRES`.
 
 **Why GMRES, not PCG or AMG?**
 

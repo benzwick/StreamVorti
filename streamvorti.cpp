@@ -641,13 +641,7 @@ int main(int argc, char *argv[])
     laplacian_matrix->Add(1.0, dyy_matrix);
     *laplacian_matrix *= -1.0;
 
-    // Dirichlet rows: replace with identity (ψ_i = ψ_bc_i)
-    for (int idx : dirichlet_psi_nodes) {
-        laplacian_matrix->EliminateRow(idx);
-        laplacian_matrix->Set(idx, idx, 1.0);
-    }
-
-    // Neumann rows: replace with normal derivative operator (∂ψ/∂n = 0)
+    // STEP 1: Replace Neumann rows with normal derivative operator (∂ψ/∂n = 0)
     // For outlet at x=const: row ← dx_matrix row (enforces ∂ψ/∂x = 0)
     // For outlet at y=const: row ← dy_matrix row (enforces ∂ψ/∂y = 0)
     for (const auto& [idx, axis] : neumann_psi_info) {
@@ -661,6 +655,12 @@ int main(int argc, char *argv[])
                 laplacian_matrix->Set(idx, cols[j], vals(j));
             }
         }
+    }
+
+    // STEP 2: Dirichlet rows — replace with identity (ψ_i = ψ_bc_i)
+    for (int idx : dirichlet_psi_nodes) {
+        laplacian_matrix->EliminateRow(idx);
+        laplacian_matrix->Set(idx, idx, 1.0);
     }
 
     laplacian_matrix->Finalize();
@@ -824,14 +824,15 @@ int main(int argc, char *argv[])
         // Solve -∇²ψ = ω instead ∇²ψ = -ω, so that RHS stays positive for linear solvers (cg)
         rhs = vorticity;
 
-        // Apply boundary conditions to Poisson RHS:
-        //   Dirichlet nodes: rhs = ψ_prescribed (0 for cavity, ∫u dy for inlet)
+        // Apply boundary conditions to Poisson RHS (Neumann first, then
+        // Dirichlet, so Dirichlet wins at shared corner nodes):
         //   Neumann nodes:   rhs = 0 (∂ψ/∂n = 0, natural outflow)
-        for (int idx : dirichlet_psi_nodes) {
-            rhs[idx] = psi_bc[idx];
-        }
+        //   Dirichlet nodes: rhs = ψ_prescribed (0 for cavity, ∫u dy for inlet)
         for (const auto& [idx, axis] : neumann_psi_info) {
             rhs[idx] = 0.0;
+        }
+        for (int idx : dirichlet_psi_nodes) {
+            rhs[idx] = psi_bc[idx];
         }
 
         linear_solver->Mult(rhs, streamfunction);

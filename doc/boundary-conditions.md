@@ -146,13 +146,7 @@ laplacian_matrix = new SparseMatrix(dxx_matrix);
 laplacian_matrix->Add(1.0, dyy_matrix);
 *laplacian_matrix *= -1.0;
 
-// Dirichlet rows: replace with identity
-for (int idx : dirichlet_psi_nodes) {
-    laplacian_matrix->EliminateRow(idx);
-    laplacian_matrix->Set(idx, idx, 1.0);
-}
-
-// Neumann rows: replace with normal derivative operator
+// STEP 1: Neumann rows first — replace with normal derivative operator
 for (auto& [idx, axis] : neumann_psi_info) {
     laplacian_matrix->EliminateRow(idx);
     // Copy derivative operator row
@@ -160,31 +154,57 @@ for (auto& [idx, axis] : neumann_psi_info) {
     for (int j = 0; j < cols.Size(); ++j)
         laplacian_matrix->Set(idx, cols[j], vals(j));
 }
+
+// STEP 2: Dirichlet rows — replace with identity
+for (int idx : dirichlet_psi_nodes) {
+    laplacian_matrix->EliminateRow(idx);
+    laplacian_matrix->Set(idx, idx, 1.0);
+}
 ```
+
+Neumann rows are processed first so that Dirichlet wins at shared corner
+nodes (where two boundary attributes share a vertex). The RHS is set
+in the same order: Neumann nodes to 0 first, then Dirichlet nodes to
+ψ_prescribed.
 
 ### Corner Node Handling
 
 MFEM assigns boundary attributes to boundary *elements* (edges in 2D),
 not vertices. At corners, two edges with different attributes share a
-vertex, so corner nodes appear in multiple attribute lists. The last
-BC processed wins at these shared nodes — this is standard FEM practice.
+vertex, so corner nodes appear in multiple attribute lists.
+
+Both the matrix and the RHS are processed Neumann-first, Dirichlet-second,
+so Dirichlet always wins at shared corners. This ensures wall-outlet corner
+nodes get the wall's ψ value rather than the Neumann condition.
 
 For the cavity, all corners are no-slip regardless of order. For
-channels, corner nodes between inlet and walls get the wall's ψ value
+channels, corner nodes between outlet and walls get the wall's ψ value
 (propagated from the inlet integration endpoint).
 
-### Parallel Limitations
+### Parallel Implementation Notes
 
-1. **Neumann BCs not implemented** — `HypreParMatrix` does not support
-   arbitrary row replacement. Pressure/outflow outlets fall back to
-   Dirichlet ψ = 0. This causes instability for open-domain problems
-   (channels). See issue #24.
+1. **Neumann row replacement** — `HypreParMatrix` does not have a direct
+   `SetRow` method, but its internal CSR blocks are accessible via
+   `GetDiag(SparseMatrix&)` and `GetOffd(SparseMatrix&, HYPRE_BigInt*&)`.
+   These return non-owning views that write through to the underlying
+   HYPRE data. Neumann rows are first zeroed with `EliminateRows()`,
+   then replaced with derivative operator entries via `SetRow` on the
+   diagonal and off-diagonal block views. All DCPSE matrices share
+   identical sparsity, so `SetRow` always matches `GetRow` column count.
 
-2. **Wall ψ constants** — computed on the serial mesh before partitioning
+2. **Dirichlet elimination** — after Neumann row replacement, Dirichlet
+   DOFs are eliminated via `OperatorHandle::EliminateRowsCols`, which
+   calls `HypreParMatrix::EliminateRowsCols` internally. This works
+   correctly for non-symmetric DCPSE matrices (unlike the serial
+   `SparseMatrix` version, which assumes symmetric sparsity). The
+   eliminated column entries are stored in a separate matrix and used
+   each timestep by `EliminateBC` to correct the RHS.
+
+3. **Wall ψ constants** — computed on the serial mesh before partitioning
    using MFEM boundary element connectivity. This avoids the problem
    of corner vertices being on different ranks.
 
-3. **Per-node ψ integration** — each rank computes ψ at its own inlet
+4. **Per-node ψ integration** — each rank computes ψ at its own inlet
    nodes independently using Simpson's rule. No MPI communication needed.
 
 ### Simply Connected Domains Only
