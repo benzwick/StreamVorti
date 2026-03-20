@@ -30,7 +30,7 @@ class FiniteDiff2dTest : public ::testing::Test {
 protected:
     void SetUp() override {
         mesh = new mfem::Mesh(
-            mfem::Mesh::MakeCartesian2D(10, 10,
+            mfem::Mesh::MakeCartesian2D(20, 20,
                 mfem::Element::QUADRILATERAL, false, 1.0, 1.0, false));
         fec = new mfem::H1_FECollection(1, 2);
         fes = new mfem::FiniteElementSpace(mesh, fec, 1);
@@ -215,12 +215,12 @@ TEST_F(FiniteDiff2dTest, LaplacianOfSinusoidal) {
 
     for (int i = 0; i < fes->GetNDofs(); ++i) {
         const double *vtx = mesh->GetVertex(i);
-        bool interior = (vtx[0] > 0.15 && vtx[0] < 0.85 &&
-                        vtx[1] > 0.15 && vtx[1] < 0.85);
+        bool interior = (vtx[0] > 0.1 && vtx[0] < 0.9 &&
+                        vtx[1] > 0.1 && vtx[1] < 0.9);
         if (interior) {
             double expected = -2.0 * pi * pi * std::sin(pi * vtx[0]) * std::sin(pi * vtx[1]);
             double computed = dxx(i) + dyy(i);
-            EXPECT_NEAR(computed, expected, 0.15);
+            EXPECT_NEAR(computed, expected, 0.05);
         }
     }
 }
