@@ -225,6 +225,195 @@ TEST_F(FiniteDiff2dTest, LaplacianOfSinusoidal) {
     }
 }
 
+// Helper: build a map from (ix, iy) grid indices to MFEM node index
+static std::map<std::pair<int,int>, int> BuildGridMap(mfem::Mesh *m, int nx, int ny, double h) {
+    std::map<std::pair<int,int>, int> g;
+    for (int i = 0; i < m->GetNV(); ++i) {
+        const double *v = m->GetVertex(i);
+        int ix = static_cast<int>(std::round(v[0] / h));
+        int iy = static_cast<int>(std::round(v[1] / h));
+        g[{ix, iy}] = i;
+    }
+    return g;
+}
+
+// Helper: get matrix value at (row, col)
+static double MatVal(const mfem::SparseMatrix &M, int row, int col) {
+    mfem::Array<int> cols;
+    mfem::Vector vals;
+    M.GetRow(row, cols, vals);
+    for (int j = 0; j < cols.Size(); ++j)
+        if (cols[j] == col) return vals(j);
+    return 0.0;
+}
+
+// Verify all six derivative matrices at an interior node.
+// 2nd-order central stencils on h=0.05 grid:
+//   dx:  (-1, 0, +1) / 2h  along x-neighbors
+//   dy:  (-1, 0, +1) / 2h  along y-neighbors
+//   dxx: (1, -2, 1) / h²   along x-neighbors
+//   dyy: (1, -2, 1) / h²   along y-neighbors
+//   dxy: (1, -1, -1, 1) / 4h²  at diagonal neighbors
+TEST_F(FiniteDiff2dTest, InteriorStencilCoefficients) {
+    StreamVorti::FiniteDiff2d fd(*gf);
+    fd.Update();
+
+    double h = 0.05;
+    int nx = 21, ny = 21;
+    auto g = BuildGridMap(mesh, nx, ny, h);
+    int ix0 = 10, iy0 = 10; // center of grid
+    int n  = g[{ix0, iy0}];
+    int xm = g[{ix0-1, iy0}], xp = g[{ix0+1, iy0}];
+    int ym = g[{ix0, iy0-1}], yp = g[{ix0, iy0+1}];
+    int pp = g[{ix0+1, iy0+1}], pm = g[{ix0+1, iy0-1}];
+    int mp = g[{ix0-1, iy0+1}], mm = g[{ix0-1, iy0-1}];
+
+    // dx: central (-1, 0, +1) / 2h
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), n, xm), -1.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), n, n),   0.0,          1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), n, xp),  1.0 / (2*h), 1e-10);
+    // dx must NOT have entries in y-direction
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), n, ym),  0.0, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), n, yp),  0.0, 1e-10);
+
+    // dy: central (-1, 0, +1) / 2h along y-neighbors
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), n, ym), -1.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), n, n),   0.0,          1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), n, yp),  1.0 / (2*h), 1e-10);
+    // dy must NOT have entries in x-direction
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), n, xm),  0.0, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), n, xp),  0.0, 1e-10);
+
+    double h2 = h * h;
+    // dxx: central (1, -2, 1) / h² along x-neighbors
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n, xm),  1.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n, n),  -2.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n, xp),  1.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n, ym),  0.0,      1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n, yp),  0.0,      1e-10);
+
+    // dyy: central (1, -2, 1) / h² along y-neighbors
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n, ym),  1.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n, n),  -2.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n, yp),  1.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n, xm),  0.0,      1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n, xp),  0.0,      1e-10);
+
+    // dxy: (1, -1, -1, 1) / (4h²) at diagonal neighbors
+    double s = 1.0 / (4.0 * h2);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxy(), n, pp),  s, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxy(), n, pm), -s, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxy(), n, mp), -s, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxy(), n, mm),  s, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxy(), n, n),  0.0, 1e-10);
+}
+
+// Verify one-sided stencils at boundary: forward at (0,0), backward at (1,1)
+TEST_F(FiniteDiff2dTest, BoundaryStencilCoefficients) {
+    StreamVorti::FiniteDiff2d fd(*gf);
+    fd.Update();
+
+    double h = 0.05;
+    int nx = 21, ny = 21;
+    auto g = BuildGridMap(mesh, nx, ny, h);
+
+    // --- Forward stencils at (0, 0) ---
+    int n0 = g[{0, 0}];
+    int n1x = g[{1, 0}], n2x = g[{2, 0}], n3x = g[{3, 0}];
+    int n1y = g[{0, 1}], n2y = g[{0, 2}], n3y = g[{0, 3}];
+
+    // dx forward: (-3, 4, -1) / 2h
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), n0, n0),  -3.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), n0, n1x),  4.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), n0, n2x), -1.0 / (2*h), 1e-10);
+
+    // dy forward: (-3, 4, -1) / 2h along y
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), n0, n0),  -3.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), n0, n1y),  4.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), n0, n2y), -1.0 / (2*h), 1e-10);
+
+    double h2 = h * h;
+    // dxx forward: (2, -5, 4, -1) / h²
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n0, n0),   2.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n0, n1x), -5.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n0, n2x),  4.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), n0, n3x), -1.0 / h2, 1e-10);
+
+    // dyy forward: (2, -5, 4, -1) / h² along y
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n0, n0),   2.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n0, n1y), -5.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n0, n2y),  4.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), n0, n3y), -1.0 / h2, 1e-10);
+
+    // --- Backward stencils at (nx-1, ny-1) ---
+    int nN = g[{nx-1, ny-1}];
+    int nBx1 = g[{nx-2, ny-1}], nBx2 = g[{nx-3, ny-1}];
+    int nBy1 = g[{nx-1, ny-2}], nBy2 = g[{nx-1, ny-3}];
+
+    // dx backward: (3, -4, 1) / 2h
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), nN, nN),    3.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), nN, nBx1), -4.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDx(), nN, nBx2),  1.0 / (2*h), 1e-10);
+
+    // dy backward: (3, -4, 1) / 2h along y
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), nN, nN),    3.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), nN, nBy1), -4.0 / (2*h), 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDy(), nN, nBy2),  1.0 / (2*h), 1e-10);
+
+    // dxx backward: (2, -5, 4, -1) / h²
+    int nBx3 = g[{nx-4, ny-1}];
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), nN, nN),    2.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), nN, nBx1), -5.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), nN, nBx2),  4.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDxx(), nN, nBx3), -1.0 / h2, 1e-10);
+
+    // dyy backward: (2, -5, 4, -1) / h² along y
+    int nBy3 = g[{nx-1, ny-4}];
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), nN, nN),    2.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), nN, nBy1), -5.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), nN, nBy2),  4.0 / h2, 1e-10);
+    EXPECT_NEAR(MatVal(fd.ShapeFunctionDyy(), nN, nBy3), -1.0 / h2, 1e-10);
+}
+
+// Verify the combined Laplacian -(dxx + dyy) has the correct 5-point stencil.
+// This catches the sparsity-dropping bug where SparseMatrix::Add silently
+// ignores new column entries from the second matrix.
+TEST_F(FiniteDiff2dTest, LaplacianSparsityAndCoefficients) {
+    StreamVorti::FiniteDiff2d fd(*gf);
+    fd.Update();
+
+    double h = 0.05;
+    double h2 = h * h;
+    int nx = 21, ny = 21;
+    auto g = BuildGridMap(mesh, nx, ny, h);
+
+    mfem::SparseMatrix *laplacian = mfem::Add(
+        -1.0, fd.ShapeFunctionDxx(), -1.0, fd.ShapeFunctionDyy());
+
+    // Check ALL interior nodes
+    for (int ix = 1; ix < nx - 1; ++ix) {
+        for (int iy = 1; iy < ny - 1; ++iy) {
+            int n  = g[{ix, iy}];
+            int xm = g[{ix-1, iy}], xp = g[{ix+1, iy}];
+            int ym = g[{ix, iy-1}], yp = g[{ix, iy+1}];
+
+            mfem::Array<int> cols;
+            mfem::Vector vals;
+            laplacian->GetRow(n, cols, vals);
+            EXPECT_EQ(cols.Size(), 5)
+                << "Interior node (" << ix << "," << iy << ") should have 5 entries";
+
+            // 5-point stencil: diag=4/h², off-diag=-1/h²
+            EXPECT_NEAR(MatVal(*laplacian, n, n),   4.0 / h2, 1e-10);
+            EXPECT_NEAR(MatVal(*laplacian, n, xm), -1.0 / h2, 1e-10);
+            EXPECT_NEAR(MatVal(*laplacian, n, xp), -1.0 / h2, 1e-10);
+            EXPECT_NEAR(MatVal(*laplacian, n, ym), -1.0 / h2, 1e-10);
+            EXPECT_NEAR(MatVal(*laplacian, n, yp), -1.0 / h2, 1e-10);
+        }
+    }
+    delete laplacian;
+}
+
 // =====================================================================
 // 2D Tests — Order 4
 // =====================================================================
