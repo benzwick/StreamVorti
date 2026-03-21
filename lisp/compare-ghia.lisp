@@ -215,6 +215,10 @@ Returns (VALUES data source-name) or (VALUES NIL NIL)."
     (ensure-directories-exist png-path)
     ;; Use dumb terminal for headless environments (CI)
     (vg 'format-plot nil "set terminal dumb")
+    ;; Set axis range before plotting to avoid vgplot parse-axis crash
+    ;; (dumb terminal ASCII art pollutes gnuplot's response buffer)
+    (vg 'format-plot nil "set xrange [-0.5:1.1]")
+    (vg 'format-plot nil "set yrange [0:1]")
     ;; Extract data as vectors
     (let ((ref-u (list-to-vector (mapcar #'cdr reference)))
           (ref-y (list-to-vector (mapcar #'car reference)))
@@ -227,7 +231,6 @@ Returns (VALUES data source-name) or (VALUES NIL NIL)."
       (vg 'title (format nil "Lid-Driven Cavity: u-velocity at x=0.5 (Re=~A)" reynolds))
       (vg 'xlabel "u-velocity")
       (vg 'ylabel "y")
-      (vg 'axis '(-0.5 1.1 0 1))
       (vg 'legend :northeast)
       ;; Save to file
       (vg 'print-plot (pathname png-path))
