@@ -38,7 +38,7 @@
   ;; Time integration
   (temporal :explicit-euler
     :dt 0.001
-    :end 60.0
+    :end 10.0
     :tolerance 1e-6)
 
   ;; Line probes for Ghia validation
