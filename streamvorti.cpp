@@ -681,9 +681,9 @@ int main(int argc, char *argv[])
     // LAPLACIAN MATRIX ASSEMBLY
     // ================================================================
     // Assemble -∇²ψ = ω system with mixed Dirichlet/Neumann BCs.
-    mfem::SparseMatrix* laplacian_matrix = new mfem::SparseMatrix(dxx_matrix);
-    laplacian_matrix->Add(1.0, dyy_matrix);
-    *laplacian_matrix *= -1.0;
+    // Use mfem::Add to merge sparsity patterns correctly — SparseMatrix::Add
+    // only updates existing entries and silently drops new columns from B.
+    mfem::SparseMatrix* laplacian_matrix = mfem::Add(-1.0, dxx_matrix, -1.0, dyy_matrix);
 
     // STEP 1: Replace Neumann rows with normal derivative operator (∂ψ/∂n = 0)
     // For outlet at x=const: row ← dx_matrix row (enforces ∂ψ/∂x = 0)
