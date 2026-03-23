@@ -240,6 +240,29 @@
       ((and (keywordp (car args)) (eq (car args) :file))
        `(setf (sim-domain ,sim-var)
               (%make-domain :type :file :file ,(second args))))
+      ;; Gmsh domain: (domain :gmsh body...)
+      ;; Wraps body in gmsh initialize/finalize and model add, writes temp
+      ;; .msh file, and creates a :file domain-data.
+      ;; Uses INTERN to resolve gmsh symbols at runtime, avoiding reader
+      ;; errors when the GMSH package is not loaded (STREAMVORTI_WITH_GMSH=OFF).
+      ((and (keywordp (car args)) (eq (car args) :gmsh))
+       (let ((body (cdr args)))
+         `(setf (sim-domain ,sim-var)
+                (let ((path (format nil "/tmp/streamvorti-~A.msh"
+                                   (get-universal-time))))
+                  (unless (find-package "GMSH")
+                    (error "Gmsh support not available. ~
+                            Rebuild with -DSTREAMVORTI_WITH_GMSH=ON"))
+                  (flet ((gmsh-fn (name &optional (pkg "GMSH"))
+                           (symbol-function (intern name pkg))))
+                    (funcall (gmsh-fn "INITIALIZE"))
+                    (unwind-protect
+                        (progn
+                          (funcall (gmsh-fn "ADD") "streamvorti")
+                          ,@body
+                          (funcall (gmsh-fn "WRITE") path))
+                      (funcall (gmsh-fn "FINALIZE"))))
+                  (%make-domain :type :file :file path)))))
       ;; Geometry domain: (domain geom-expr type &rest kwargs)
       (t
        (let* ((geom-form (car args))

@@ -522,6 +522,43 @@
     (check-not-null (sdl:simulation-coupling sim) "Coupling defined")))
 
 ;;; ============================================================
+;;; Tests for Gmsh Domain (macro-level, no gmsh-cl needed)
+;;; ============================================================
+
+(define-test test-domain-gmsh-macro-expansion
+  "Test that (domain :gmsh ...) compiles in the simulation macro."
+  ;; Test the compile-sim-domain function directly with :gmsh keyword.
+  ;; Body forms are arbitrary — we only check that the macro recognizes :gmsh
+  ;; and produces code that calls gmsh initialize/finalize via INTERN.
+  (let ((form '(domain :gmsh
+                 (some-gmsh-call 1 2 3)
+                 (another-call :dim 2))))
+    (let ((expansion (sdl::compile-sim-domain 'sim form)))
+      (check-not-null expansion "Gmsh domain compiles")
+      (let ((exp-str (format nil "~S" expansion)))
+        ;; Should use INTERN to resolve gmsh symbols at runtime
+        (check (search "INITIALIZE" exp-str)
+               "Expansion calls gmsh initialize")
+        (check (search "FINALIZE" exp-str)
+               "Expansion calls gmsh finalize")
+        (check (search "FIND-PACKAGE" exp-str)
+               "Expansion checks for GMSH package")))))
+
+(define-test test-domain-gmsh-creates-file-domain
+  "Test that gmsh domain creates a :file type domain-data."
+  ;; The macro expansion should produce code that creates a domain-data
+  ;; with :type :file and a generated .msh file path.
+  (let ((form '(domain :gmsh (dummy-call))))
+    (let ((expansion (sdl::compile-sim-domain 'sim form)))
+      (let ((exp-str (format nil "~S" expansion)))
+        (check (search "MAKE-DOMAIN" exp-str)
+               "Expansion creates domain-data")
+        (check (search ":FILE" exp-str)
+               "Domain type is :file")
+        (check (search ".msh" exp-str)
+               "Expansion references .msh file")))))
+
+;;; ============================================================
 ;;; Run All Tests
 ;;; ============================================================
 
@@ -593,6 +630,11 @@
   (format t "~%--- Coupling ---~%")
   (test-coupling-sequential)
   (test-coupling-monolithic)
+
+  ;; Gmsh domain tests (macro-level, no gmsh-cl needed)
+  (format t "~%--- Gmsh Domain ---~%")
+  (test-domain-gmsh-macro-expansion)
+  (test-domain-gmsh-creates-file-domain)
 
   ;; Complete simulation tests
   (format t "~%--- Complete Simulations ---~%")

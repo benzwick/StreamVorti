@@ -19,14 +19,25 @@
   #+sbcl (setf *default-pathname-defaults* (pathname project-path))
   #+ecl (ext:chdir project-path))
 
-;;; Load the validation module
+;;; Load the validation module and tests
 (load (merge-pathnames "lisp/compare-ghia.lisp" *project-dir*))
-
-;;; Load the test suite
 (load (merge-pathnames "lisp/test-compare-ghia.lisp" *project-dir*))
 
+;;; Load SDL packages (needed for test-sdl.lisp)
+(load (merge-pathnames "lisp/packages.lisp" *project-dir*))
+(load (merge-pathnames "lisp/geometry.lisp" *project-dir*))
+(load (merge-pathnames "lisp/mesh.lisp" *project-dir*))
+(load (merge-pathnames "lisp/boundaries.lisp" *project-dir*))
+(load (merge-pathnames "lisp/sdl-macros.lisp" *project-dir*))
+(load (merge-pathnames "lisp/simulation.lisp" *project-dir*))
+(load (merge-pathnames "lisp/cpp-bridge.lisp" *project-dir*))
+
+;;; Load SDL test suite
+(load (merge-pathnames "lisp/test-sdl.lisp" *project-dir*))
+
 ;;; Exit with appropriate code
-(let ((fail-count streamvorti.validation.tests::*fail-count*))
-  #+sbcl (sb-ext:exit :code (if (zerop fail-count) 0 1))
-  #+ecl (ext:quit (if (zerop fail-count) 0 1))
+(let ((total-fails (+ streamvorti.validation.tests::*fail-count*
+                      streamvorti.sdl.tests::*fail-count*)))
+  #+sbcl (sb-ext:exit :code (if (zerop total-fails) 0 1))
+  #+ecl (ext:quit (if (zerop total-fails) 0 1))
   #-(or sbcl ecl) (quit))
