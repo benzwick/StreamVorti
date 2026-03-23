@@ -1335,8 +1335,10 @@ int main(int argc, char *argv[])
                 steady_prev_vorticity = vorticity;
                 steady_prev_streamfunction = streamfunction;
                 steady_initialized = true;
-                std::cout << "Steady state monitoring started at timestep "
-                        << time_step << std::endl;
+                if (myid == 0) {
+                    std::cout << "Steady state monitoring started at timestep "
+                              << time_step << std::endl;
+                }
             } else {
                 // Compute relative changes since last check
                 mfem::Vector diff_vort(num_nodes);
@@ -1348,56 +1350,62 @@ int main(int argc, char *argv[])
                 diff_stream = streamfunction;
                 diff_stream -= steady_prev_streamfunction;
 
-                // Compute relative changes with proper threshold check
-                double vort_norm = vorticity.Norml2();
-                double stream_norm = streamfunction.Norml2();
+                // Global L2 norms via MFEM's parallel norm
                 const double norm_threshold = 1e-12;
+                double vort_norm = mfem::ParNormlp(vorticity, 2.0, MPI_COMM_WORLD);
+                double stream_norm = mfem::ParNormlp(streamfunction, 2.0, MPI_COMM_WORLD);
+                double diff_vort_norm = mfem::ParNormlp(diff_vort, 2.0, MPI_COMM_WORLD);
+                double diff_stream_norm = mfem::ParNormlp(diff_stream, 2.0, MPI_COMM_WORLD);
 
                 double vort_change = (vort_norm > norm_threshold) ?
-                                     diff_vort.Norml2() / vort_norm :
-                                     diff_vort.Norml2();
+                                     diff_vort_norm / vort_norm : diff_vort_norm;
                 double stream_change = (stream_norm > norm_threshold) ?
-                                       diff_stream.Norml2() / stream_norm :
-                                       diff_stream.Norml2();
+                                       diff_stream_norm / stream_norm : diff_stream_norm;
                 double max_change = std::max(vort_change, stream_change);
 
-                // Report progress
-                std::cout << "Step " << time_step << " (t=" << std::fixed
-                        << std::setprecision(6) << current_time
-                        << "): Temporal ‖Δ‖/‖·‖ = " << std::scientific << max_change;
+                if (myid == 0) {
+                    // Report progress
+                    std::cout << "Step " << time_step << " (t=" << std::fixed
+                              << std::setprecision(6) << current_time
+                              << "): Temporal ‖Δ‖/‖·‖ = " << std::scientific << max_change;
 
-                // Show current residuals if available
-                if (params.check_residuals && !residual_history.timesteps.empty()) {
-                    size_t last_idx = residual_history.timesteps.size() - 1;
-                    std::cout << " [ω_RMS=" << residual_history.vorticity_rms[last_idx]
-                            << ", ψ_RMS=" << residual_history.streamfunction_rms[last_idx] << "]";
+                    // Show current residuals if available
+                    if (params.check_residuals && !residual_history.timesteps.empty()) {
+                        size_t last_idx = residual_history.timesteps.size() - 1;
+                        std::cout << " [ω_RMS=" << residual_history.vorticity_rms[last_idx]
+                                  << ", ψ_RMS=" << residual_history.streamfunction_rms[last_idx] << "]";
+                    }
                 }
 
-                // Check convergence
+                // Check convergence (all ranks must agree)
                 if (max_change < params.steady_state_tol) {
                     steady_consecutive_passes++;
-                    std::cout << " ✓ [" << steady_consecutive_passes << "/"
-                            << params.steady_state_checks << "]" << std::endl;
+                    if (myid == 0) {
+                        std::cout << " ✓ [" << steady_consecutive_passes << "/"
+                                  << params.steady_state_checks << "]" << std::endl;
+                    }
 
                     if (steady_consecutive_passes >= params.steady_state_checks) {
-                        std::cout << "\n" << std::string(70, '=') << "\n";
-                        std::cout << "STEADY STATE REACHED\n";
-                        std::cout << "Time: " << GetCurrentDateTime() << "\n";
-                        std::cout << std::string(70, '=') << std::endl;
-                        std::cout << "Final relative change: " << max_change << std::endl;
-                        std::cout << "Convergence tolerance: " << params.steady_state_tol << std::endl;
-                        std::cout << "Total timesteps: " << time_step << std::endl;
-                        std::cout << "Physical time: " << current_time << std::endl;
+                        if (myid == 0) {
+                            std::cout << "\n" << std::string(70, '=') << "\n";
+                            std::cout << "STEADY STATE REACHED\n";
+                            std::cout << "Time: " << GetCurrentDateTime() << "\n";
+                            std::cout << std::string(70, '=') << std::endl;
+                            std::cout << "Final relative change: " << max_change << std::endl;
+                            std::cout << "Convergence tolerance: " << params.steady_state_tol << std::endl;
+                            std::cout << "Total timesteps: " << time_step << std::endl;
+                            std::cout << "Physical time: " << current_time << std::endl;
 
-                        if (params.check_residuals && !residual_history.timesteps.empty()) {
-                            size_t last_idx = residual_history.timesteps.size() - 1;
-                            std::cout << "Final vorticity residual: "
-                                    << residual_history.vorticity_rms[last_idx] << std::endl;
-                            std::cout << "Final streamfunction residual: "
-                                    << residual_history.streamfunction_rms[last_idx] << std::endl;
+                            if (params.check_residuals && !residual_history.timesteps.empty()) {
+                                size_t last_idx = residual_history.timesteps.size() - 1;
+                                std::cout << "Final vorticity residual: "
+                                          << residual_history.vorticity_rms[last_idx] << std::endl;
+                                std::cout << "Final streamfunction residual: "
+                                          << residual_history.streamfunction_rms[last_idx] << std::endl;
+                            }
+
+                            std::cout << std::string(70, '=') << "\n" << std::endl;
                         }
-
-                        std::cout << std::string(70, '=') << "\n" << std::endl;
 
                         // Save final solution before breaking
                         if (save_solutions) {
@@ -1412,7 +1420,9 @@ int main(int argc, char *argv[])
                         break;  // Exit time-stepping loop
                     }
                 } else {
-                    std::cout << " (not converged)" << std::endl;
+                    if (myid == 0) {
+                        std::cout << " (not converged)" << std::endl;
+                    }
                     steady_consecutive_passes = 0; // Reset counter
                 }
 
