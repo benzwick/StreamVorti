@@ -1,0 +1,125 @@
+# GitHub Actions workflow for building StreamVorti with MFEM 4.9
+#
+# This workflow builds StreamVorti against MFEM 4.9 to verify forward
+# compatibility. Coverage reporting is handled by build-from-source.yml
+# (MFEM 4.8) and is not duplicated here.
+#
+# WHAT IS CACHED:
+# - HYPRE: Built library in install directory
+# - METIS: Built library files
+# - MFEM: Complete installation in /opt/mfem/
+# - ccache: Compiler cache (via hendrikmuhs/ccache-action)
+#
+# TRIGGERS:
+# - Manual workflow_dispatch
+# - Push to main branch
+# - Pull requests to main branch
+
+name: Build StreamVorti (MFEM 4.9)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  HYPRE_URL: 'https://github.com/hypre-space/hypre/archive'
+  HYPRE_ARCHIVE: v2.19.0
+  HYPRE_TOP_DIR: hypre-2.19.0
+  METIS_URL: 'https://mfem.github.io/tpls'
+  METIS_ARCHIVE: metis-4.0.3.tar.gz
+  METIS_TOP_DIR: metis-4.0.3
+  MFEM_TOP_DIR: mfem-4.9
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-latest]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: ./scripts/build-from-source/01-install-system-dependencies.sh
+
+    - name: Setup ccache and create Eigen symlinks
+      run: ./scripts/build-from-source/02-setup-ccache.sh
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ matrix.os }}-mfem49-build-ccache
+        max-size: "2G"
+        verbose: 2
+
+    # Build HYPRE (required for parallel MFEM)
+    - name: Cache HYPRE build
+      id: cache-hypre
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ env.HYPRE_TOP_DIR }}/install
+        key: ${{ env.HYPRE_TOP_DIR }}-${{ matrix.os }}
+
+    - name: Build HYPRE
+      if: steps.cache-hypre.outputs.cache-hit != 'true'
+      run: ./scripts/build-from-source/03-build-hypre.sh "${{ env.HYPRE_URL }}" "${{ env.HYPRE_ARCHIVE }}" "${{ env.HYPRE_TOP_DIR }}"
+
+    # Build METIS (optional but recommended for MFEM)
+    - name: Cache METIS build
+      id: cache-metis
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ env.METIS_TOP_DIR }}/libmetis.a
+          ${{ env.METIS_TOP_DIR }}/Lib
+        key: ${{ env.METIS_TOP_DIR }}-${{ matrix.os }}
+
+    - name: Build METIS
+      if: steps.cache-metis.outputs.cache-hit != 'true'
+      run: ./scripts/build-from-source/04-build-metis.sh "${{ env.METIS_URL }}" "${{ env.METIS_ARCHIVE }}" "${{ env.METIS_TOP_DIR }}"
+
+    # Build MFEM 4.9 with all dependencies
+    - name: Cache MFEM build
+      id: cache-mfem
+      uses: actions/cache@v3
+      with:
+        path: /opt/mfem/${{ env.MFEM_TOP_DIR }}
+        key: ${{ env.MFEM_TOP_DIR }}-hypre-metis-${{ matrix.os }}
+
+    - name: Build and install MFEM 4.9
+      if: steps.cache-mfem.outputs.cache-hit != 'true'
+      run: ./scripts/build-from-source/05-build-mfem.sh "${{ env.MFEM_TOP_DIR }}" "${{ env.HYPRE_TOP_DIR }}" "${{ env.METIS_TOP_DIR }}" "/opt/mfem/${{ env.MFEM_TOP_DIR }}"
+
+    - name: Install Google Test
+      run: ./scripts/build-from-source/11-install-gtest.sh
+
+    - name: Build StreamVorti
+      run: ./scripts/build-from-source/06-build-streamvorti.sh "/opt/mfem/${{ env.MFEM_TOP_DIR }}" "Release"
+
+    - name: Display ccache statistics
+      run: |
+        ccache -s
+        echo "Cache hit rate information:"
+        ccache --show-stats
+
+    - name: Run unit tests
+      run: ./scripts/build-from-source/07-run-ctest.sh build
+
+    - name: Check built artifacts
+      run: ./scripts/build-from-source/08-check-built-artifacts.sh build
+
+    - name: Upload StreamVorti binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: streamvorti-mfem49-binaries-${{ matrix.os }}
+        path: |
+          build/StreamVorti
+          build/StreamVorti_par
+          build/MfemRun
+        retention-days: 7
