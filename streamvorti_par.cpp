@@ -936,6 +936,12 @@ int main(int argc, char *argv[])
     mfem::ParGridFunction streamfunction_gf(&scalar_fes);
     mfem::ParGridFunction velocity_gf(&vector_fes);
 
+    // MPI rank field for visualization of domain decomposition
+    mfem::L2_FECollection rank_fec(0, dim);
+    mfem::ParFiniteElementSpace rank_fes(mesh, &rank_fec);
+    mfem::ParGridFunction rank_gf(&rank_fes);
+    rank_gf = static_cast<double>(myid);
+
     // Create ParaView data collection
     mfem::ParaViewDataCollection paraview_dc(paraview_filename, mesh);
     if (paraview_output) {
@@ -949,6 +955,7 @@ int main(int argc, char *argv[])
         paraview_dc.RegisterField("Vorticity", &vorticity_gf);
         paraview_dc.RegisterField("StreamFunction", &streamfunction_gf);
         paraview_dc.RegisterField("Velocity", &velocity_gf);
+        paraview_dc.RegisterField("MPI_Rank", &rank_gf);
         // Set time and cycle, then save
         paraview_dc.SetCycle(0);
         paraview_dc.SetTime(0.0);
