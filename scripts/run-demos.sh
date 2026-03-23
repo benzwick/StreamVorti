@@ -64,7 +64,7 @@ for entry in "${DEMOS[@]}"; do
     echo "========================================"
 
     LOG="$REPO_ROOT/results/${demo}.log"
-    if (cd "$REPO_ROOT/results" && "$BINARY" -f "$DEMO_FILE" -lp "$REPO_ROOT/lisp" -pv) > "$LOG" 2>&1; then
+    if (cd "$REPO_ROOT" && "$BINARY" -f "$DEMO_FILE" -lp "$REPO_ROOT/lisp" -pv) > "$LOG" 2>&1; then
         if [ -n "$expect_fail" ]; then
             echo "XPASS: $demo (expected to fail but passed!)"
             XPASSED=$((XPASSED + 1))
