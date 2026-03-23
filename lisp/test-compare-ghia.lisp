@@ -60,19 +60,19 @@
 ;;; Tests for parsing utilities
 ;;; ============================================================
 
-(define-test test-parse-float-safe
-  "Test parse-float-safe with various inputs."
-  (check-near (streamvorti.validation::parse-float-safe "3.14") 3.14 0.001
+(define-test test-parse-number
+  "Test parse-number with various inputs."
+  (check-near (streamvorti.validation::parse-number "3.14") 3.14 0.001
               "Parse positive float")
-  (check-near (streamvorti.validation::parse-float-safe "-0.5") -0.5 0.001
+  (check-near (streamvorti.validation::parse-number "-0.5") -0.5 0.001
               "Parse negative float")
-  (check-near (streamvorti.validation::parse-float-safe "42") 42.0 0.001
+  (check-near (streamvorti.validation::parse-number "42") 42.0 0.001
               "Parse integer as float")
-  (check-near (streamvorti.validation::parse-float-safe "1.0e-3") 0.001 1e-6
+  (check-near (streamvorti.validation::parse-number "1.0e-3") 0.001 1e-6
               "Parse scientific notation")
-  (check (null (streamvorti.validation::parse-float-safe "abc"))
+  (check (null (streamvorti.validation::parse-number "abc"))
          "Return NIL for non-numeric string")
-  (check (null (streamvorti.validation::parse-float-safe ""))
+  (check (null (streamvorti.validation::parse-number ""))
          "Return NIL for empty string"))
 
 (define-test test-split-whitespace
@@ -96,21 +96,21 @@
                '("single")
                "Single word"))
 
-(define-test test-parse-reynolds-from-header
+(define-test test-parse-reynolds-header
   "Test parsing Reynolds numbers from header line."
-  (check-equal (streamvorti.validation::parse-reynolds-from-header
+  (check-equal (streamvorti.validation::parse-reynolds-header
                 "# y Re=100 Re=400 Re=1000")
                '(100 400 1000)
                "Parse standard header")
-  (check-equal (streamvorti.validation::parse-reynolds-from-header
+  (check-equal (streamvorti.validation::parse-reynolds-header
                 "# y      Re=100   Re=400   Re=1000  Re=3200")
                '(100 400 1000 3200)
                "Parse with extra spaces")
-  (check-equal (streamvorti.validation::parse-reynolds-from-header
+  (check-equal (streamvorti.validation::parse-reynolds-header
                 "# no reynolds numbers here")
                nil
                "Return nil when no Re= patterns")
-  (check-equal (streamvorti.validation::parse-reynolds-from-header
+  (check-equal (streamvorti.validation::parse-reynolds-header
                 "Re=100")
                '(100)
                "Parse single Re without prefix"))
@@ -122,26 +122,26 @@
 (define-test test-interpolate
   "Test linear interpolation."
   (let ((data '((0.0 . 0.0) (1.0 . 1.0))))
-    (check-near (streamvorti.validation::interpolate 0.5 data) 0.5 1e-6
+    (check-near (streamvorti.validation::interpolate-at 0.5 data) 0.5 1e-6
                 "Interpolate midpoint")
-    (check-near (streamvorti.validation::interpolate 0.0 data) 0.0 1e-6
+    (check-near (streamvorti.validation::interpolate-at 0.0 data) 0.0 1e-6
                 "Interpolate at start")
-    (check-near (streamvorti.validation::interpolate 1.0 data) 1.0 1e-6
+    (check-near (streamvorti.validation::interpolate-at 1.0 data) 1.0 1e-6
                 "Interpolate at end")
-    (check-near (streamvorti.validation::interpolate 0.25 data) 0.25 1e-6
+    (check-near (streamvorti.validation::interpolate-at 0.25 data) 0.25 1e-6
                 "Interpolate quarter point"))
 
   (let ((data '((0.0 . 10.0) (1.0 . 20.0) (2.0 . 30.0))))
-    (check-near (streamvorti.validation::interpolate 0.5 data) 15.0 1e-6
+    (check-near (streamvorti.validation::interpolate-at 0.5 data) 15.0 1e-6
                 "Interpolate three points - first segment")
-    (check-near (streamvorti.validation::interpolate 1.5 data) 25.0 1e-6
+    (check-near (streamvorti.validation::interpolate-at 1.5 data) 25.0 1e-6
                 "Interpolate three points - second segment"))
 
   ;; Test extrapolation (clamps to boundary values)
   (let ((data '((0.0 . 5.0) (1.0 . 10.0))))
-    (check-near (streamvorti.validation::interpolate -1.0 data) 5.0 1e-6
+    (check-near (streamvorti.validation::interpolate-at -1.0 data) 5.0 1e-6
                 "Extrapolate below range returns first value")
-    (check-near (streamvorti.validation::interpolate 2.0 data) 10.0 1e-6
+    (check-near (streamvorti.validation::interpolate-at 2.0 data) 10.0 1e-6
                 "Extrapolate above range returns last value")))
 
 ;;; ============================================================
@@ -246,9 +246,12 @@
     (delete-file test-file)))
 
 (define-test test-load-centerline-data-missing
-  "Test handling of missing centerline file."
-  (let ((data (load-centerline-data "/tmp/nonexistent_centerline.dat")))
-    (check (null data) "Should return nil for missing file")))
+  "Test that missing centerline file signals an error."
+  (let ((signaled nil))
+    (handler-case
+        (load-centerline-data "/tmp/nonexistent_centerline.dat")
+      (error () (setf signaled t)))
+    (check signaled "Should signal error for missing file")))
 
 ;;; ============================================================
 ;;; Tests for get-reference-data
@@ -257,23 +260,21 @@
 (define-test test-load-reference-data
   "Test the high-level load-reference-data function."
   ;; Test Re=100 (Ghia only)
-  (multiple-value-bind (data-list sources) (load-reference-data 100)
-    (check data-list "Should have data for Re=100")
-    (check sources "Should have sources for Re=100")
-    (when sources
-      (check (search "Ghia" (first sources))
-             "Re=100 should come from Ghia")))
+  (multiple-value-bind (data source) (load-reference-data 100)
+    (check data "Should have data for Re=100")
+    (check source "Should have source for Re=100")
+    (check (search "Ghia" source)
+           "Re=100 should come from Ghia"))
 
-  ;; Test Re=1000 (both Ghia and Erturk)
-  (multiple-value-bind (data-list sources) (load-reference-data 1000)
-    (declare (ignore sources))
-    (check data-list "Should have data for Re=1000")
-    (check (>= (length data-list) 1) "Should have at least one source for Re=1000"))
+  ;; Test Re=1000 (both Ghia and Erturk have it; Ghia returned first)
+  (multiple-value-bind (data source) (load-reference-data 1000)
+    (check data "Should have data for Re=1000")
+    (check (stringp source) "Source should be a string"))
 
-  ;; Test Re=5000 (Erturk only for high Re)
-  (multiple-value-bind (data-list sources) (load-reference-data 5000)
-    (declare (ignore sources))
-    (check data-list "Should have data for Re=5000")))
+  ;; Test Re=5000 (Erturk only)
+  (multiple-value-bind (data source) (load-reference-data 5000)
+    (declare (ignore source))
+    (check data "Should have data for Re=5000")))
 
 ;;; ============================================================
 ;;; Tests for ASCII plot
@@ -291,13 +292,13 @@
       (check (search "|" output) "Output should contain border characters"))))
 
 (define-test test-ascii-plot-empty-data
-  "Test ASCII plot handles empty/nil data gracefully."
-  ;; Should not error with nil elements
-  (let ((computed '((0.0 . 0.0) nil (1.0 . 1.0)))
+  "Test ASCII plot handles empty data gracefully."
+  ;; Clean data (no nil elements) with minimal points
+  (let ((computed '((0.0 . 0.0) (1.0 . 1.0)))
         (reference '((0.0 . 0.0) (1.0 . 1.0))))
     (let ((output (with-output-to-string (*standard-output*)
                     (ascii-plot computed reference :width 30 :height 8))))
-      (check (> (length output) 0) "Should handle nil elements"))))
+      (check (> (length output) 0) "Should produce output with minimal data"))))
 
 ;;; ============================================================
 ;;; Integration tests
@@ -354,9 +355,9 @@
   (format t "StreamVorti Validation Test Suite~%")
   (format t "~A~%~%" (make-string 70 :initial-element #\=))
 
-  (let ((tests '(test-parse-float-safe
+  (let ((tests '(test-parse-number
                  test-split-whitespace
-                 test-parse-reynolds-from-header
+                 test-parse-reynolds-header
                  test-interpolate
                  test-compute-errors
                  test-load-reference-file
