@@ -3,6 +3,7 @@
 [![Build](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source.yml)
 [![Build with ECL](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source-with-ecl.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source-with-ecl.yml)
 [![Build with Spack](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-spack.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-spack.yml)
+[![Build (MFEM 4.9)](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-mfem-4.9.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-mfem-4.9.yml)
 [![C++ Tests](https://github.com/benzwick/StreamVorti/actions/workflows/test-cpp.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/test-cpp.yml)
 [![Lisp Tests](https://github.com/benzwick/StreamVorti/actions/workflows/test-lisp.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/test-lisp.yml)
 [![Validation](https://github.com/benzwick/StreamVorti/actions/workflows/test-validation.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/test-validation.yml)
@@ -12,60 +13,62 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B17)
 [![Common Lisp](https://img.shields.io/badge/Common%20Lisp-SBCL%20%7C%20ECL-blue.svg)](https://common-lisp.net/)
-[![MFEM](https://img.shields.io/badge/MFEM-4.8-green.svg)](https://mfem.org/)
+[![MFEM](https://img.shields.io/badge/MFEM-4.8%20%7C%204.9-green.svg)](https://mfem.org/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/benzwick/StreamVorti)
 
 # Installing
 
 ## Install MFEM
 
-### MacOS
+StreamVorti supports MFEM 4.8 and 4.9. The recommended approach differs by platform.
 
-Parallel build:
-```
-cd <mfem-root-dir>
-```
+### macOS
 
-   (download hypre and METIS 4 from above URLs)
-   (build METIS 4 in ../metis-4.0 relative to mfem/)
-   (build hypre in ../hypre relative to mfem/)
+Use the provided convenience script, which installs Homebrew dependencies automatically:
 
-```
-mkdir build
-cd build
-cmake -DCMAKE_INSTALL_PREFIX=/opt/mfem/mfem-4.8 -DMFEM_USE_MPI=YES  -DCMAKE_BUILD_TYPE=Debug ..
-make -j 8                  # Build MFEM
+```bash
+# Build and install MFEM 4.8 (default)
+./scripts/macos-build-mfem-with-metis.sh
+
+# Build and install MFEM 4.9
+./scripts/macos-build-mfem-with-metis.sh 4.9
 ```
 
-```
-make tests -j 8            # Build unit-tests
-make examples -j 8         # Build examples
-make miniapps -j 8         # Build miniapps
-make test                  # Run the tests
+This installs to `~/local/mfem-<VERSION>` using Homebrew-managed HYPRE, METIS, SuiteSparse, and Open MPI.
 
-make install
-```
-Make a note of where MFEM is installed.
+### Linux (from source)
 
+```bash
+# Build HYPRE and METIS first, then:
+./scripts/build-from-source/05-build-mfem.sh mfem-4.8  <hypre-dir> <metis-dir> /opt/mfem/mfem-4.8
+./scripts/build-from-source/05-build-mfem.sh mfem-4.9  <hypre-dir> <metis-dir> /opt/mfem/mfem-4.9
+```
+
+### Linux (Spack)
+
+See [INSTALL-SPACK-MFEM.md](INSTALL-SPACK-MFEM.md).
 
 ## Install StreamVorti
 
-```
-mkdir build
-cd build
+```bash
+mkdir build && cd build
 cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug ..
 make -j6
 ```
-Note: On Debian Linux, if you encounter `fatal error: Eigen/Dense: No such file or directory`, create symlinks:
+
+To build against MFEM 4.9:
+
+```bash
+cmake -DMFEM_DIR=/opt/mfem/mfem-4.9 -DCMAKE_BUILD_TYPE=Debug ..
+make -j6
 ```
+
+Note: On Debian Linux, if you encounter `fatal error: Eigen/Dense: No such file or directory`, create symlinks:
+
+```bash
 cd /usr/include
 sudo ln -sf eigen3/Eigen Eigen
 sudo ln -sf eigen3/unsupported unsupported
-```
-
-Note: On MacOS, you might need to add this option above to find the Eigen headers in the home directory:
-```
--DEIGEN3_INCLUDE_DIRS=~/include
 ```
 
 # Usage
