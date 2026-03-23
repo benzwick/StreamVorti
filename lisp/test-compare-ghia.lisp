@@ -28,6 +28,8 @@
          (progn ,@body t)
        (error (e)
          (format t "~%ERROR in ~A: ~A~%" ',name e)
+         (incf *test-count*)
+         (incf *fail-count*)
          nil))))
 
 (defun check (condition &optional (message ""))
