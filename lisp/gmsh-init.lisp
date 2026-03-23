@@ -25,6 +25,16 @@
       (dolist (entry (directory (merge-pathnames "*/" ocicl-dir)))
         (push entry asdf:*central-registry*))))
 
+  ;; Load CFFI first so we can set library search paths
+  (asdf:load-system :cffi)
+
+  ;; Tell CFFI where to find libgmsh.so (built from gmsh-cl's submodule)
+  (let ((gmsh-lib-dir (merge-pathnames "_reference/gmsh/build/" gmsh-dir)))
+    (when (probe-file gmsh-lib-dir)
+      (pushnew gmsh-lib-dir
+               (symbol-value (intern "*FOREIGN-LIBRARY-DIRECTORIES*" "CFFI"))
+               :test #'equal)))
+
   ;; Load gmsh-cl and its dependencies.
   ;; gmsh-cl's defpackage forms will update the stub packages created
   ;; by packages.lisp, adding exports and full functionality.
