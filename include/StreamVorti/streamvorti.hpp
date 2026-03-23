@@ -402,24 +402,24 @@ SolverPackage* CreateLinearSolver(const std::string& solver_type, const mfem::Sp
                                    const SimulationParams& params);
 
 /**
- * @brief Save solution fields to DAT files
+ * @brief Save solution fields in MFEM's native GridFunction format.
  *
- * Writes vorticity, streamfunction, and velocity components to separate
- * files with high precision (12 digits). Filename suffix indicates whether
- * this is final solution or intermediate output.
+ * Writes vorticity, streamfunction, and velocity GridFunctions to .gf files
+ * which can be loaded back with GridFunction::Load(). The parallel version
+ * uses ParGridFunction::SaveAsOne() to gather the full solution to rank 0.
  *
- * @param vorticity Vorticity field
- * @param streamfunction Streamfunction field
- * @param u_velocity Horizontal velocity (u = ∂ψ/∂y)
- * @param v_velocity Vertical velocity (v = -∂ψ/∂x)
- * @param filename Base filename prefix
+ * @param vorticity_gf Vorticity GridFunction (must be up-to-date)
+ * @param streamfunction_gf Streamfunction GridFunction
+ * @param velocity_gf Vector velocity GridFunction
+ * @param prefix Output filename prefix
  * @param timestep Current timestep number
  * @param dat_dir Output directory
  * @param is_final True for final solution, false for intermediate
  */
-void SaveSolutionToFile(const mfem::Vector& vorticity, const mfem::Vector& streamfunction,
-                       const mfem::Vector& u_velocity, const mfem::Vector& v_velocity,
-                       const std::string& filename, int timestep,
+void SaveSolutionToFile(mfem::GridFunction& vorticity_gf,
+                       mfem::GridFunction& streamfunction_gf,
+                       mfem::GridFunction& velocity_gf,
+                       const std::string& prefix, int timestep,
                        const std::string& dat_dir, bool is_final);
 
 /**

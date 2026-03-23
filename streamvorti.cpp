@@ -802,6 +802,17 @@ int main(int argc, char *argv[])
         std::cout << "Created ParaView output directory: " << paraview_prefix_path << std::endl;
     }
 
+    // Helper: update GridFunctions from solution vectors.
+    // Used by both ParaView output and SaveSolutionToFile.
+    auto UpdateGridFunctions = [&]() {
+        for (int i = 0; i < num_nodes; ++i) {
+            vorticity_gf[i] = vorticity[i];
+            streamfunction_gf[i] = streamfunction[i];
+            velocity_gf(vector_fes.DofToVDof(i, 0)) = u_velocity[i];
+            velocity_gf(vector_fes.DofToVDof(i, 1)) = v_velocity[i];
+        }
+    };
+
     // ====================================================================
     // TIME-STEPPING PARAMETERS
     // ====================================================================
@@ -1106,25 +1117,22 @@ int main(int argc, char *argv[])
         }
 
         // ================================================================
-        // STEP 7: OUTPUT SOLUTION PERIODICALLY (if enabled)
+        // STEP 7-8: UPDATE GRID FUNCTIONS AND OUTPUT
         // ================================================================
+        bool need_gf_update =
+            (save_solutions && (time_step % params.output_frequency == 0)) ||
+            (paraview_output && (time_step % params.paraview_output_frequency == 0));
+
+        if (need_gf_update) {
+            UpdateGridFunctions();
+        }
+
         if (save_solutions && (time_step % params.output_frequency == 0)) {
-            SaveSolutionToFile(vorticity, streamfunction, u_velocity, v_velocity,
+            SaveSolutionToFile(vorticity_gf, streamfunction_gf, velocity_gf,
                             params.output_prefix, time_step, dat_dir, false);
         }
 
-        // ================================================================
-        // STEP 8: PARAVIEW OUTPUT (if enabled)
-        // ================================================================
         if (paraview_output && (time_step % params.paraview_output_frequency == 0)) {
-
-            for (int i = 0; i < num_nodes; ++i) {
-                vorticity_gf[i] = vorticity[i];
-                streamfunction_gf[i] = streamfunction[i];
-                velocity_gf(vector_fes.DofToVDof(i, 0)) = u_velocity[i];
-                velocity_gf(vector_fes.DofToVDof(i, 1)) = v_velocity[i];
-            }
-
             paraview_dc.SetTime(current_time);
             paraview_dc.SetCycle(time_step);
             paraview_dc.Save();
@@ -1206,10 +1214,9 @@ int main(int argc, char *argv[])
 
                         // Save final solution before breaking
                         if (save_solutions) {
-                            mfem::Vector v_final = dpsi_dx;
-                            v_final *= -1.0;
-                            SaveSolutionToFile(vorticity, streamfunction,
-                                            dpsi_dy, v_final,
+                            UpdateGridFunctions();
+                            SaveSolutionToFile(vorticity_gf, streamfunction_gf,
+                                            velocity_gf,
                                             params.output_prefix, time_step,
                                             dat_dir, true);
                         }
@@ -1532,61 +1539,26 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh,
     // For a 40×40 grid: 40, 38, 40, 38 (total boundary: 156)
 }
 
-void SaveSolutionToFile(const mfem::Vector& vorticity,
-                       const mfem::Vector& streamfunction,
-                       const mfem::Vector& u_velocity,
-                       const mfem::Vector& v_velocity,
-                       const std::string& filename,
+void SaveSolutionToFile(mfem::GridFunction& vorticity_gf,
+                       mfem::GridFunction& streamfunction_gf,
+                       mfem::GridFunction& velocity_gf,
+                       const std::string& prefix,
                        int timestep,
                        const std::string& dat_dir,
                        bool is_final)
 {
-    // Determine suffix based on whether this is final or intermediate save
+    // Save GridFunctions in MFEM's native format (.gf).
+    // These can be loaded back with GridFunction::Load().
     std::string suffix = is_final ? "_final" : "_solution";
 
-    // Save vorticity
-    std::string vort_filename = dat_dir + "/" + filename + "_vorticity" + suffix + ".dat";
-    std::ofstream vort_file(vort_filename);
-    if (vort_file.is_open()) {
-        vort_file.precision(12);
-        for (int i = 0; i < vorticity.Size(); ++i) {
-            vort_file << vorticity[i] << std::endl;
-        }
-        vort_file.close();
-    }
+    std::ofstream vort_ofs(dat_dir + "/" + prefix + "_vorticity" + suffix + ".gf");
+    vorticity_gf.Save(vort_ofs);
 
-    // Save streamfunction
-    std::string stream_filename = dat_dir + "/" + filename + "_streamfunction" + suffix + ".dat";
-    std::ofstream stream_file(stream_filename);
-    if (stream_file.is_open()) {
-        stream_file.precision(12);
-        for (int i = 0; i < streamfunction.Size(); ++i) {
-            stream_file << streamfunction[i] << std::endl;
-        }
-        stream_file.close();
-    }
+    std::ofstream stream_ofs(dat_dir + "/" + prefix + "_streamfunction" + suffix + ".gf");
+    streamfunction_gf.Save(stream_ofs);
 
-    // Save u-velocity
-    std::string u_filename = dat_dir + "/" + filename + "_u_velocity" + suffix + ".dat";
-    std::ofstream u_file(u_filename);
-    if (u_file.is_open()) {
-        u_file.precision(12);
-        for (int i = 0; i < u_velocity.Size(); ++i) {
-            u_file << u_velocity[i] << std::endl;
-        }
-        u_file.close();
-    }
-
-    // Save v-velocity
-    std::string v_filename = dat_dir + "/" + filename + "_v_velocity" + suffix + ".dat";
-    std::ofstream v_file(v_filename);
-    if (v_file.is_open()) {
-        v_file.precision(12);
-        for (int i = 0; i < v_velocity.Size(); ++i) {
-            v_file << v_velocity[i] << std::endl;
-        }
-        v_file.close();
-    }
+    std::ofstream vel_ofs(dat_dir + "/" + prefix + "_velocity" + suffix + ".gf");
+    velocity_gf.Save(vel_ofs);
 
     if (is_final) {
         std::cout << "SaveSolutionToFile: Saved final solution at timestep " << timestep << std::endl;
