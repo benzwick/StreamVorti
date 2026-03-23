@@ -14,6 +14,7 @@
 [![Common Lisp](https://img.shields.io/badge/Common%20Lisp-SBCL%20%7C%20ECL-blue.svg)](https://common-lisp.net/)
 [![MFEM](https://img.shields.io/badge/MFEM-4.8-green.svg)](https://mfem.org/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/benzwick/StreamVorti)
+[![Renovate](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://renovatebot.com)
 
 # Installing
 
