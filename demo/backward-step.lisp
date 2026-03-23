@@ -52,6 +52,12 @@
     :dt 0.001
     :end 20.0)
 
+  ;; Line probes at several downstream stations
+  (probes
+    (line inlet-profile   (x 0.5))
+    (line reattachment    (x 5.0))
+    (line downstream      (x 8.0)))
+
   (output :vtk
     :directory "results/backward-step/"
     :every 1.0

@@ -378,10 +378,15 @@ EclObject Bridge::findSymbol(const std::string& name,
         return to_ecl(ECL_NIL);
     }
 
-    int intern_flag;
     cl_object name_str = ecl_make_simple_base_string(actual_name.c_str(),
                                                       actual_name.length());
-    return to_ecl(ecl_intern(name_str, pkg, &intern_flag));
+    // Use cl_find_symbol (FIND-SYMBOL) instead of ecl_intern (INTERN) to avoid
+    // creating symbols that don't exist and crashing on newer ECL versions
+    cl_object sym = cl_find_symbol(2, name_str, pkg);
+    if (sym == ECL_NIL) {
+        return to_ecl(ECL_NIL);
+    }
+    return to_ecl(sym);
 }
 
 EclObject Bridge::symbolFunction(EclObject sym)

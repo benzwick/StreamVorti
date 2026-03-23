@@ -182,14 +182,19 @@ TEST_F(SdlLoaderTest, SimulationRunnerConstruct) {
 // ==================== Loader Getters Tests ====================
 
 TEST_F(SdlLoaderTest, LoaderGetFunction) {
-    // Define a function in SDL package
+    // Define a function in SDL package (how users define functions in SDL files).
+    // Use separate eval calls because in-package only affects the *reader* for
+    // subsequent top-level forms, not forms within the same read.
+    StreamVorti::Lisp::Runtime::eval("(in-package :sdl)");
     StreamVorti::Lisp::Runtime::eval(
-        "(in-package :cl-user)"
-        "(defun my-test-func (x) (* x 2))");
+        "(defun my-test-func (x y z)"
+        "  (declare (ignore y z))"
+        "  (* x 2.0d0))");
 
     auto func = StreamVorti::Lisp::Loader::getFunction("MY-TEST-FUNC");
-    // Function might not be valid if not in SDL package
-    // This test mainly verifies the method doesn't crash
+    ASSERT_TRUE(func.isValid());
+    EXPECT_NEAR(func.evaluateAt(3.0, 0.0, 0.0), 6.0, 1e-10);
+    EXPECT_NEAR(func.evaluateAt(0.5, 0.0, 0.0), 1.0, 1e-10);
 }
 
 // ==================== Integration Tests ====================

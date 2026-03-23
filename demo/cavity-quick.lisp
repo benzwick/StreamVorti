@@ -38,6 +38,11 @@
     :dt 0.005
     :end 2.0)
 
+  ;; Line probes for quick validation
+  (probes
+    (line vertical-center   (x 0.5))
+    (line horizontal-center (y 0.5)))
+
   (output :vtk
     :directory "results/quick/"
     :every 0.5

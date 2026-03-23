@@ -29,9 +29,7 @@ jobs:
       if: always()
       with:
         path: ~/spack
-        key: spack-installation-${{ runner.os }}-v1
-        restore-keys: |
-          spack-installation-${{ runner.os }}-
+        key: spack-installation-${{ runner.os }}-v3
 
     - name: Install Spack
       if: steps.cache-spack.outputs.cache-hit != 'true'
@@ -48,9 +46,7 @@ jobs:
           ~/spack/var/spack/cache
           ~/spack/opt/spack
           ~/spack/var/spack/environments/streamvorti
-        key: spack-env-streamvorti-${{ runner.os }}-v1
-        restore-keys: |
-          spack-env-streamvorti-${{ runner.os }}-
+        key: spack-env-streamvorti-${{ runner.os }}-v3
 
     - name: Create and install Spack environment
       run: ./scripts/build-with-spack/04-create-spack-environment.sh ~/spack streamvorti spack.yaml

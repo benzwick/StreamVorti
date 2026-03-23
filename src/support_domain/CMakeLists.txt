@@ -1,28 +1,34 @@
 #----------------------------------------------
-CMAKE_MINIMUM_REQUIRED(VERSION 3.30)
-
-IF(POLICY CMP0181)
-  CMAKE_POLICY(SET CMP0181 NEW) # CMake 3.30
-ENDIF()
-
-PROJECT(SupportDomain)
-
 
 # Module source files.
-SET(SOURCES support_domain.cpp)
+set(SOURCES support_domain.cpp)
 
-# Include the headers directory.
-INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
+# Add parallel support domain if MPI is available
+if(MFEM_USE_MPI)
+    list(APPEND SOURCES par_support_domain.cpp)
+endif()
 
 # Module header files.
-SET(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/support_domain/support_domain.hpp)
+set(HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/support_domain/support_domain.hpp)
 
-ADD_LIBRARY(${PROJECT_NAME} OBJECT ${SOURCES} ${HEADERS} )
+# Add parallel support domain header if MPI is available
+if(MFEM_USE_MPI)
+    list(APPEND HEADERS ${CMAKE_SOURCE_DIR}/include/StreamVorti/support_domain/par_support_domain.hpp)
+endif()
+
+add_library(SupportDomain OBJECT ${SOURCES} ${HEADERS})
 
 # Link to CGAL to inherit its include directories
-TARGET_LINK_LIBRARIES(${PROJECT_NAME} CGAL::CGAL CGAL::CGAL_Core)
+target_link_libraries(SupportDomain PUBLIC CGAL::CGAL CGAL::CGAL_Core)
 
-SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
+# Enable OpenMP for support domain loops (use parent's OpenMP configuration)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(SupportDomain PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
+target_include_directories(SupportDomain PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+set_target_properties(SupportDomain PROPERTIES LINKER_LANGUAGE CXX)
 
 # Install the header files to include/StreamVorti directory under CMAKE_INSTALL_PREFIX.
-INSTALL( FILES ${HEADERS} DESTINATION include/StreamVorti/support_domain )
+install(FILES ${HEADERS} DESTINATION include/StreamVorti/support_domain)

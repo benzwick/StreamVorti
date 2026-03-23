@@ -2,8 +2,12 @@
 
 [![Build](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source.yml)
 [![Build with ECL](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source-with-ecl.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-from-source-with-ecl.yml)
+[![Build with Spack](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-spack.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/build-with-spack.yml)
+[![C++ Tests](https://github.com/benzwick/StreamVorti/actions/workflows/test-cpp.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/test-cpp.yml)
 [![Lisp Tests](https://github.com/benzwick/StreamVorti/actions/workflows/test-lisp.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/test-lisp.yml)
 [![Validation](https://github.com/benzwick/StreamVorti/actions/workflows/test-validation.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/test-validation.yml)
+[![Examples](https://github.com/benzwick/StreamVorti/actions/workflows/run-examples.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/run-examples.yml)
+[![Examples (Parallel)](https://github.com/benzwick/StreamVorti/actions/workflows/run-examples-parallel.yml/badge.svg)](https://github.com/benzwick/StreamVorti/actions/workflows/run-examples-parallel.yml)
 [![codecov](https://codecov.io/gh/benzwick/StreamVorti/branch/main/graph/badge.svg)](https://codecov.io/gh/benzwick/StreamVorti)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.wikipedia.org/wiki/C%2B%2B17)

@@ -86,11 +86,52 @@ SimulationConfig Loader::load(const std::string& path)
     // Extract boundary conditions
     config.boundaries = extractBoundaries(sim_obj);
 
+    // Apply boundary attributes to the MFEM mesh.
+    // The SDL assigns attribute numbers (1, 2, 3, ...) to each boundary
+    // definition, but these must be applied to the actual MFEM boundary
+    // elements using the predicate (e.g. (= x 0) → all boundary edges
+    // whose center matches x=0 get the attribute).
+    if (config.mesh) {
+        for (const auto& bc : config.boundaries) {
+            if (bc.predicate_axis == '\0') {
+                throw EclException(
+                    "Boundary '" + bc.name + "' uses a compound predicate "
+                    "(and/or/not) which is not yet supported for MFEM boundary "
+                    "attribute assignment. Only simple predicates like (= x 0) "
+                    "or (= y 1) are supported.");
+            }
+            int predicate_type;
+            switch (bc.predicate_axis) {
+                case 'x': predicate_type = 0; break;
+                case 'y': predicate_type = 1; break;
+                case 'z': predicate_type = 2; break;
+                default:
+                    throw EclException(
+                        "Boundary '" + bc.name + "' has unsupported predicate "
+                        "axis '" + std::string(1, bc.predicate_axis) + "'. "
+                        "Only 'x', 'y', and 'z' are supported.");
+            }
+            int count = sv_mesh_set_boundary_attribute(
+                config.mesh.get(), predicate_type,
+                bc.predicate_value, bc.predicate_tolerance,
+                bc.attribute);
+            if (count == 0) {
+                throw EclException(
+                    "Boundary '" + bc.name + "' predicate (" +
+                    std::string(1, bc.predicate_axis) + " = " +
+                    std::to_string(bc.predicate_value) +
+                    ") matched no boundary elements on the mesh. "
+                    "Check that the predicate value matches the domain geometry.");
+            }
+        }
+    }
+
     // Extract parameters
     config.physics = extractPhysicsParams(sim_obj);
     config.dcpse = extractDCPSEParams(sim_obj);
     config.solver = extractSolverParams(sim_obj);
     config.output = extractOutputParams(sim_obj);
+    config.probes = extractProbes(sim_obj);
 
     return config;
 }
@@ -120,10 +161,48 @@ SimulationConfig Loader::loadFromString(const std::string& sdl_content)
     config.dimension = getIntProperty(sim_obj, "dimension", 2);
     config.mesh = extractMesh(sim_obj);
     config.boundaries = extractBoundaries(sim_obj);
+
+    // Apply boundary attributes to the MFEM mesh (same as in load())
+    if (config.mesh) {
+        for (const auto& bc : config.boundaries) {
+            if (bc.predicate_axis == '\0') {
+                throw EclException(
+                    "Boundary '" + bc.name + "' uses a compound predicate "
+                    "(and/or/not) which is not yet supported for MFEM boundary "
+                    "attribute assignment. Only simple predicates like (= x 0) "
+                    "or (= y 1) are supported.");
+            }
+            int predicate_type;
+            switch (bc.predicate_axis) {
+                case 'x': predicate_type = 0; break;
+                case 'y': predicate_type = 1; break;
+                case 'z': predicate_type = 2; break;
+                default:
+                    throw EclException(
+                        "Boundary '" + bc.name + "' has unsupported predicate "
+                        "axis '" + std::string(1, bc.predicate_axis) + "'. "
+                        "Only 'x', 'y', and 'z' are supported.");
+            }
+            int count = sv_mesh_set_boundary_attribute(
+                config.mesh.get(), predicate_type,
+                bc.predicate_value, bc.predicate_tolerance,
+                bc.attribute);
+            if (count == 0) {
+                throw EclException(
+                    "Boundary '" + bc.name + "' predicate (" +
+                    std::string(1, bc.predicate_axis) + " = " +
+                    std::to_string(bc.predicate_value) +
+                    ") matched no boundary elements on the mesh. "
+                    "Check that the predicate value matches the domain geometry.");
+            }
+        }
+    }
+
     config.physics = extractPhysicsParams(sim_obj);
     config.dcpse = extractDCPSEParams(sim_obj);
     config.solver = extractSolverParams(sim_obj);
     config.output = extractOutputParams(sim_obj);
+    config.probes = extractProbes(sim_obj);
 
     return config;
 }
@@ -280,6 +359,12 @@ DCPSEParams Loader::extractDCPSEParams(EclObject sim_obj)
         return params;
     }
 
+    // Extract spatial method type (e.g., "dcpse", "fdm", "fem")
+    std::string spatial_type = getStringProperty(dcpse_spec, "spatial-type", "dcpse");
+    std::transform(spatial_type.begin(), spatial_type.end(), spatial_type.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    params.method = spatial_type;
+
     params.num_neighbors = getIntProperty(dcpse_spec, "num-neighbors", 25);
     params.cutoff_radius = getDoubleProperty(dcpse_spec, "cutoff-radius", 30.0);
     params.support_radius = getDoubleProperty(dcpse_spec, "support-radius", 5.0);
@@ -348,6 +433,43 @@ OutputParams Loader::extractOutputParams(EclObject sim_obj)
     }
 
     return params;
+}
+
+std::vector<LineProbe> Loader::extractProbes(EclObject sim_obj)
+{
+    std::vector<LineProbe> probes;
+
+    EclObject probes_list = getProperty(sim_obj, "probes");
+    if (Bridge::isNil(probes_list) || !Bridge::isList(probes_list)) {
+        return probes;
+    }
+
+    // Each probe is a list: (name axis position)
+    cl_object cl_list = to_cl(probes_list);
+    while (cl_list != ECL_NIL && !Bridge::isNil(to_ecl(cl_consp(cl_list)))) {
+        EclObject probe_spec = to_ecl(cl_car(cl_list));
+
+        if (!Bridge::isNil(probe_spec) && Bridge::isList(probe_spec)) {
+            cl_object cl_spec = to_cl(probe_spec);
+            // Extract (name axis position)
+            EclObject name_obj = to_ecl(cl_car(cl_spec));
+            cl_spec = cl_cdr(cl_spec);
+            EclObject axis_obj = to_ecl(cl_car(cl_spec));
+            cl_spec = cl_cdr(cl_spec);
+            EclObject pos_obj = to_ecl(cl_car(cl_spec));
+
+            LineProbe probe;
+            probe.name = Bridge::toCppString(name_obj);
+            std::string axis_str = Bridge::toCppString(axis_obj);
+            probe.axis = axis_str.empty() ? 'x' : axis_str[0];
+            probe.position = Bridge::toCppDouble(pos_obj);
+            probes.push_back(probe);
+        }
+
+        cl_list = cl_cdr(cl_list);
+    }
+
+    return probes;
 }
 
 EclObject Loader::getProperty(EclObject plist, const std::string& key)

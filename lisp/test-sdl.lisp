@@ -318,6 +318,12 @@
     (check-equal (sdl:spatial-neighbors m) 25 "Neighbor count")
     (check-near (sdl:spatial-support-radius m) 3.5 1e-10 "Support radius")))
 
+(define-test test-spatial-fdm
+  "Test finite difference spatial discretization definition."
+  (let ((m (sdl:make-spatial :fdm)))
+    (check-equal (sdl:spatial-type m) :fdm "Spatial type (FDM)")
+    (check (null (sdl:spatial-neighbors m)) "FDM has no neighbors")))
+
 (define-test test-spatial-fem
   "Test FEM spatial discretization definition."
   (let ((m (sdl:make-spatial :fem :order 2)))
@@ -455,6 +461,32 @@
     (check-not-null (sdl:simulation-boundaries sim) "Boundaries defined")
     (check-not-null (sdl:simulation-physics sim) "Physics defined")))
 
+(define-test test-simulation-cavity-fdm
+  "Test lid-driven cavity simulation with finite differences."
+  (let ((sim (sdl:simulation "cavity-fdm" :dim 2
+               (domain (box (0 0) (1 1)) :mesh :n (20 20))
+
+               (boundaries
+                 (lid    (= y 1))
+                 (bottom (= y 0))
+                 (left   (= x 0))
+                 (right  (= x 1)))
+
+               (physics :navier-stokes :Re 100
+                 (bc lid    :velocity (1 0))
+                 (bc bottom :no-slip)
+                 (bc left   :no-slip)
+                 (bc right  :no-slip))
+
+               (spatial :fdm)
+
+               (temporal :explicit-euler :dt 0.001 :end 5.0))))
+    (check-not-null sim "FDM simulation created")
+    (check-equal (sdl:simulation-name sim) "cavity-fdm" "FDM simulation name")
+    (let ((spatial (sdl:simulation-spatial sim)))
+      (check-not-null spatial "Spatial defined")
+      (check-equal (sdl:spatial-type spatial) :fdm "Spatial type is FDM"))))
+
 (define-test test-simulation-multiphysics
   "Test multiphysics simulation definition."
   (let ((sim (sdl:simulation "conjugate-heat" :dim 2
@@ -537,6 +569,7 @@
   ;; Spatial discretization tests
   (format t "~%--- Spatial Discretization ---~%")
   (test-spatial-dcpse)
+  (test-spatial-fdm)
   (test-spatial-fem)
   (test-spatial-sph)
 
@@ -564,6 +597,7 @@
   ;; Complete simulation tests
   (format t "~%--- Complete Simulations ---~%")
   (test-simulation-lid-driven-cavity)
+  (test-simulation-cavity-fdm)
   (test-simulation-multiphysics)
 
   ;; Summary

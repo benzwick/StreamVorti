@@ -2,103 +2,50 @@
 ;;;;
 ;;;; StreamVorti SDL Example
 ;;;;
-;;;; This file demonstrates the SDL (Simulation Definition Language)
-;;;; for defining a channel flow problem with a parabolic inlet profile.
+;;;; Channel flow with parabolic inlet velocity profile using
+;;;; stream function - vorticity formulation.
 ;;;;
-;;;; Run with:
-;;;;   MfemRun -f demo/channel.lisp
+;;;; Run with: StreamVorti -f demo/channel.lisp -lp lisp -pv
 
 (in-package :sdl)
 
-;;; ============================================================
-;;; Simulation Definition
-;;; ============================================================
+(simulation "channel-flow-2d" :dim 2
 
-(simulation
-  :name "channel-flow-2d"
-  :version 1
-  :dimension 2
+  ;; 4:1 aspect ratio channel
+  (domain (box (0 0) (4 1)) :mesh :n (80 20))
 
-  ;;; --------------------------------------------------------
-  ;;; Domain: 4:1 aspect ratio channel
-  ;;; --------------------------------------------------------
-  (geometry
-    (defparameter *channel* (rectangle '(0 0) '(4 1))))
-
-  ;;; --------------------------------------------------------
-  ;;; Mesh: structured quadrilateral, finer in x direction
-  ;;; --------------------------------------------------------
-  (mesh
-    (generate *channel*
-              :type :quad
-              :divisions '(40 10)))
-
-  ;;; --------------------------------------------------------
-  ;;; Boundary conditions
-  ;;; --------------------------------------------------------
   (boundaries
-    ;; Parabolic velocity profile at inlet: u(y) = 4*y*(1-y)
-    ;; Maximum velocity at y=0.5, zero at walls
-    (defun parabolic-inlet (x y)
-      (declare (ignore x))
-      (* 4.0 y (- 1.0 y)))
+    (inlet  (= x 0))
+    (outlet (= x 4))
+    (top    (= y 1))
+    (bottom (= y 0)))
 
-    ;; No-slip walls
-    (defun no-slip (x y)
-      (declare (ignore x y))
-      0.0)
-
-    ;; Zero pressure at outlet
-    (defun outlet-pressure (x y)
-      (declare (ignore x y))
-      0.0)
-
-    ;; Apply boundary conditions
-    (region "inlet"  (where (= x 0.0)) (velocity #'parabolic-inlet))
-    (region "outlet" (where (= x 4.0)) (pressure #'outlet-pressure))
-    (region "top"    (where (= y 1.0)) (velocity #'no-slip))
-    (region "bottom" (where (= y 0.0)) (velocity #'no-slip)))
-
-  ;;; --------------------------------------------------------
-  ;;; Physics
-  ;;; --------------------------------------------------------
-  (physics
-    :type :incompressible-navier-stokes
+  (physics :navier-stokes
     :formulation :stream-vorticity
-    :reynolds 200.0
-    :density 1.0
-    :viscosity 0.005)
+    :Re 200
 
-  ;;; --------------------------------------------------------
-  ;;; Discretization
-  ;;; --------------------------------------------------------
-  (discretization
-    :method :dcpse
-    :num-neighbors 30
-    :cutoff-radius 30.0
+    ;; Parabolic inlet profile: u(y) = 4*y*(1-y)
+    (bc inlet :velocity
+      :u (fn (x y) (* 4 y (- 1 y)))
+      :v 0)
+    (bc outlet :pressure 0)
+    (bc top    :no-slip)
+    (bc bottom :no-slip))
+
+  (spatial :dcpse
+    :neighbors 25
     :support-radius 5.0)
 
-  ;;; --------------------------------------------------------
-  ;;; Solver
-  ;;; --------------------------------------------------------
-  (solver
-    :timestepping :explicit-euler
-    :dt 0.0005
-    :end-time 20.0
-    :tolerance 1.0e-6)
+  (temporal :explicit-euler
+    :dt 0.001
+    :end 5.0)
 
-  ;;; --------------------------------------------------------
-  ;;; Output
-  ;;; --------------------------------------------------------
-  (output
-    :format :vtk
-    :interval 0.5
+  (probes
+    (line quarter-channel (x 1.0))
+    (line mid-channel     (x 2.0))
+    (line exit-channel    (x 3.0)))
+
+  (output :vtk
     :directory "results/channel/"
-    :fields '(vorticity streamfunction velocity pressure)))
-
-;;; ============================================================
-;;; Print simulation summary
-;;; ============================================================
-
-(format t "~%Loaded: ~A~%" (simulation-name *current-simulation*))
-(print-simulation-summary *current-simulation*)
+    :every 1.0
+    :fields (vorticity streamfunction velocity)))

@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,6 +62,10 @@ public:
     inline const mfem::SparseMatrix & ShapeFunctionDxx() const { return this->sh_func_dxx_; }
     inline const mfem::SparseMatrix & ShapeFunctionDyy() const { return this->sh_func_dyy_; }
     inline const mfem::SparseMatrix & ShapeFunctionDxy() const { return this->sh_func_dxy_; }
+
+    const mfem::SparseMatrix & Dxx() const override { return this->sh_func_dxx_; }
+    const mfem::SparseMatrix & Dyy() const override { return this->sh_func_dyy_; }
+    const mfem::SparseMatrix & Dxy() const override { return this->sh_func_dxy_; }
 
 private:
     mfem::SparseMatrix sh_func_dx_; /*!< The shape function 1st x derivative matrix. */

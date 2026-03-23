@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
 
 #include "mfem.hpp"
 
+#include "StreamVorti/derivative_operator.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 
 namespace StreamVorti {
@@ -35,7 +36,7 @@ namespace StreamVorti {
  * \class Dcpse
  * \brief DC PSE derivatives base class.
  */
-class Dcpse: public SupportDomain
+class Dcpse: public SupportDomain, public DerivativeOperator
 {
 public:
     /*!

@@ -8,6 +8,7 @@ include(GoogleTest)
 # Test sources
 set(TEST_SOURCES
     test_main.cpp
+    test_finite_differences.cpp
 )
 
 # Add Lisp integration tests if ECL is enabled
@@ -47,6 +48,10 @@ if(STREAMVORTI_BUILD_STATIC_LIBS)
     target_link_libraries(streamvorti_tests ${PROJECT_NAME}_static)
 else()
     target_link_libraries(streamvorti_tests ${PROJECT_NAME})
+endif()
+
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(streamvorti_tests OpenMP::OpenMP_CXX)
 endif()
 
 if(STREAMVORTI_WITH_ECL)

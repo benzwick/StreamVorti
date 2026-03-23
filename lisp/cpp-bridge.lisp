@@ -172,6 +172,13 @@
     (sim-data (sim-output-config obj))
     (t nil)))
 
+(defun get-probes (obj)
+  "Get probe specifications from simulation.
+   Returns a list of (name axis position) triples."
+  (typecase obj
+    (sim-data (sim-probes obj))
+    (t nil)))
+
 ;;; ============================================================
 ;;; Domain/mesh accessors
 ;;; ============================================================
@@ -333,6 +340,15 @@
 ;;; ============================================================
 ;;; Spatial/discretization accessors
 ;;; ============================================================
+
+(defun get-spatial-type (obj)
+  "Get spatial discretization type string (e.g., 'dcpse', 'fdm')."
+  (typecase obj
+    (spatial-data
+     (if (spatial-type obj)
+         (string-downcase (symbol-name (spatial-type obj)))
+         "dcpse"))
+    (t nil)))
 
 (defun get-num-neighbors (obj)
   "Get number of neighbors from spatial config."

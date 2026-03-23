@@ -1,7 +1,7 @@
 /*
  * StreamVorti - Software for solving PDEs using explicit methods.
  * Copyright (C) 2017 Konstantinos A. Mountris
- * Copyright (C) 2020-2025 Benjamin F. Zwick
+ * Copyright (C) 2020-2026 Benjamin F. Zwick
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,9 +36,13 @@
 
 // Collecting StreamVorti modules' header files.
 
+#include "StreamVorti/derivative_operator.hpp"
 #include "StreamVorti/approximants/dcpse.hpp"
 #include "StreamVorti/approximants/dcpse_2d.hpp"
 #include "StreamVorti/approximants/dcpse_3d.hpp"
+#include "StreamVorti/finite_differences/fd.hpp"
+#include "StreamVorti/finite_differences/fd_2d.hpp"
+#include "StreamVorti/finite_differences/fd_3d.hpp"
 #include "StreamVorti/support_domain/support_domain.hpp"
 
 /*!

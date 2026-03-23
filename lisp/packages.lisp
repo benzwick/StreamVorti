@@ -290,6 +290,9 @@
    #:output-interval
    #:output-fields
    #:output-probes
+   ;; Probes
+   #:sim-probes
+   #:get-probes
    ;; Coupling
    #:make-coupling
    #:coupling-name

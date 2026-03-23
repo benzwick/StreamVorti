@@ -16,6 +16,7 @@ jobs:
     name: "Demo: ${{ matrix.name }}"
     runs-on: ubuntu-22.04
     timeout-minutes: ${{ matrix.timeout || 5 }}
+    continue-on-error: ${{ matrix.allow-failure || false }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     strategy:
@@ -24,7 +25,13 @@ jobs:
         include:
           - name: cavity
             file: demo/cavity.lisp
-            validate: true
+            validate: ghia
+            ghia-results: results/output_dat/lid-driven-cavity_vertical-center.dat
+            timeout: 10
+          - name: cavity-fdm
+            file: demo/cavity-fdm.lisp
+            validate: ghia
+            ghia-results: results/output_dat/lid-driven-cavity-fdm_vertical-center.dat
             timeout: 10
           - name: cavity-quick
             file: demo/cavity-quick.lisp
@@ -39,10 +46,18 @@ jobs:
             timeout: 15
           - name: poiseuille
             file: demo/poiseuille.lisp
+            validate: poiseuille
+          - name: channel
+            file: demo/channel.lisp
           - name: backward-step
             file: demo/backward-step.lisp
-          - name: cylinder
+            allow-failure: true  # Compound predicates (and/or) not yet supported (issue #30)
+          - name: von-karman  # SDL::DIFFERENCE not implemented (issue #25)
+            file: demo/von-karman.lisp
+            allow-failure: true
+          - name: cylinder  # SDL::DIFFERENCE not implemented (issue #25)
             file: demo/cylinder.lisp
+            allow-failure: true
 
     steps:
     - uses: actions/checkout@v4
@@ -78,12 +93,21 @@ jobs:
         ../bin/StreamVorti -f ../${{ matrix.file }} -lp ../lisp -pv 2>&1 | tee simulation.log
 
     - name: Validate against Ghia
-      if: ${{ matrix.validate }}
+      if: ${{ matrix.validate == 'ghia' }}
       run: |
         set -o pipefail
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
-             --eval '(streamvorti.validation:run-validation :results-file "results/output_dat/lid-driven-cavity_u_centerline_x0.5.dat")' \
+             --eval '(unless (streamvorti.validation:run-validation :results-file "${{ matrix.ghia-results }}") (sb-ext:exit :code 1))' \
+             2>&1 | tee results/validation.log
+
+    - name: Validate against exact Poiseuille solution
+      if: ${{ matrix.validate == 'poiseuille' }}
+      run: |
+        set -o pipefail
+        sbcl --non-interactive \
+             --load lisp/compare-poiseuille.lisp \
+             --eval '(unless (streamvorti.poiseuille:run-validation :results-file "results/output_dat/poiseuille-flow_mid-channel.dat") (sb-ext:exit :code 1))' \
              2>&1 | tee results/validation.log
 
     - name: Upload results
@@ -140,13 +164,58 @@ jobs:
         set -o pipefail
         sbcl --non-interactive \
              --load lisp/compare-ghia.lisp \
-             --eval '(streamvorti.validation:run-validation :results-file "results/output_dat/mfem_square10x10_u_centerline_x0.5.dat")' \
+             --eval '(unless (streamvorti.validation:run-validation :results-file "results/output_dat/mfem_square10x10_u_centerline_x0.5.dat") (sb-ext:exit :code 1))' \
              2>&1 | tee results/validation.log
 
     - name: Upload all results
       uses: actions/upload-artifact@v4
       with:
         name: cavity-cli-results
+        path: results/
+        retention-days: 5
+
+  run-cavity-fdm-cli:
+    name: "Cavity FDM (CLI)"
+    runs-on: ubuntu-22.04
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download binaries (from triggering workflow)
+      if: ${{ github.event_name == 'workflow_run' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: streamvorti-ecl-binaries-ubuntu-22.04
+        path: bin
+        run-id: ${{ github.event.workflow_run.id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Download binaries (manual trigger - get latest)
+      if: ${{ github.event_name == 'workflow_dispatch' }}
+      uses: dawidd6/action-download-artifact@v3
+      with:
+        workflow: build-from-source-with-ecl.yml
+        name: streamvorti-ecl-binaries-ubuntu-22.04
+        path: bin
+
+    - name: Install runtime dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libsuitesparse-dev libopenmpi-dev ecl
+
+    - name: Run FDM cavity with CLI args
+      run: |
+        set -o pipefail
+        chmod +x bin/StreamVorti
+        mkdir -p results
+        cd results
+        ../bin/StreamVorti -dim 2 -nx 20 -ny 20 -method fdm -Re 100 -dt 0.005 -ft 5.0 -pv 2>&1 | tee simulation.log
+
+    - name: Upload all results
+      uses: actions/upload-artifact@v4
+      with:
+        name: cavity-fdm-cli-results
         path: results/
         retention-days: 5
 

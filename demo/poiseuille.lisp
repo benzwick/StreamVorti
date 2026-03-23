@@ -40,7 +40,12 @@
     :dt 0.001
     :end 5.0)
 
+  (probes
+    (line quarter-channel (x 1.0))
+    (line mid-channel     (x 2.0))
+    (line exit-channel    (x 3.0)))
+
   (output :vtk
     :directory "results/poiseuille/"
-    :every 0.5
-    :fields (velocity pressure)))
+    :every 1.0
+    :fields (velocity vorticity streamfunction)))

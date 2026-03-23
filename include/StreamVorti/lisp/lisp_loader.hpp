@@ -89,14 +89,21 @@ struct BoundaryCondition {
 };
 
 /**
- * @struct DCPSEParams
- * @brief DCPSE discretization parameters from SDL
+ * @struct SpatialParams
+ * @brief Spatial discretization parameters from SDL
+ *
+ * Covers both DCPSE (meshless) and FDM (finite differences) methods.
+ * The method field determines which discretization is used.
  */
-struct DCPSEParams {
-    int num_neighbors = 25;     ///< Number of support domain neighbors
-    double cutoff_radius = 30;  ///< Cutoff radius multiplier
-    double support_radius = 5;  ///< Support radius multiplier
+struct SpatialParams {
+    std::string method = "dcpse"; ///< Spatial method: "dcpse" or "fdm"
+    int num_neighbors = 25;       ///< Number of support domain neighbors (DCPSE only)
+    double cutoff_radius = 30;    ///< Cutoff radius multiplier (DCPSE only)
+    double support_radius = 5;    ///< Support radius multiplier (DCPSE only)
 };
+
+// Backwards-compatible alias
+using DCPSEParams = SpatialParams;
 
 /**
  * @struct SolverParams
@@ -137,6 +144,20 @@ struct OutputParams {
  * @struct SimulationConfig
  * @brief Complete simulation configuration loaded from SDL
  */
+/**
+ * @struct LineProbe
+ * @brief Named axis-aligned line probe for data extraction
+ *
+ * Defined in SDL as: (line name (axis position))
+ * The solver extracts u,v velocity at all mesh nodes matching the
+ * coordinate and writes to output_dat/<sim-name>_<probe-name>.dat
+ */
+struct LineProbe {
+    std::string name;    ///< Probe name (used in output filename)
+    char axis = 'x';     ///< Axis perpendicular to the line ('x' or 'y')
+    double position = 0; ///< Coordinate value along the axis
+};
+
 struct SimulationConfig {
     std::string name;
     int version = 1;
@@ -147,6 +168,9 @@ struct SimulationConfig {
 
     // Boundary conditions
     std::vector<BoundaryCondition> boundaries;
+
+    // Line probes for data extraction
+    std::vector<LineProbe> probes;
 
     // Parameters
     PhysicsParams physics;
@@ -244,6 +268,13 @@ public:
      * @return OutputParams struct
      */
     static OutputParams extractOutputParams(EclObject sim_obj);
+
+    /**
+     * @brief Extract line probe specifications from SDL
+     * @param sim_obj The Lisp simulation object
+     * @return Vector of LineProbe structs
+     */
+    static std::vector<LineProbe> extractProbes(EclObject sim_obj);
 
 private:
     /**
