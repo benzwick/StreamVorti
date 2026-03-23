@@ -1147,30 +1147,45 @@ int main(int argc, char *argv[])
         if (params.check_residuals && (time_step % params.residual_check_freq == 0)) {
 
             // Vorticity residual: ∂ω/∂t + K(ψ,ω) - L(ω) = 0
-            double vort_sum_sq = 0.0, vort_max = 0.0;
+            double local_vort_sum_sq = 0.0, local_vort_max = 0.0;
             for (int idx : interior_nodes) {
                 double domega_dt = (vorticity[idx] - vorticity_old[idx]) / current_dt;
                 double conv = convection_term[idx];
                 double diff = diffusion_term[idx];
 
                 double res = domega_dt + conv - diff;
-                vort_sum_sq += res * res;
-                vort_max = std::max(vort_max, std::abs(res));
+                local_vort_sum_sq += res * res;
+                local_vort_max = std::max(local_vort_max, std::abs(res));
             }
-            double vort_rms = std::sqrt(vort_sum_sq / interior_nodes.size());
 
             // Streamfunction residual: ∇²ψ + ω = 0
             mfem::Vector d2psi_dx2(num_nodes), d2psi_dy2(num_nodes);
             dxx_matrix.Mult(streamfunction, d2psi_dx2);
             dyy_matrix.Mult(streamfunction, d2psi_dy2);
 
-            double psi_sum_sq = 0.0, psi_max = 0.0;
+            double local_psi_sum_sq = 0.0, local_psi_max = 0.0;
             for (int idx : interior_nodes) {
                 double res = d2psi_dx2[idx] + d2psi_dy2[idx] + vorticity[idx];
-                psi_sum_sq += res * res;
-                psi_max = std::max(psi_max, std::abs(res));
+                local_psi_sum_sq += res * res;
+                local_psi_max = std::max(local_psi_max, std::abs(res));
             }
-            double psi_rms = std::sqrt(psi_sum_sq / interior_nodes.size());
+
+            // Reduce to global residuals across all ranks
+            double global_vort_sum_sq, global_vort_max;
+            double global_psi_sum_sq, global_psi_max;
+            int local_interior_count = static_cast<int>(interior_nodes.size());
+            int global_interior_count;
+
+            MPI_Allreduce(&local_vort_sum_sq, &global_vort_sum_sq, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+            MPI_Allreduce(&local_vort_max, &global_vort_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+            MPI_Allreduce(&local_psi_sum_sq, &global_psi_sum_sq, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+            MPI_Allreduce(&local_psi_max, &global_psi_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+            MPI_Allreduce(&local_interior_count, &global_interior_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+            double vort_rms = std::sqrt(global_vort_sum_sq / global_interior_count);
+            double vort_max = global_vort_max;
+            double psi_rms = std::sqrt(global_psi_sum_sq / global_interior_count);
+            double psi_max = global_psi_max;
 
             // Compute relative changes for steady state context
             double vort_rel_change = 0.0;
@@ -1183,17 +1198,18 @@ int main(int argc, char *argv[])
                 diff_stream = streamfunction;
                 diff_stream -= steady_prev_streamfunction;
 
-                // Compute relative changes with proper threshold check
-                double vort_norm = vorticity.Norml2();
-                double stream_norm = streamfunction.Norml2();
+                // Global L2 norms via MFEM's parallel norm
                 const double norm_threshold = 1e-12;
+                double vort_norm = mfem::ParNormlp(vorticity, 2.0, MPI_COMM_WORLD);
+                double stream_norm = mfem::ParNormlp(streamfunction, 2.0, MPI_COMM_WORLD);
+
+                double diff_vort_norm = mfem::ParNormlp(diff_vort, 2.0, MPI_COMM_WORLD);
+                double diff_stream_norm = mfem::ParNormlp(diff_stream, 2.0, MPI_COMM_WORLD);
 
                 vort_rel_change = (vort_norm > norm_threshold) ?
-                                  diff_vort.Norml2() / vort_norm :
-                                  diff_vort.Norml2();
+                                  diff_vort_norm / vort_norm : diff_vort_norm;
                 psi_rel_change = (stream_norm > norm_threshold) ?
-                                 diff_stream.Norml2() / stream_norm :
-                                 diff_stream.Norml2();
+                                 diff_stream_norm / stream_norm : diff_stream_norm;
             }
 
             // Store in history
