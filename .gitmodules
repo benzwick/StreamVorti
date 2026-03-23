@@ -7,3 +7,6 @@
 [submodule "_reference/hypre"]
 	path = _reference/hypre
 	url = https://github.com/hypre-space/hypre.git
+[submodule "_reference/gmsh-cl"]
+	path = _reference/gmsh-cl
+	url = https://github.com/benzwick/gmsh-cl
