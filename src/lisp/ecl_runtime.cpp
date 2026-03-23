@@ -63,6 +63,10 @@ void Runtime::init(const std::string& lisp_path)
     initialized_ = true;
     clearError();
 
+    // Enable ASDF for loading external CL systems.
+    // ECL ships ASDF as a contrib module — no external dependency.
+    cl_safe_eval(c_string_to_object("(require 'asdf)"), Cnil, Cnil);
+
     // If lisp_path provided, load the SDL packages
     if (!lisp_path_.empty()) {
         std::filesystem::path base_path(lisp_path_);
@@ -91,6 +95,23 @@ void Runtime::init(const std::string& lisp_path)
                 }
             }
         }
+
+#ifdef STREAMVORTI_WITH_GMSH
+        // Set gmsh-cl directory and load gmsh integration
+        std::string gmsh_dir_expr = std::string("(defvar *gmsh-cl-dir* \"")
+                                     + GMSH_CL_DIR + "/\")";
+        cl_safe_eval(c_string_to_object(gmsh_dir_expr.c_str()), Cnil, Cnil);
+
+        std::filesystem::path gmsh_file = base_path / "gmsh-init.lisp";
+        if (std::filesystem::exists(gmsh_file)) {
+            try {
+                loadFile(gmsh_file.string());
+            } catch (const EclException& e) {
+                std::cerr << "Warning: Failed to load gmsh-cl: "
+                          << e.what() << std::endl;
+            }
+        }
+#endif
     }
 }
 
@@ -169,11 +190,18 @@ void Runtime::loadFile(const std::string& path)
 
     clearError();
 
-    // Build load expression wrapped in handler-case to capture errors
-    // Returns T on success, error message string on failure
+    // Build load expression wrapped in handler-case to capture errors.
+    // Uses load-with-gmsh-stubs (defined in packages.lisp) when available
+    // to auto-intern symbols in gmsh-cl stub packages, so the reader
+    // doesn't error on occ:rectangle etc. when gmsh-cl isn't loaded.
+    // Returns T on success, error message string on failure.
     std::ostringstream load_expr;
     load_expr << "(handler-case "
-              << "  (progn (load \"" << path << "\") t) "
+              << "  (progn "
+              << "    (if (fboundp 'cl-user::load-with-gmsh-stubs) "
+              << "        (cl-user::load-with-gmsh-stubs \"" << path << "\") "
+              << "        (load \"" << path << "\")) "
+              << "    t) "
               << "  (error (c) "
               << "    (format nil \"~A\" c)))";
 

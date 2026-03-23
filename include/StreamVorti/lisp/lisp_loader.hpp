@@ -238,6 +238,24 @@ public:
     static std::vector<BoundaryCondition> extractBoundaries(EclObject sim_obj);
 
     /**
+     * @brief Apply boundary attributes to the MFEM mesh
+     *
+     * For coordinate predicates (= x 0), sets boundary attributes on matching
+     * elements. For attribute predicates (attribute N), skips — the attribute
+     * is already set in the mesh (e.g., from Gmsh physical groups).
+     */
+    static void applyBoundaryAttributes(SimulationConfig& config);
+
+    /**
+     * @brief Check if all boundaries use attribute predicates (from physical groups)
+     *
+     * Returns true when every boundary has predicate_axis == 'a', meaning
+     * MFEM already has the correct attributes from the .msh file and
+     * sv_mesh_set_boundary_attribute should be skipped entirely.
+     */
+    static bool hasBoundaryAttributesFromPhysicalGroups(const SimulationConfig& config);
+
+    /**
      * @brief Extract DCPSE parameters from loaded SDL
      *
      * @param sim_obj The Lisp simulation object

@@ -223,4 +223,117 @@ TEST_F(SdlLoaderTest, LoadFromStringMinimal) {
     }
 }
 
+// ==================== Gmsh Integration Tests ====================
+
+#ifdef STREAMVORTI_WITH_GMSH
+
+TEST_F(SdlLoaderTest, GmshDomainLoadsFromFile) {
+    // Simple rectangle with physical groups via get-boundary + get-closest-entities
+    std::string sdl = R"(
+        (in-package :sdl)
+        (simulation "gmsh-test" :dim 2
+          (domain :gmsh
+            (occ:rectangle 0 0 0 1 1)
+            (occ:synchronize)
+            (let ((bnd (gmsh:get-boundary (gmsh:get-entities :dim 2) :oriented nil)))
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 0 0.5 0 bnd :n 1))
+                :tag 1 :name "left")
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 1 0.5 0 bnd :n 1))
+                :tag 2 :name "right")
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 0.5 0 0 bnd :n 1))
+                :tag 3 :name "bottom")
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 0.5 1 0 bnd :n 1))
+                :tag 4 :name "top"))
+            (gmsh:add-physical-group 2
+              (gmsh:tags-of (gmsh:get-entities :dim 2)) :tag 1)
+            (gmsh/mesh:generate :dim 2))
+          (boundaries
+            (left   (attribute 1))
+            (right  (attribute 2))
+            (bottom (attribute 3))
+            (top    (attribute 4)))
+          (physics :navier-stokes :Re 100
+            (bc left   :no-slip)
+            (bc right  :no-slip)
+            (bc bottom :no-slip)
+            (bc top    :velocity (1 0)))
+          (temporal :explicit-euler :dt 0.001 :end 0.01))
+    )";
+
+    auto path = createTempSdlFile(sdl);
+    auto config = StreamVorti::Lisp::Loader::load(path);
+
+    EXPECT_EQ(config.name, "gmsh-test");
+    EXPECT_EQ(config.dimension, 2);
+    ASSERT_NE(config.mesh, nullptr);
+    EXPECT_GT(config.mesh->GetNV(), 4);
+    EXPECT_GT(config.mesh->GetNE(), 0);
+    EXPECT_EQ(config.boundaries.size(), 4);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SdlLoaderTest, GmshDomainCylinderInChannel) {
+    // Cylinder-in-channel: OCC booleans + get-boundary + get-closest-entities
+    std::string sdl = R"(
+        (in-package :sdl)
+        (simulation "cylinder-test" :dim 2
+          (domain :gmsh
+            (occ:rectangle 0 0 0 2.2 0.41 :tag 1)
+            (occ:disk 0.2 0.2 0 0.05 0.05 :tag 2)
+            (occ:cut (gmsh:surface-tags '(1)) (gmsh:surface-tags '(2)))
+            (occ:synchronize)
+            (let ((bnd (gmsh:get-boundary (gmsh:get-entities :dim 2) :oriented nil)))
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 0 0.205 0 bnd :n 1))
+                :tag 1 :name "inlet")
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 2.2 0.205 0 bnd :n 1))
+                :tag 2 :name "outlet")
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 1.1 0.41 0 bnd :n 1))
+                :tag 3 :name "top")
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 1.1 0 0 bnd :n 1))
+                :tag 4 :name "bottom")
+              (gmsh:add-physical-group 1
+                (gmsh:tags-of (occ:get-closest-entities 0.2 0.2 0 bnd :n 4))
+                :tag 5 :name "cylinder"))
+            (gmsh:add-physical-group 2
+              (gmsh:tags-of (gmsh:get-entities :dim 2)) :tag 1)
+            (gmsh/option:set-number "Mesh.CharacteristicLengthMax" 0.1d0)
+            (gmsh/mesh:generate :dim 2))
+          (boundaries
+            (inlet    (attribute 1))
+            (outlet   (attribute 2))
+            (top      (attribute 3))
+            (bottom   (attribute 4))
+            (cylinder (attribute 5)))
+          (physics :navier-stokes :Re 100
+            (bc inlet    :velocity (1 0))
+            (bc outlet   :outflow)
+            (bc top      :no-slip)
+            (bc bottom   :no-slip)
+            (bc cylinder :no-slip))
+          (temporal :explicit-euler :dt 0.001 :end 0.01))
+    )";
+
+    auto path = createTempSdlFile(sdl);
+    auto config = StreamVorti::Lisp::Loader::load(path);
+
+    EXPECT_EQ(config.name, "cylinder-test");
+    ASSERT_NE(config.mesh, nullptr);
+    EXPECT_GT(config.mesh->GetNE(), 10);
+    // 5 boundaries including cylinder
+    EXPECT_EQ(config.boundaries.size(), 5);
+
+    std::filesystem::remove(path);
+}
+
+#endif // STREAMVORTI_WITH_GMSH
+
 #endif // STREAMVORTI_WITH_ECL

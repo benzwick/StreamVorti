@@ -29,5 +29,12 @@ if(ECL_FOUND)
     target_compile_definitions(LispIntegration PUBLIC STREAMVORTI_WITH_ECL)
 endif()
 
+# Gmsh-CL integration
+if(STREAMVORTI_WITH_GMSH)
+    target_compile_definitions(LispIntegration PRIVATE
+        STREAMVORTI_WITH_GMSH
+        GMSH_CL_DIR="${GMSH_CL_DIR}")
+endif()
+
 # Position independent code for shared library
 set_property(TARGET LispIntegration PROPERTY POSITION_INDEPENDENT_CODE ON)

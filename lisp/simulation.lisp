@@ -116,7 +116,8 @@
     ((stringp expr) expr)
     ((symbolp expr)
      (let ((name (string-upcase (symbol-name expr))))
-       (if (member name '("X" "Y" "Z" "=" ">" "<" ">=" "<=" "AND" "OR" "NOT")
+       (if (member name '("X" "Y" "Z" "=" ">" "<" ">=" "<=" "AND" "OR" "NOT"
+                          "ATTRIBUTE")
                    :test #'string=)
            `',expr
            expr)))
@@ -232,6 +233,41 @@
 
 ;;; --- Top-level form compilers ---
 
+(defun compile-sim-domain-gmsh (sim-var body)
+  "Compile a (domain :gmsh body...) form.
+   Uses INTERN to resolve gmsh symbols at runtime, avoiding reader
+   errors when the GMSH package is not loaded."
+  `(setf (sim-domain ,sim-var)
+         (let ((path (format nil "/tmp/streamvorti-~A.msh"
+                             (get-universal-time))))
+           (unless (fboundp (find-symbol "INITIALIZE" "GMSH"))
+             (error "Gmsh support not available. ~
+                     Rebuild with -DSTREAMVORTI_WITH_GMSH=ON"))
+           (flet ((gmsh-fn (name &optional (pkg "GMSH"))
+                    (symbol-function (intern name pkg))))
+             (let ((phys-groups nil))
+               (funcall (gmsh-fn "INITIALIZE"))
+               (unwind-protect
+                   (progn
+                     (funcall (gmsh-fn "ADD") "streamvorti")
+                     ,@body
+                     ;; Query named physical groups before writing
+                     (let ((groups (funcall (gmsh-fn "GET-PHYSICAL-GROUPS")
+                                           :dim 1)))
+                       (dolist (g groups)
+                         (let* ((dim (car g)) (tag (cdr g))
+                                (name (funcall (gmsh-fn "GET-PHYSICAL-NAME")
+                                               dim tag)))
+                           (when (plusp (length name))
+                             (push (cons name tag) phys-groups)))))
+                     ;; Write MSH2 format for MFEM compatibility
+                     (funcall (gmsh-fn "SET-NUMBER" "GMSH/OPTION")
+                              "Mesh.MshFileVersion" 2.2d0)
+                     (funcall (gmsh-fn "WRITE") path))
+                 (funcall (gmsh-fn "FINALIZE")))
+               (%make-domain :type :file :file path
+                             :physical-groups (nreverse phys-groups)))))))
+
 (defun compile-sim-domain (sim-var form)
   "Compile a (domain ...) form."
   (let ((args (cdr form)))
@@ -240,6 +276,9 @@
       ((and (keywordp (car args)) (eq (car args) :file))
        `(setf (sim-domain ,sim-var)
               (%make-domain :type :file :file ,(second args))))
+      ;; Gmsh domain: (domain :gmsh body...)
+      ((and (keywordp (car args)) (eq (car args) :gmsh))
+       (compile-sim-domain-gmsh sim-var (cdr args)))
       ;; Geometry domain: (domain geom-expr type &rest kwargs)
       (t
        (let* ((geom-form (car args))

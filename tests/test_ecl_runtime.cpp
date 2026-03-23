@@ -156,4 +156,10 @@ TEST_F(EclRuntimeTest, EvalMathSqrt) {
     EXPECT_NEAR(StreamVorti::Lisp::Bridge::toCppDouble(result), 2.0, 1e-10);
 }
 
+TEST_F(EclRuntimeTest, AsdfAvailable) {
+    // ASDF should be loaded during init
+    auto result = StreamVorti::Lisp::Runtime::eval("(asdf:asdf-version)");
+    EXPECT_FALSE(StreamVorti::Lisp::Bridge::isNil(result));
+}
+
 #endif // STREAMVORTI_WITH_ECL

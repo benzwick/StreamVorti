@@ -75,7 +75,8 @@
 
 (defstruct (domain-data (:constructor %make-domain)
                         (:conc-name domain-))
-  type dimension geometry n h file particle-count)
+  type dimension geometry n h file particle-count
+  physical-groups)
 
 (defun domain (&rest args)
   "Create a domain.
@@ -183,6 +184,11 @@
        (let ((sub-fn (compile-predicate-expr (second expr))))
          (lambda (point)
            (not (funcall sub-fn point)))))
+      ;; (attribute N) — boundary attribute from Gmsh physical group
+      ((string= (symbol-name op) "ATTRIBUTE")
+       (lambda (point)
+         (declare (ignore point))
+         t))  ; always true — attribute matching is done by the mesh, not predicate
       (t (error "Unknown predicate operator: ~A" op)))))
 
 (defun make-predicate (expr)
