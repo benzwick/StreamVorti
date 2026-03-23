@@ -260,6 +260,9 @@
                                                dim tag)))
                            (when (plusp (length name))
                              (push (cons name tag) phys-groups)))))
+                     ;; Write MSH2 format for MFEM compatibility
+                     (funcall (gmsh-fn "SET-NUMBER" "GMSH/OPTION")
+                              "Mesh.MshFileVersion" 2.2d0)
                      (funcall (gmsh-fn "WRITE") path))
                  (funcall (gmsh-fn "FINALIZE")))
                (%make-domain :type :file :file path
