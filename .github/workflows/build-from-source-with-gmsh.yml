@@ -29,6 +29,7 @@ env:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
 
     steps:
     - name: Checkout repository
@@ -90,24 +91,41 @@ jobs:
     - name: Install Google Test
       run: ./scripts/build-from-source/11-install-gtest.sh
 
-    # Build libgmsh and gmsh-cl dependencies
-    - name: Cache libgmsh build
+    # Build libgmsh (cached)
+    - name: Restore libgmsh cache
       id: cache-gmsh
-      uses: actions/cache@v3
+      uses: actions/cache/restore@v4
       with:
         path: _reference/gmsh-cl/_reference/gmsh/build
-        key: gmsh-cl-libgmsh-${{ runner.os }}-${{ hashFiles('.gitmodules') }}
+        key: libgmsh-${{ hashFiles('.gitmodules') }}
 
+    - name: Build libgmsh
+      run: |
+        cd _reference/gmsh-cl/_reference/gmsh
+        mkdir -p build && cd build
+        if [ ! -f CMakeCache.txt ]; then
+          cmake .. -DENABLE_BUILD_SHARED=ON -DCMAKE_BUILD_TYPE=Release
+        else
+          # Touch cached build artifacts so make sees them as newer than
+          # source files (git checkout sets timestamps to "now")
+          find . -type f -exec touch -t $(date -d '+1 minute' +%Y%m%d%H%M.%S) {} +
+        fi
+        make -j$(nproc)
+
+    - name: Save libgmsh cache
+      if: always() && steps.cache-gmsh.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: _reference/gmsh-cl/_reference/gmsh/build
+        key: libgmsh-${{ hashFiles('.gitmodules') }}
+
+    # Install gmsh-cl CL dependencies (cached)
     - name: Cache gmsh-cl ocicl dependencies
       id: cache-ocicl
       uses: actions/cache@v3
       with:
         path: _reference/gmsh-cl/ocicl
         key: gmsh-cl-ocicl-${{ runner.os }}-${{ hashFiles('_reference/gmsh-cl/ocicl.csv') }}
-
-    - name: Build gmsh-cl and libgmsh
-      if: steps.cache-gmsh.outputs.cache-hit != 'true'
-      run: ./scripts/build-from-source/12-build-gmsh.sh
 
     - name: Install gmsh-cl ocicl dependencies
       if: steps.cache-ocicl.outputs.cache-hit != 'true'
