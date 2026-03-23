@@ -110,7 +110,7 @@ jobs:
       run: ./scripts/build-from-source/11-install-gtest.sh
 
     - name: Build StreamVorti
-      run: ./scripts/build-from-source/06-build-streamvorti.sh "/opt/mfem/${{ env.MFEM_TOP_DIR }}" "Release"
+      run: ./scripts/build-from-source/06-build-streamvorti.sh "/opt/mfem/${{ env.MFEM_TOP_DIR }}" "Debug"
 
     - name: Display ccache statistics
       run: |
@@ -128,8 +128,9 @@ jobs:
       run: ./scripts/build-from-source/10-generate-coverage.sh build
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: build/coverage.info
         flags: unittests
         name: codecov-umbrella

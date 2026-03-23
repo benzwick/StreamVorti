@@ -131,8 +131,9 @@ jobs:
       run: ./scripts/build-from-source/10-generate-coverage.sh build
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: build/coverage.info
         flags: unittests
         name: codecov-umbrella
