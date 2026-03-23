@@ -525,6 +525,62 @@
 ;;; Tests for Gmsh Domain (macro-level, no gmsh-cl needed)
 ;;; ============================================================
 
+(define-test test-boundary-attribute-predicate
+  "Test (attribute N) predicate for Gmsh physical groups."
+  ;; Create boundaries using attribute predicates
+  (let ((boundaries (sdl:make-boundaries
+                      (list (list 'inlet '(attribute 1))
+                            (list 'cylinder '(attribute 5))))))
+    (check-equal (length boundaries) 2 "Two boundaries created")
+    ;; Boundary names
+    (check-equal (sdl:boundary-name (first boundaries)) 'inlet
+                 "First boundary name")
+    (check-equal (sdl:boundary-name (second boundaries)) 'cylinder
+                 "Second boundary name")))
+
+(define-test test-boundary-attribute-in-simulation
+  "Test (attribute N) in a full simulation macro."
+  (let ((sim (sdl:simulation "attr-test" :dim 2
+               (domain :file "test.msh")
+               (boundaries
+                 (inlet    (attribute 1))
+                 (outlet   (attribute 2))
+                 (cylinder (attribute 5)))
+               (physics :navier-stokes :Re 100
+                 (bc inlet    :velocity (1 0))
+                 (bc outlet   :outflow)
+                 (bc cylinder :no-slip))
+               (temporal :explicit-euler :dt 0.001 :end 0.01))))
+    (check-not-null sim "Simulation with attribute predicates created")
+    (check-equal (length (sdl:simulation-boundaries sim)) 3
+                 "Three boundaries")))
+
+(define-test test-boundary-auto-from-physical-groups
+  "Test that boundaries are auto-derived from physical groups when omitted."
+  ;; Create a domain-data with physical groups but no explicit boundaries
+  (let* ((domain (sdl::%make-domain :type :file :file "test.msh"
+                                    :physical-groups '(("inlet" . 1)
+                                                       ("outlet" . 2)
+                                                       ("wall" . 3))))
+         (sim (sdl::%make-sim :name "auto-bc-test" :dim 2))
+         (phys (sdl:make-physics :type :navier-stokes
+                                 :bcs (list (list 'inlet :velocity '(1 0))
+                                            (list 'outlet :outflow)
+                                            (list 'wall :no-slip)))))
+    (setf (sdl::sim-domain sim) domain)
+    (setf (sdl::sim-physics-list sim) (list phys))
+    ;; No boundaries set — should auto-derive from physical groups
+    (let ((merged (sdl::merge-sim-boundaries sim)))
+      (check-equal (length merged) 3
+                   "Three boundaries auto-derived")
+      ;; Check attributes match physical group tags
+      (check-equal (sdl::merged-bc-attribute (first merged)) 1
+                   "inlet attribute = 1")
+      (check-equal (sdl::merged-bc-attribute (second merged)) 2
+                   "outlet attribute = 2")
+      (check-equal (sdl::merged-bc-attribute (third merged)) 3
+                   "wall attribute = 3"))))
+
 (define-test test-domain-gmsh-macro-expansion
   "Test that (domain :gmsh ...) compiles in the simulation macro."
   ;; Test the compile-sim-domain function directly with :gmsh keyword.
@@ -541,8 +597,8 @@
                "Expansion calls gmsh initialize")
         (check (search "FINALIZE" exp-str)
                "Expansion calls gmsh finalize")
-        (check (search "FIND-PACKAGE" exp-str)
-               "Expansion checks for GMSH package")))))
+        (check (search "FBOUNDP" exp-str)
+               "Expansion checks for GMSH availability")))))
 
 (define-test test-domain-gmsh-creates-file-domain
   "Test that gmsh domain creates a :file type domain-data."
@@ -630,6 +686,12 @@
   (format t "~%--- Coupling ---~%")
   (test-coupling-sequential)
   (test-coupling-monolithic)
+
+  ;; Attribute predicate tests
+  (format t "~%--- Attribute Predicates ---~%")
+  (test-boundary-attribute-predicate)
+  (test-boundary-attribute-in-simulation)
+  (test-boundary-auto-from-physical-groups)
 
   ;; Gmsh domain tests (macro-level, no gmsh-cl needed)
   (format t "~%--- Gmsh Domain ---~%")

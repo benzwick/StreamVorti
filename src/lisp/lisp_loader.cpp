@@ -87,43 +87,11 @@ SimulationConfig Loader::load(const std::string& path)
     config.boundaries = extractBoundaries(sim_obj);
 
     // Apply boundary attributes to the MFEM mesh.
-    // The SDL assigns attribute numbers (1, 2, 3, ...) to each boundary
-    // definition, but these must be applied to the actual MFEM boundary
-    // elements using the predicate (e.g. (= x 0) → all boundary edges
-    // whose center matches x=0 get the attribute).
-    if (config.mesh) {
-        for (const auto& bc : config.boundaries) {
-            if (bc.predicate_axis == '\0') {
-                throw EclException(
-                    "Boundary '" + bc.name + "' uses a compound predicate "
-                    "(and/or/not) which is not yet supported for MFEM boundary "
-                    "attribute assignment. Only simple predicates like (= x 0) "
-                    "or (= y 1) are supported.");
-            }
-            int predicate_type;
-            switch (bc.predicate_axis) {
-                case 'x': predicate_type = 0; break;
-                case 'y': predicate_type = 1; break;
-                case 'z': predicate_type = 2; break;
-                default:
-                    throw EclException(
-                        "Boundary '" + bc.name + "' has unsupported predicate "
-                        "axis '" + std::string(1, bc.predicate_axis) + "'. "
-                        "Only 'x', 'y', and 'z' are supported.");
-            }
-            int count = sv_mesh_set_boundary_attribute(
-                config.mesh.get(), predicate_type,
-                bc.predicate_value, bc.predicate_tolerance,
-                bc.attribute);
-            if (count == 0) {
-                throw EclException(
-                    "Boundary '" + bc.name + "' predicate (" +
-                    std::string(1, bc.predicate_axis) + " = " +
-                    std::to_string(bc.predicate_value) +
-                    ") matched no boundary elements on the mesh. "
-                    "Check that the predicate value matches the domain geometry.");
-            }
-        }
+    // For Gmsh meshes with physical groups, MFEM already sets boundary
+    // attributes from the .msh file — skip predicate-based assignment.
+    // For generated Cartesian meshes, apply predicate-based attributes.
+    if (config.mesh && !hasBoundaryAttributesFromPhysicalGroups(config)) {
+        applyBoundaryAttributes(config);
     }
 
     // Extract parameters
@@ -162,40 +130,8 @@ SimulationConfig Loader::loadFromString(const std::string& sdl_content)
     config.mesh = extractMesh(sim_obj);
     config.boundaries = extractBoundaries(sim_obj);
 
-    // Apply boundary attributes to the MFEM mesh (same as in load())
-    if (config.mesh) {
-        for (const auto& bc : config.boundaries) {
-            if (bc.predicate_axis == '\0') {
-                throw EclException(
-                    "Boundary '" + bc.name + "' uses a compound predicate "
-                    "(and/or/not) which is not yet supported for MFEM boundary "
-                    "attribute assignment. Only simple predicates like (= x 0) "
-                    "or (= y 1) are supported.");
-            }
-            int predicate_type;
-            switch (bc.predicate_axis) {
-                case 'x': predicate_type = 0; break;
-                case 'y': predicate_type = 1; break;
-                case 'z': predicate_type = 2; break;
-                default:
-                    throw EclException(
-                        "Boundary '" + bc.name + "' has unsupported predicate "
-                        "axis '" + std::string(1, bc.predicate_axis) + "'. "
-                        "Only 'x', 'y', and 'z' are supported.");
-            }
-            int count = sv_mesh_set_boundary_attribute(
-                config.mesh.get(), predicate_type,
-                bc.predicate_value, bc.predicate_tolerance,
-                bc.attribute);
-            if (count == 0) {
-                throw EclException(
-                    "Boundary '" + bc.name + "' predicate (" +
-                    std::string(1, bc.predicate_axis) + " = " +
-                    std::to_string(bc.predicate_value) +
-                    ") matched no boundary elements on the mesh. "
-                    "Check that the predicate value matches the domain geometry.");
-            }
-        }
+    if (config.mesh && !hasBoundaryAttributesFromPhysicalGroups(config)) {
+        applyBoundaryAttributes(config);
     }
 
     config.physics = extractPhysicsParams(sim_obj);
@@ -470,6 +406,60 @@ std::vector<LineProbe> Loader::extractProbes(EclObject sim_obj)
     }
 
     return probes;
+}
+
+bool Loader::hasBoundaryAttributesFromPhysicalGroups(const SimulationConfig& config)
+{
+    // If all boundaries use attribute predicates (predicate_axis == 'a'),
+    // the mesh already has correct attributes from Gmsh physical groups.
+    if (config.boundaries.empty()) return false;
+    for (const auto& bc : config.boundaries) {
+        if (bc.predicate_axis != 'a') return false;
+    }
+    return true;
+}
+
+void Loader::applyBoundaryAttributes(SimulationConfig& config)
+{
+    for (const auto& bc : config.boundaries) {
+        // 'a' = attribute predicate (from Gmsh physical groups).
+        // The boundary attribute is already set in the mesh file,
+        // so skip sv_mesh_set_boundary_attribute entirely.
+        if (bc.predicate_axis == 'a') {
+            continue;
+        }
+
+        if (bc.predicate_axis == '\0') {
+            throw EclException(
+                "Boundary '" + bc.name + "' uses a compound predicate "
+                "(and/or/not) which is not yet supported for MFEM boundary "
+                "attribute assignment. Only simple predicates like (= x 0) "
+                "or (= y 1) are supported.");
+        }
+        int predicate_type;
+        switch (bc.predicate_axis) {
+            case 'x': predicate_type = 0; break;
+            case 'y': predicate_type = 1; break;
+            case 'z': predicate_type = 2; break;
+            default:
+                throw EclException(
+                    "Boundary '" + bc.name + "' has unsupported predicate "
+                    "axis '" + std::string(1, bc.predicate_axis) + "'. "
+                    "Only 'x', 'y', and 'z' are supported.");
+        }
+        int count = sv_mesh_set_boundary_attribute(
+            config.mesh.get(), predicate_type,
+            bc.predicate_value, bc.predicate_tolerance,
+            bc.attribute);
+        if (count == 0) {
+            throw EclException(
+                "Boundary '" + bc.name + "' predicate (" +
+                std::string(1, bc.predicate_axis) + " = " +
+                std::to_string(bc.predicate_value) +
+                ") matched no boundary elements on the mesh. "
+                "Check that the predicate value matches the domain geometry.");
+        }
+    }
 }
 
 EclObject Loader::getProperty(EclObject plist, const std::string& key)

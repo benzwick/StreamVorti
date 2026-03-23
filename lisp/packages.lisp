@@ -11,6 +11,52 @@
 (in-package :cl-user)
 
 ;;; ============================================================
+;;; Gmsh Package Stubs
+;;; ============================================================
+;;;
+;;; Define empty gmsh-cl stub packages so that the Lisp reader can
+;;; parse SDL files referencing gmsh-cl symbols (occ:rectangle, etc.)
+;;; even when gmsh-cl is not loaded.  The runtime check in
+;;; compile-sim-domain-gmsh gives a clear error if the user actually
+;;; tries to run Gmsh code without STREAMVORTI_WITH_GMSH.
+;;;
+;;; When gmsh-cl IS loaded (via gmsh-init.lisp), it deletes these
+;;; stubs and creates the real packages with full exports.
+
+(defvar *gmsh-stub-packages* '(:gmsh :gmsh/occ :gmsh/geo :gmsh/mesh
+                                :gmsh/option :gmsh/fltk)
+  "Gmsh-cl stub package names. Used by gmsh-init.lisp to clean up.")
+
+(defvar *gmsh-stub-nicknames* '((:gmsh/occ . :occ)
+                                (:gmsh/geo . :geo)
+                                (:gmsh/mesh . :mesh)
+                                (:gmsh/option . :opt)
+                                (:gmsh/fltk . :fltk))
+  "Nicknames for gmsh-cl stub packages.")
+
+(dolist (name *gmsh-stub-packages*)
+  (unless (find-package name)
+    (let* ((nick (cdr (assoc name *gmsh-stub-nicknames*))))
+      (make-package name :use nil
+                    :nicknames (when nick (list nick))))))
+
+(defun load-with-gmsh-stubs (path)
+  "Load PATH, catching reader errors for missing symbols in gmsh-cl
+   stub packages and re-signaling with a clear error message."
+  (handler-case (load path)
+    (reader-error (c)
+      (let ((msg (format nil "~A" c)))
+        ;; Check if the error is about a gmsh stub package
+        (dolist (name *gmsh-stub-packages*)
+          (when (search (package-name (find-package name)) msg)
+            (error "SDL file requires Gmsh support (referenced ~A).~%~
+                    Rebuild with: cmake -DSTREAMVORTI_WITH_GMSH=ON ~
+                    -DSTREAMVORTI_WITH_ECL=ON .."
+                   (package-name (find-package name)))))
+        ;; Not a gmsh error — re-signal original
+        (error c)))))
+
+;;; ============================================================
 ;;; Foreign Function Interface Package
 ;;; ============================================================
 
