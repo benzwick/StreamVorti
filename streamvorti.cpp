@@ -122,6 +122,7 @@ int main(int argc, char *argv[])
 
     bool paraview_output = false;
     std::string paraview_filename = fname;
+    std::string paraview_prefix_path = "ParaView";
 
     // Simulation parameters
     SimulationParams params;
@@ -295,6 +296,9 @@ int main(int argc, char *argv[])
             // Map output settings
             if (config.output.format == "vtk") {
                 paraview_output = true;
+            }
+            if (!config.output.directory.empty()) {
+                paraview_prefix_path = config.output.directory;
             }
             // Map output interval to paraview frequency (convert time to steps)
             if (config.output.interval > 0 && params.dt > 0) {
@@ -781,7 +785,7 @@ int main(int argc, char *argv[])
     mfem::ParaViewDataCollection paraview_dc(paraview_filename, mesh);
     if (paraview_output) {
         // paraview_dc.SetPrecision(8);
-        paraview_dc.SetPrefixPath("ParaView");
+        paraview_dc.SetPrefixPath(paraview_prefix_path);
         paraview_dc.SetLevelsOfDetail(order);
         // paraview_dc.SetDataFormat(mfem::VTKFormat::ASCII);
         paraview_dc.SetDataFormat(mfem::VTKFormat::BINARY);
@@ -795,7 +799,7 @@ int main(int argc, char *argv[])
         paraview_dc.SetTime(0.0);
         paraview_dc.Save();
 
-        std::cout << "Created ParaView output directory: " << "ParaView" << std::endl;
+        std::cout << "Created ParaView output directory: " << paraview_prefix_path << std::endl;
     }
 
     // ====================================================================
