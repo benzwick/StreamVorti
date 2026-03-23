@@ -69,6 +69,39 @@ Note: On MacOS, you might need to add this option above to find the Eigen header
 -DEIGEN3_INCLUDE_DIRS=~/include
 ```
 
+### With Gmsh (optional, for unstructured mesh generation)
+
+Gmsh support enables `(domain :gmsh ...)` in SDL files for complex geometries
+(e.g., cylinder in channel) using [gmsh-cl](https://github.com/benzwick/gmsh-cl).
+Requires ECL.
+
+```bash
+# 1. Initialize gmsh-cl submodule and install CL dependencies
+git submodule update --init _reference/gmsh-cl
+cd _reference/gmsh-cl && ocicl install
+
+# 2. Build libgmsh from gmsh-cl's Gmsh submodule
+cd _reference/gmsh-cl
+git submodule update --init _reference/gmsh
+cd _reference/gmsh && mkdir build && cd build
+cmake .. -DENABLE_BUILD_SHARED=ON -DCMAKE_BUILD_TYPE=Release
+make -j6
+cd $PROJECT_ROOT
+
+# 3. Build StreamVorti with Gmsh support
+cd build
+cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug \
+      -DSTREAMVORTI_WITH_ECL=ON -DSTREAMVORTI_WITH_GMSH=ON ..
+make -j6
+```
+
+### With ECL (optional, for SDL simulation files)
+
+```bash
+cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug \
+      -DSTREAMVORTI_WITH_ECL=ON ..
+```
+
 # Usage
 
 Two executables are built:
