@@ -283,9 +283,12 @@ Returns (VALUES data source-name) or (VALUES NIL NIL)."
                          (results-file "output_dat/mfem_square10x10_u_centerline_x0.5.dat")
                          (reynolds 100)
                          (output-dir "plots/")
-                         (plot t))
+                         (plot t)
+                         (l2-threshold 0.05)
+                         (linf-threshold 0.10))
   "Validate StreamVorti results against reference data.
-Returns T if validation passes, NIL otherwise."
+Returns T if validation passes, NIL otherwise.
+L2-THRESHOLD and LINF-THRESHOLD control pass/fail criteria (default 5%/10%)."
   (format t "~%~70,,,'-<~>~%")
   (format t "StreamVorti Validation for Re=~A~%" reynolds)
   (format t "~70,,,'-<~>~%~%")
@@ -302,12 +305,12 @@ Returns T if validation passes, NIL otherwise."
       (format t "Reference data: ~A points~%" (length reference))
       ;; Compute errors
       (multiple-value-bind (l2 linf) (compute-errors computed reference)
-        (let ((l2-pass (< l2 0.05))
-              (linf-pass (< linf 0.10)))
+        (let ((l2-pass (< l2 l2-threshold))
+              (linf-pass (< linf linf-threshold)))
           (format t "  L2 error:   ~,6F~%" l2)
           (format t "  Linf error: ~,6F~%" linf)
-          (format t "  L2 < 5%: ~A~%" (if l2-pass "PASS" "FAIL"))
-          (format t "  Linf < 10%: ~A~%" (if linf-pass "PASS" "FAIL"))
+          (format t "  L2 < ~A%: ~A~%" (round (* 100 l2-threshold)) (if l2-pass "PASS" "FAIL"))
+          (format t "  Linf < ~A%: ~A~%" (round (* 100 linf-threshold)) (if linf-pass "PASS" "FAIL"))
           (format t "~%Overall: ~A~%" (if (and l2-pass linf-pass) "PASS" "FAIL"))
           ;; Plots
           (when plot
