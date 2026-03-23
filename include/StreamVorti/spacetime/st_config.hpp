@@ -39,6 +39,8 @@
 #include <vector>
 #include <functional>
 
+namespace mfem { class Mesh; }
+
 namespace StreamVorti {
 namespace SpaceTime {
 
@@ -194,6 +196,7 @@ struct SolverConfig
 
     // Mesh
     std::string mesh_file;              ///< Spatial mesh file
+    mfem::Mesh *spatial_mesh = nullptr; ///< Pre-built mesh (e.g. from SDL); not owned
     int serial_refine = 0;              ///< Uniform refinements before partitioning
     int parallel_refine = 0;            ///< Uniform refinements after partitioning
 

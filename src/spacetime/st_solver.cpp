@@ -187,7 +187,16 @@ void STNavierStokesSolver::Initialize()
 
 void STNavierStokesSolver::LoadSpatialMesh()
 {
-    if (config_.mesh_file.empty())
+    if (config_.spatial_mesh)
+    {
+        // Use pre-built mesh (e.g. from SDL loader)
+        spatial_mesh_ = new mfem::Mesh(*config_.spatial_mesh);
+    }
+    else if (!config_.mesh_file.empty())
+    {
+        spatial_mesh_ = new mfem::Mesh(config_.mesh_file.c_str(), 1, 1);
+    }
+    else
     {
         if (myid_ == 0)
         {
@@ -195,9 +204,6 @@ void STNavierStokesSolver::LoadSpatialMesh()
         }
         return;
     }
-
-    // Load spatial mesh
-    spatial_mesh_ = new mfem::Mesh(config_.mesh_file.c_str(), 1, 1);
     assert(spatial_mesh_->Dimension() == config_.spatial_dim);
 
     // Apply serial refinement

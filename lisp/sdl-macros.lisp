@@ -339,14 +339,17 @@
 
 (defstruct (spatial-data (:constructor %make-spatial)
                          (:conc-name spatial-))
-  type neighbors support-radius order kernel h)
+  type neighbors support-radius order kernel h
+  element-type velocity-order pressure-order)
 
-(defun make-spatial (type &key neighbors support-radius order kernel h)
+(defun make-spatial (type &key neighbors support-radius order kernel h
+                              element-type velocity-order pressure-order)
   "Create a spatial discretization definition.
 
    Examples:
    (make-spatial :dcpse :neighbors 25 :support-radius 3.5)
    (make-spatial :fem :order 2)
+   (make-spatial :fem :element-type :tensor-product :velocity-order 2 :pressure-order 1)
    (make-spatial :sph :kernel :wendland :h 0.02)"
   (%make-spatial
    :type type
@@ -354,7 +357,10 @@
    :support-radius (when support-radius (coerce support-radius 'double-float))
    :order order
    :kernel kernel
-   :h (when h (coerce h 'double-float))))
+   :h (when h (coerce h 'double-float))
+   :element-type element-type
+   :velocity-order velocity-order
+   :pressure-order pressure-order))
 
 ;;; ============================================================
 ;;; Temporal Integration

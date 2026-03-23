@@ -30,7 +30,8 @@
 (defstruct (sim-data (:constructor %make-sim)
                      (:conc-name sim-))
   name dim domain boundaries subdomains physics-list
-  spatial temporal output-config probes coupling)
+  spatial temporal output-config probes coupling
+  space-time adaptivity nonlinear-solver linear-solver)
 
 (defvar *known-physics-types*
   '(:navier-stokes :heat-conduction :stokes :euler :laplace :diffusion
@@ -433,6 +434,12 @@
             ,@(when iterations `(:iterations ,iterations))
             ,@(when interface `(:interface ',interface))))))
 
+(defun compile-sim-plist-form (sim-var slot-accessor form)
+  "Store an SDL form's keyword arguments as a property list on a sim slot.
+   Used for forms like (space-time :formulation :st-vms :dt-slab 0.1 ...)
+   where we capture the full keyword/value pairs for later extraction."
+  `(setf (,slot-accessor ,sim-var) ',(cdr form)))
+
 (defun compile-sim-form (sim-var form)
   "Compile a single simulation body form by dispatching on (car form)."
   (unless (and (listp form) (symbolp (car form)))
@@ -448,6 +455,10 @@
       ((string= tag "OUTPUT")      (compile-sim-output sim-var form))
       ((string= tag "PROBES")      (compile-sim-probes sim-var form))
       ((string= tag "COUPLING")    (compile-sim-coupling sim-var form))
+      ((string= tag "SPACE-TIME")  (compile-sim-plist-form sim-var 'sim-space-time form))
+      ((string= tag "ADAPTIVITY")  (compile-sim-plist-form sim-var 'sim-adaptivity form))
+      ((string= tag "NONLINEAR-SOLVER") (compile-sim-plist-form sim-var 'sim-nonlinear-solver form))
+      ((string= tag "LINEAR-SOLVER")    (compile-sim-plist-form sim-var 'sim-linear-solver form))
       (t (error "Unknown simulation form: ~A" (car form))))))
 
 ;;; ============================================================
