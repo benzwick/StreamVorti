@@ -1121,8 +1121,8 @@ int main(int argc, char *argv[])
             for (int i = 0; i < num_nodes; ++i) {
                 vorticity_gf[i] = vorticity[i];
                 streamfunction_gf[i] = streamfunction[i];
-                velocity_gf[i] = u_velocity[i];                    // u
-                velocity_gf[i + num_nodes] = v_velocity[i];      // v = -∂ψ/∂x
+                velocity_gf(vector_fes.DofToVDof(i, 0)) = u_velocity[i];
+                velocity_gf(vector_fes.DofToVDof(i, 1)) = v_velocity[i];
             }
 
             paraview_dc.SetTime(current_time);

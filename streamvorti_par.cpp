@@ -1282,11 +1282,19 @@ int main(int argc, char *argv[])
         // ================================================================
         if (paraview_output && (time_step % params.paraview_output_frequency == 0)) {
 
-            for (int i = 0; i < num_nodes; ++i) {
-                vorticity_gf[i] = vorticity[i];
-                streamfunction_gf[i] = streamfunction[i];
-                velocity_gf[i] = u_velocity[i];                    // u
-                velocity_gf[i + num_nodes] = v_velocity[i];      // v = -∂ψ/∂x
+            // Distribute true-DOF vectors to local-DOF ParGridFunctions
+            vorticity_gf.Distribute(vorticity);
+            streamfunction_gf.Distribute(streamfunction);
+
+            // Assemble vector velocity field from scalar components
+            {
+                mfem::ParGridFunction u_gf(&scalar_fes), v_gf(&scalar_fes);
+                u_gf.Distribute(u_velocity);
+                v_gf.Distribute(v_velocity);
+                for (int i = 0; i < scalar_fes.GetNDofs(); ++i) {
+                    velocity_gf(vector_fes.DofToVDof(i, 0)) = u_gf(i);
+                    velocity_gf(vector_fes.DofToVDof(i, 1)) = v_gf(i);
+                }
             }
 
             paraview_dc.SetTime(current_time);
