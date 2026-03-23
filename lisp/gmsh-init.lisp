@@ -13,16 +13,19 @@
 
 (in-package :cl-user)
 
-;; Delete stub packages created by packages.lisp so gmsh-cl can
-;; define the real ones with full exports and nicknames.
-(dolist (name '(:gmsh/fltk :gmsh/option :gmsh/mesh :gmsh/geo
-               :gmsh/occ :gmsh))
-  (let ((pkg (find-package name)))
-    (when (and pkg (null (apropos-list "" pkg)))
-      (delete-package pkg))))
+(let ((gmsh-dir (truename *gmsh-cl-dir*)))
 
-;; Register gmsh-cl source with ASDF
-(push (truename *gmsh-cl-dir*) asdf:*central-registry*)
+  ;; Register gmsh-cl source with ASDF
+  (push gmsh-dir asdf:*central-registry*)
 
-;; Load gmsh-cl and its dependencies
-(asdf:load-system :gmsh-cl)
+  ;; Register ocicl dependencies (cffi, alexandria, etc.)
+  ;; ocicl install places each dependency in a subdirectory of ocicl/
+  (let ((ocicl-dir (merge-pathnames "ocicl/" gmsh-dir)))
+    (when (probe-file ocicl-dir)
+      (dolist (entry (directory (merge-pathnames "*/" ocicl-dir)))
+        (push entry asdf:*central-registry*))))
+
+  ;; Load gmsh-cl and its dependencies.
+  ;; gmsh-cl's defpackage forms will update the stub packages created
+  ;; by packages.lisp, adding exports and full functionality.
+  (asdf:load-system :gmsh-cl))
