@@ -1436,14 +1436,23 @@ int main(int argc, char *argv[])
         // SIMPLE REAL-TIME MONITORING
         // ====================================================================
 
-        // Ranges of Vorticity and Streamfunction results
+        // Ranges of Vorticity and Streamfunction results (global min/max)
         if (time_step % 1000 == 0) {
-            std::cout << "\nStep " << time_step
-                    << " | t=" << std::fixed << std::setprecision(2) << current_time
-                    << " | ω: [" << std::setprecision(3) << vorticity.Min()
-                    << ", " << vorticity.Max() << "]"
-                    << " | ψ: [" << streamfunction.Min()
-                    << ", " << streamfunction.Max() << "]" << std::endl;
+            double local_vals[4] = {vorticity.Min(), vorticity.Max(),
+                                    streamfunction.Min(), streamfunction.Max()};
+            double global_min_vort, global_max_vort, global_min_psi, global_max_psi;
+            MPI_Reduce(&local_vals[0], &global_min_vort, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+            MPI_Reduce(&local_vals[1], &global_max_vort, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+            MPI_Reduce(&local_vals[2], &global_min_psi, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+            MPI_Reduce(&local_vals[3], &global_max_psi, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+            if (myid == 0) {
+                std::cout << "\nStep " << time_step
+                          << " | t=" << std::fixed << std::setprecision(2) << current_time
+                          << " | ω: [" << std::setprecision(3) << global_min_vort
+                          << ", " << global_max_vort << "]"
+                          << " | ψ: [" << global_min_psi
+                          << ", " << global_max_psi << "]" << std::endl;
+            }
         }
 
     } // End of time-stepping loop
