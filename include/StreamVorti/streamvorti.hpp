@@ -104,6 +104,7 @@ struct SimulationParams {
 
     // Linear solver configuration
     std::string solver_type = "umfpack";   ///< Solver: umfpack/klu/cg/gmres/minres/bicgstab
+    bool symmetrize_laplacian = false;     ///< Symmetrize DCPSE Laplacian: L = (L+L^T)/2 (required for CG)
     int solver_max_iter = 500;             ///< Maximum iterations for iterative solvers
     double solver_rel_tol = 1e-8;          ///< Relative tolerance (typical: 1e-6 to 1e-10)
     int solver_print_level = 0;            ///< Verbosity (0=quiet, 1=summary, 2=verbose)

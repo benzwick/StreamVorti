@@ -197,6 +197,9 @@ int main(int argc, char *argv[])
     // Solver options
     args.AddOption(&params.solver_type, "-solver", "--linear-solver",
                    "Linear solver: umfpack, cg, gmres, minres, bicgstab, hypre (if available)");
+    args.AddOption(&params.symmetrize_laplacian, "-sym", "--symmetrize",
+                   "-no-sym", "--no-symmetrize",
+                   "Symmetrize DCPSE Laplacian: L=(L+L^T)/2 (required for CG/PCG solvers).");
     args.AddOption(&params.solver_print_level, "-spl", "--solver-print-level",
                    "Solver print level (0=quiet, 1=summary, 2=verbose).");
     args.AddOption(&params.solver_max_iter, "-smi", "--solver-max-iter",
@@ -687,7 +690,28 @@ int main(int argc, char *argv[])
     // Assemble -∇²ψ = ω system with mixed Dirichlet/Neumann BCs.
     // Use mfem::Add to merge sparsity patterns correctly — SparseMatrix::Add
     // only updates existing entries and silently drops new columns from B.
-    mfem::SparseMatrix* laplacian_matrix = mfem::Add(-1.0, dxx_matrix, -1.0, dyy_matrix);
+    // CG/PCG solvers require SPD matrices — abort if selected without symmetrization
+    if ((params.solver_type == "cg") && !params.symmetrize_laplacian) {
+        MFEM_ABORT("Solver '" << params.solver_type
+                   << "' requires a symmetric matrix. "
+                   << "Use -sym to symmetrize the DCPSE Laplacian, "
+                   << "or use a non-symmetric solver (gmres, umfpack).");
+    }
+
+    mfem::SparseMatrix* laplacian_matrix;
+    if (params.symmetrize_laplacian) {
+        // Symmetrize DCPSE Laplacian: L = (L + L^T) / 2
+        // DCPSE operators approximate the symmetric continuous Laplacian
+        // but have non-symmetric stencils. Symmetrizing enables CG solvers.
+        mfem::SparseMatrix* L_raw = mfem::Add(-1.0, dxx_matrix, -1.0, dyy_matrix);
+        mfem::SparseMatrix* L_t = mfem::Transpose(*L_raw);
+        laplacian_matrix = mfem::Add(0.5, *L_raw, 0.5, *L_t);
+        delete L_raw;
+        delete L_t;
+        std::cout << "Setup: Symmetrized DCPSE Laplacian: L = (L + L^T) / 2" << std::endl;
+    } else {
+        laplacian_matrix = mfem::Add(-1.0, dxx_matrix, -1.0, dyy_matrix);
+    }
 
     // STEP 1: Replace Neumann rows with normal derivative operator (∂ψ/∂n = 0)
     // For outlet at x=const: row ← dx_matrix row (enforces ∂ψ/∂x = 0)

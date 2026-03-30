@@ -336,6 +336,9 @@ int main(int argc, char *argv[])
     // Solver options
     args.AddOption(&params.solver_type, "-solver", "--linear-solver",
                    "Linear solver: umfpack, cg, gmres, minres, bicgstab, hypre (if available)");
+    args.AddOption(&params.symmetrize_laplacian, "-sym", "--symmetrize",
+                   "-no-sym", "--no-symmetrize",
+                   "Symmetrize DCPSE Laplacian: L=(L+L^T)/2 (required for CG/PCG solvers).");
     args.AddOption(&params.solver_print_level, "-spl", "--solver-print-level",
                    "Solver print level (0=quiet, 1=summary, 2=verbose).");
     args.AddOption(&params.solver_max_iter, "-smi", "--solver-max-iter",
@@ -800,8 +803,31 @@ int main(int argc, char *argv[])
     // ================================================================
     // LAPLACIAN MATRIX ASSEMBLY
     // ================================================================
-    mfem::HypreParMatrix* laplacian_matrix = mfem::ParAdd(&dxx_matrix, &dyy_matrix);
-    *laplacian_matrix *= -1.0;
+    // CG/PCG solvers require SPD matrices — abort if selected without symmetrization
+    if ((params.solver_type == "cg") && !params.symmetrize_laplacian) {
+        MFEM_ABORT("Solver '" << params.solver_type
+                   << "' requires a symmetric matrix. "
+                   << "Use -sym to symmetrize the DCPSE Laplacian, "
+                   << "or use a non-symmetric solver (gmres, hypre).");
+    }
+
+    mfem::HypreParMatrix* laplacian_matrix;
+    if (params.symmetrize_laplacian) {
+        // Symmetrize DCPSE Laplacian: L = (L + L^T) / 2
+        mfem::HypreParMatrix* L_raw = mfem::ParAdd(&dxx_matrix, &dyy_matrix);
+        *L_raw *= -1.0;
+        mfem::HypreParMatrix* L_t = L_raw->Transpose();
+        mfem::HypreParMatrix* L_sum = mfem::ParAdd(L_raw, L_t);
+        *L_sum *= 0.5;
+        laplacian_matrix = L_sum;
+        delete L_raw;
+        delete L_t;
+        if (myid == 0)
+            std::cout << "Setup: Symmetrized DCPSE Laplacian: L = (L + L^T) / 2" << std::endl;
+    } else {
+        laplacian_matrix = mfem::ParAdd(&dxx_matrix, &dyy_matrix);
+        *laplacian_matrix *= -1.0;
+    }
 
     // STEP 1: Replace Neumann rows with derivative operators FIRST
     // (before Dirichlet column elimination).
