@@ -30,7 +30,8 @@
 (defstruct (sim-data (:constructor %make-sim)
                      (:conc-name sim-))
   name dim domain boundaries subdomains physics-list
-  spatial temporal output-config probes coupling)
+  spatial temporal output-config probes coupling
+  space-time adaptivity nonlinear-solver linear-solver)
 
 (defvar *known-physics-types*
   '(:navier-stokes :heat-conduction :stokes :euler :laplace :diffusion
@@ -115,7 +116,8 @@
     ((stringp expr) expr)
     ((symbolp expr)
      (let ((name (string-upcase (symbol-name expr))))
-       (if (member name '("X" "Y" "Z" "=" ">" "<" ">=" "<=" "AND" "OR" "NOT")
+       (if (member name '("X" "Y" "Z" "=" ">" "<" ">=" "<=" "AND" "OR" "NOT"
+                          "ATTRIBUTE")
                    :test #'string=)
            `',expr
            expr)))
@@ -231,6 +233,41 @@
 
 ;;; --- Top-level form compilers ---
 
+(defun compile-sim-domain-gmsh (sim-var body)
+  "Compile a (domain :gmsh body...) form.
+   Uses INTERN to resolve gmsh symbols at runtime, avoiding reader
+   errors when the GMSH package is not loaded."
+  `(setf (sim-domain ,sim-var)
+         (let ((path (format nil "/tmp/streamvorti-~A.msh"
+                             (get-universal-time))))
+           (unless (fboundp (find-symbol "INITIALIZE" "GMSH"))
+             (error "Gmsh support not available. ~
+                     Rebuild with -DSTREAMVORTI_WITH_GMSH=ON"))
+           (flet ((gmsh-fn (name &optional (pkg "GMSH"))
+                    (symbol-function (intern name pkg))))
+             (let ((phys-groups nil))
+               (funcall (gmsh-fn "INITIALIZE"))
+               (unwind-protect
+                   (progn
+                     (funcall (gmsh-fn "ADD") "streamvorti")
+                     ,@body
+                     ;; Query named physical groups before writing
+                     (let ((groups (funcall (gmsh-fn "GET-PHYSICAL-GROUPS")
+                                           :dim 1)))
+                       (dolist (g groups)
+                         (let* ((dim (car g)) (tag (cdr g))
+                                (name (funcall (gmsh-fn "GET-PHYSICAL-NAME")
+                                               dim tag)))
+                           (when (plusp (length name))
+                             (push (cons name tag) phys-groups)))))
+                     ;; Write MSH2 format for MFEM compatibility
+                     (funcall (gmsh-fn "SET-NUMBER" "GMSH/OPTION")
+                              "Mesh.MshFileVersion" 2.2d0)
+                     (funcall (gmsh-fn "WRITE") path))
+                 (funcall (gmsh-fn "FINALIZE")))
+               (%make-domain :type :file :file path
+                             :physical-groups (nreverse phys-groups)))))))
+
 (defun compile-sim-domain (sim-var form)
   "Compile a (domain ...) form."
   (let ((args (cdr form)))
@@ -239,6 +276,9 @@
       ((and (keywordp (car args)) (eq (car args) :file))
        `(setf (sim-domain ,sim-var)
               (%make-domain :type :file :file ,(second args))))
+      ;; Gmsh domain: (domain :gmsh body...)
+      ((and (keywordp (car args)) (eq (car args) :gmsh))
+       (compile-sim-domain-gmsh sim-var (cdr args)))
       ;; Geometry domain: (domain geom-expr type &rest kwargs)
       (t
        (let* ((geom-form (car args))
@@ -433,6 +473,12 @@
             ,@(when iterations `(:iterations ,iterations))
             ,@(when interface `(:interface ',interface))))))
 
+(defun compile-sim-plist-form (sim-var slot-accessor form)
+  "Store an SDL form's keyword arguments as a property list on a sim slot.
+   Used for forms like (space-time :formulation :st-vms :dt-slab 0.1 ...)
+   where we capture the full keyword/value pairs for later extraction."
+  `(setf (,slot-accessor ,sim-var) ',(cdr form)))
+
 (defun compile-sim-form (sim-var form)
   "Compile a single simulation body form by dispatching on (car form)."
   (unless (and (listp form) (symbolp (car form)))
@@ -448,6 +494,10 @@
       ((string= tag "OUTPUT")      (compile-sim-output sim-var form))
       ((string= tag "PROBES")      (compile-sim-probes sim-var form))
       ((string= tag "COUPLING")    (compile-sim-coupling sim-var form))
+      ((string= tag "SPACE-TIME")  (compile-sim-plist-form sim-var 'sim-space-time form))
+      ((string= tag "ADAPTIVITY")  (compile-sim-plist-form sim-var 'sim-adaptivity form))
+      ((string= tag "NONLINEAR-SOLVER") (compile-sim-plist-form sim-var 'sim-nonlinear-solver form))
+      ((string= tag "LINEAR-SOLVER")    (compile-sim-plist-form sim-var 'sim-linear-solver form))
       (t (error "Unknown simulation form: ~A" (car form))))))
 
 ;;; ============================================================

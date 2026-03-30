@@ -82,5 +82,28 @@ void ExtractCenterline(const mfem::Vector& u_velocity,
                        double position,
                        double tol = 0.01);
 
+/**
+ * @brief Save solution fields to files using MFEM's native format (parallel).
+ *
+ * Uses ParGridFunction::SaveAsOne() to gather the full solution to rank 0
+ * and write a single file per field. Output files use MFEM's .gf format
+ * which can be loaded back with GridFunction::Load().
+ *
+ * @param vorticity_gf Vorticity ParGridFunction (must be up-to-date via Distribute)
+ * @param streamfunction_gf Streamfunction ParGridFunction
+ * @param velocity_gf Vector velocity ParGridFunction
+ * @param prefix Output filename prefix
+ * @param timestep Current timestep number
+ * @param dat_dir Output directory
+ * @param is_final Whether this is the final solution save
+ */
+void SaveSolutionToFile(mfem::ParGridFunction& vorticity_gf,
+                       mfem::ParGridFunction& streamfunction_gf,
+                       mfem::ParGridFunction& velocity_gf,
+                       const std::string& prefix,
+                       int timestep,
+                       const std::string& dat_dir,
+                       bool is_final);
+
 #endif // MFEM_USE_MPI
 #endif // STREAMVORTI_PAR_HPP_

@@ -9,6 +9,7 @@ Git submodules and links to StreamVorti's dependencies for code reference.
 | [MFEM](https://mfem.org/) | 4.8 | `mfem/` | Finite element methods library. Provides mesh handling, linear algebra, grid functions. Core dependency. |
 | [HYPRE](https://computing.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods) | 2.19.0 | `hypre/` | Scalable linear solvers and multigrid methods. Required by MFEM for parallel builds. |
 | [vgplot](https://github.com/volkers/vgplot) | latest | `vgplot/` | Common Lisp gnuplot interface for plotting. Used for visualization scripts. |
+| [gmsh-cl](https://github.com/benzwick/gmsh-cl) | latest | `gmsh-cl/` | Common Lisp interface for Gmsh. REPL-driven geometry creation, meshing, and visualization. Optional (`-DSTREAMVORTI_WITH_GMSH=ON`). |
 
 To initialize submodules after cloning:
 ```bash

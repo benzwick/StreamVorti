@@ -1,0 +1,145 @@
+# GitHub Actions workflow for building StreamVorti with Gmsh support
+#
+# Builds StreamVorti with MFEM, ECL, and gmsh-cl for unstructured mesh
+# generation. Runs all tests including Gmsh-specific C++ tests.
+#
+# TRIGGERS:
+# - Manual workflow_dispatch
+# - Push to main branch
+# - Pull requests to main branch
+
+name: Build with Gmsh
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  HYPRE_URL: 'https://github.com/hypre-space/hypre/archive'
+  HYPRE_ARCHIVE: v2.19.0
+  HYPRE_TOP_DIR: hypre-2.19.0
+  METIS_URL: 'https://mfem.github.io/tpls'
+  METIS_ARCHIVE: metis-4.0.3.tar.gz
+  METIS_TOP_DIR: metis-4.0.3
+  MFEM_TOP_DIR: mfem-4.8
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install system dependencies
+      run: ./scripts/build-from-source/01-install-system-dependencies-gmsh.sh
+
+    - name: Setup ccache and create Eigen symlinks
+      run: ./scripts/build-from-source/02-setup-ccache.sh
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ubuntu-latest-gmsh-build-ccache
+        max-size: "2G"
+        verbose: 2
+
+    # Build HYPRE
+    - name: Cache HYPRE build
+      id: cache-hypre
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.HYPRE_TOP_DIR }}/install
+        key: ${{ env.HYPRE_TOP_DIR }}-${{ runner.os }}
+
+    - name: Build HYPRE
+      if: steps.cache-hypre.outputs.cache-hit != 'true'
+      run: ./scripts/build-from-source/03-build-hypre.sh "${{ env.HYPRE_URL }}" "${{ env.HYPRE_ARCHIVE }}" "${{ env.HYPRE_TOP_DIR }}"
+
+    # Build METIS
+    - name: Cache METIS build
+      id: cache-metis
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ env.METIS_TOP_DIR }}/libmetis.a
+          ${{ env.METIS_TOP_DIR }}/Lib
+        key: ${{ env.METIS_TOP_DIR }}-${{ runner.os }}
+
+    - name: Build METIS
+      if: steps.cache-metis.outputs.cache-hit != 'true'
+      run: ./scripts/build-from-source/04-build-metis.sh "${{ env.METIS_URL }}" "${{ env.METIS_ARCHIVE }}" "${{ env.METIS_TOP_DIR }}"
+
+    # Build MFEM
+    - name: Cache MFEM build
+      id: cache-mfem
+      uses: actions/cache@v3
+      with:
+        path: /opt/mfem/${{ env.MFEM_TOP_DIR }}
+        key: ${{ env.MFEM_TOP_DIR }}-hypre-metis-${{ runner.os }}
+
+    - name: Build and install MFEM 4.8
+      if: steps.cache-mfem.outputs.cache-hit != 'true'
+      run: ./scripts/build-from-source/05-build-mfem.sh "${{ env.MFEM_TOP_DIR }}" "${{ env.HYPRE_TOP_DIR }}" "${{ env.METIS_TOP_DIR }}" "/opt/mfem/${{ env.MFEM_TOP_DIR }}"
+
+    - name: Install Google Test
+      run: ./scripts/build-from-source/11-install-gtest.sh
+
+    # Build libgmsh (cached)
+    - name: Restore libgmsh cache
+      id: cache-gmsh
+      uses: actions/cache/restore@v4
+      with:
+        path: _reference/gmsh-cl/_reference/gmsh/build
+        key: libgmsh-${{ hashFiles('.gitmodules') }}
+
+    - name: Build libgmsh
+      run: |
+        cd _reference/gmsh-cl/_reference/gmsh
+        mkdir -p build && cd build
+        if [ ! -f CMakeCache.txt ]; then
+          cmake .. -DENABLE_BUILD_SHARED=ON -DCMAKE_BUILD_TYPE=Release
+        else
+          # Touch cached build artifacts so make sees them as newer than
+          # source files (git checkout sets timestamps to "now")
+          find . -type f -exec touch -t $(date -d '+1 minute' +%Y%m%d%H%M.%S) {} +
+        fi
+        make -j$(nproc)
+
+    - name: Save libgmsh cache
+      if: always() && steps.cache-gmsh.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: _reference/gmsh-cl/_reference/gmsh/build
+        key: libgmsh-${{ hashFiles('.gitmodules') }}
+
+    # Install gmsh-cl CL dependencies (cached)
+    - name: Cache gmsh-cl ocicl dependencies
+      id: cache-ocicl
+      uses: actions/cache@v3
+      with:
+        path: _reference/gmsh-cl/ocicl
+        key: gmsh-cl-ocicl-${{ runner.os }}-${{ hashFiles('_reference/gmsh-cl/ocicl.csv') }}
+
+    - name: Install gmsh-cl ocicl dependencies
+      if: steps.cache-ocicl.outputs.cache-hit != 'true'
+      run: cd _reference/gmsh-cl && ocicl install
+
+    # Build StreamVorti with Gmsh
+    - name: Build StreamVorti with Gmsh
+      run: ./scripts/build-from-source/06-build-streamvorti-gmsh.sh "/opt/mfem/${{ env.MFEM_TOP_DIR }}" "Debug" "OFF"
+
+    - name: Display ccache statistics
+      run: ccache -s
+
+    - name: Run unit tests
+      run: ./scripts/build-from-source/07-run-ctest.sh build
+
+    - name: Run Lisp tests
+      run: make -C build test-lisp

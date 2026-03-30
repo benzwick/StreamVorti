@@ -59,6 +59,10 @@ if(STREAMVORTI_WITH_ECL)
     target_compile_definitions(streamvorti_tests PRIVATE STREAMVORTI_WITH_ECL)
 endif()
 
+if(STREAMVORTI_WITH_GMSH)
+    target_compile_definitions(streamvorti_tests PRIVATE STREAMVORTI_WITH_GMSH)
+endif()
+
 # Discover and register tests
 gtest_discover_tests(streamvorti_tests
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

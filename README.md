@@ -15,6 +15,7 @@
 [![Common Lisp](https://img.shields.io/badge/Common%20Lisp-SBCL%20%7C%20ECL-blue.svg)](https://common-lisp.net/)
 [![MFEM](https://img.shields.io/badge/MFEM-4.8%20%7C%204.9-green.svg)](https://mfem.org/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/benzwick/StreamVorti)
+[![Renovate](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://renovatebot.com)
 
 # Installing
 
@@ -69,6 +70,44 @@ Note: On Debian Linux, if you encounter `fatal error: Eigen/Dense: No such file 
 cd /usr/include
 sudo ln -sf eigen3/Eigen Eigen
 sudo ln -sf eigen3/unsupported unsupported
+```
+
+Note: On MacOS, you might need to add this option above to find the Eigen headers in the home directory:
+```
+-DEIGEN3_INCLUDE_DIRS=~/include
+```
+
+### With Gmsh (optional, for unstructured mesh generation)
+
+Gmsh support enables `(domain :gmsh ...)` in SDL files for complex geometries
+(e.g., cylinder in channel) using [gmsh-cl](https://github.com/benzwick/gmsh-cl).
+Requires ECL.
+
+```bash
+# 1. Initialize gmsh-cl submodule and install CL dependencies
+git submodule update --init _reference/gmsh-cl
+cd _reference/gmsh-cl && ocicl install
+
+# 2. Build libgmsh from gmsh-cl's Gmsh submodule
+cd _reference/gmsh-cl
+git submodule update --init _reference/gmsh
+cd _reference/gmsh && mkdir build && cd build
+cmake .. -DENABLE_BUILD_SHARED=ON -DCMAKE_BUILD_TYPE=Release
+make -j6
+cd $PROJECT_ROOT
+
+# 3. Build StreamVorti with Gmsh support
+cd build
+cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug \
+      -DSTREAMVORTI_WITH_ECL=ON -DSTREAMVORTI_WITH_GMSH=ON ..
+make -j6
+```
+
+### With ECL (optional, for SDL simulation files)
+
+```bash
+cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug \
+      -DSTREAMVORTI_WITH_ECL=ON ..
 ```
 
 # Usage

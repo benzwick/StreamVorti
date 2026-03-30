@@ -260,6 +260,7 @@ int main(int argc, char *argv[])
 
     bool paraview_output = false;
     std::string paraview_filename = fname;
+    std::string paraview_prefix_path = "ParaView";
 
     // Simulation parameters
     SimulationParams params;
@@ -436,6 +437,9 @@ int main(int argc, char *argv[])
             // Map output settings
             if (config.output.format == "vtk") {
                 paraview_output = true;
+            }
+            if (!config.output.directory.empty()) {
+                paraview_prefix_path = config.output.directory;
             }
             // Map output interval to paraview frequency (convert time to steps)
             if (config.output.interval > 0 && params.dt > 0) {
@@ -932,11 +936,17 @@ int main(int argc, char *argv[])
     mfem::ParGridFunction streamfunction_gf(&scalar_fes);
     mfem::ParGridFunction velocity_gf(&vector_fes);
 
+    // MPI rank field for visualization of domain decomposition
+    mfem::L2_FECollection rank_fec(0, dim);
+    mfem::ParFiniteElementSpace rank_fes(mesh, &rank_fec);
+    mfem::ParGridFunction rank_gf(&rank_fes);
+    rank_gf = static_cast<double>(myid);
+
     // Create ParaView data collection
     mfem::ParaViewDataCollection paraview_dc(paraview_filename, mesh);
     if (paraview_output) {
         // paraview_dc.SetPrecision(8);
-        paraview_dc.SetPrefixPath("ParaView");
+        paraview_dc.SetPrefixPath(paraview_prefix_path);
         paraview_dc.SetLevelsOfDetail(order);
         // paraview_dc.SetDataFormat(mfem::VTKFormat::ASCII);
         paraview_dc.SetDataFormat(mfem::VTKFormat::BINARY);
@@ -945,13 +955,28 @@ int main(int argc, char *argv[])
         paraview_dc.RegisterField("Vorticity", &vorticity_gf);
         paraview_dc.RegisterField("StreamFunction", &streamfunction_gf);
         paraview_dc.RegisterField("Velocity", &velocity_gf);
+        paraview_dc.RegisterField("MPI_Rank", &rank_gf);
         // Set time and cycle, then save
         paraview_dc.SetCycle(0);
         paraview_dc.SetTime(0.0);
         paraview_dc.Save();
 
-        std::cout << "Created ParaView output directory: " << "ParaView" << std::endl;
+        std::cout << "Created ParaView output directory: " << paraview_prefix_path << std::endl;
     }
+
+    // Helper: update ParGridFunctions from true-DOF solution vectors.
+    // Used by both ParaView output and SaveSolutionToFile.
+    auto UpdateGridFunctions = [&]() {
+        vorticity_gf.Distribute(vorticity);
+        streamfunction_gf.Distribute(streamfunction);
+        mfem::ParGridFunction u_gf(&scalar_fes), v_gf(&scalar_fes);
+        u_gf.Distribute(u_velocity);
+        v_gf.Distribute(v_velocity);
+        for (int i = 0; i < scalar_fes.GetNDofs(); ++i) {
+            velocity_gf(vector_fes.DofToVDof(i, 0)) = u_gf(i);
+            velocity_gf(vector_fes.DofToVDof(i, 1)) = v_gf(i);
+        }
+    };
 
     // ====================================================================
     // TIME-STEPPING PARAMETERS
@@ -1136,30 +1161,45 @@ int main(int argc, char *argv[])
         if (params.check_residuals && (time_step % params.residual_check_freq == 0)) {
 
             // Vorticity residual: ∂ω/∂t + K(ψ,ω) - L(ω) = 0
-            double vort_sum_sq = 0.0, vort_max = 0.0;
+            double local_vort_sum_sq = 0.0, local_vort_max = 0.0;
             for (int idx : interior_nodes) {
                 double domega_dt = (vorticity[idx] - vorticity_old[idx]) / current_dt;
                 double conv = convection_term[idx];
                 double diff = diffusion_term[idx];
 
                 double res = domega_dt + conv - diff;
-                vort_sum_sq += res * res;
-                vort_max = std::max(vort_max, std::abs(res));
+                local_vort_sum_sq += res * res;
+                local_vort_max = std::max(local_vort_max, std::abs(res));
             }
-            double vort_rms = std::sqrt(vort_sum_sq / interior_nodes.size());
 
             // Streamfunction residual: ∇²ψ + ω = 0
             mfem::Vector d2psi_dx2(num_nodes), d2psi_dy2(num_nodes);
             dxx_matrix.Mult(streamfunction, d2psi_dx2);
             dyy_matrix.Mult(streamfunction, d2psi_dy2);
 
-            double psi_sum_sq = 0.0, psi_max = 0.0;
+            double local_psi_sum_sq = 0.0, local_psi_max = 0.0;
             for (int idx : interior_nodes) {
                 double res = d2psi_dx2[idx] + d2psi_dy2[idx] + vorticity[idx];
-                psi_sum_sq += res * res;
-                psi_max = std::max(psi_max, std::abs(res));
+                local_psi_sum_sq += res * res;
+                local_psi_max = std::max(local_psi_max, std::abs(res));
             }
-            double psi_rms = std::sqrt(psi_sum_sq / interior_nodes.size());
+
+            // Reduce to global residuals across all ranks
+            double global_vort_sum_sq, global_vort_max;
+            double global_psi_sum_sq, global_psi_max;
+            int local_interior_count = static_cast<int>(interior_nodes.size());
+            int global_interior_count;
+
+            MPI_Allreduce(&local_vort_sum_sq, &global_vort_sum_sq, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+            MPI_Allreduce(&local_vort_max, &global_vort_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+            MPI_Allreduce(&local_psi_sum_sq, &global_psi_sum_sq, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+            MPI_Allreduce(&local_psi_max, &global_psi_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+            MPI_Allreduce(&local_interior_count, &global_interior_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+            double vort_rms = std::sqrt(global_vort_sum_sq / global_interior_count);
+            double vort_max = global_vort_max;
+            double psi_rms = std::sqrt(global_psi_sum_sq / global_interior_count);
+            double psi_max = global_psi_max;
 
             // Compute relative changes for steady state context
             double vort_rel_change = 0.0;
@@ -1172,17 +1212,18 @@ int main(int argc, char *argv[])
                 diff_stream = streamfunction;
                 diff_stream -= steady_prev_streamfunction;
 
-                // Compute relative changes with proper threshold check
-                double vort_norm = vorticity.Norml2();
-                double stream_norm = streamfunction.Norml2();
+                // Global L2 norms via MFEM's parallel norm
                 const double norm_threshold = 1e-12;
+                double vort_norm = mfem::ParNormlp(vorticity, 2.0, MPI_COMM_WORLD);
+                double stream_norm = mfem::ParNormlp(streamfunction, 2.0, MPI_COMM_WORLD);
+
+                double diff_vort_norm = mfem::ParNormlp(diff_vort, 2.0, MPI_COMM_WORLD);
+                double diff_stream_norm = mfem::ParNormlp(diff_stream, 2.0, MPI_COMM_WORLD);
 
                 vort_rel_change = (vort_norm > norm_threshold) ?
-                                  diff_vort.Norml2() / vort_norm :
-                                  diff_vort.Norml2();
+                                  diff_vort_norm / vort_norm : diff_vort_norm;
                 psi_rel_change = (stream_norm > norm_threshold) ?
-                                 diff_stream.Norml2() / stream_norm :
-                                 diff_stream.Norml2();
+                                 diff_stream_norm / stream_norm : diff_stream_norm;
             }
 
             // Store in history
@@ -1266,25 +1307,22 @@ int main(int argc, char *argv[])
         #endif // MFEM_USE_MPI
 
         // ================================================================
-        // STEP 7: OUTPUT SOLUTION PERIODICALLY (if enabled)
+        // STEP 7-8: UPDATE GRID FUNCTIONS AND OUTPUT
         // ================================================================
+        bool need_gf_update =
+            (save_solutions && (time_step % params.output_frequency == 0)) ||
+            (paraview_output && (time_step % params.paraview_output_frequency == 0));
+
+        if (need_gf_update) {
+            UpdateGridFunctions();
+        }
+
         if (save_solutions && (time_step % params.output_frequency == 0)) {
-            SaveSolutionToFile(vorticity, streamfunction, u_velocity, v_velocity,
+            SaveSolutionToFile(vorticity_gf, streamfunction_gf, velocity_gf,
                             params.output_prefix, time_step, dat_dir, false);
         }
 
-        // ================================================================
-        // STEP 8: PARAVIEW OUTPUT (if enabled)
-        // ================================================================
         if (paraview_output && (time_step % params.paraview_output_frequency == 0)) {
-
-            for (int i = 0; i < num_nodes; ++i) {
-                vorticity_gf[i] = vorticity[i];
-                streamfunction_gf[i] = streamfunction[i];
-                velocity_gf[i] = u_velocity[i];                    // u
-                velocity_gf[i + num_nodes] = v_velocity[i];      // v = -∂ψ/∂x
-            }
-
             paraview_dc.SetTime(current_time);
             paraview_dc.SetCycle(time_step);
             paraview_dc.Save();
@@ -1300,8 +1338,10 @@ int main(int argc, char *argv[])
                 steady_prev_vorticity = vorticity;
                 steady_prev_streamfunction = streamfunction;
                 steady_initialized = true;
-                std::cout << "Steady state monitoring started at timestep "
-                        << time_step << std::endl;
+                if (myid == 0) {
+                    std::cout << "Steady state monitoring started at timestep "
+                              << time_step << std::endl;
+                }
             } else {
                 // Compute relative changes since last check
                 mfem::Vector diff_vort(num_nodes);
@@ -1313,63 +1353,68 @@ int main(int argc, char *argv[])
                 diff_stream = streamfunction;
                 diff_stream -= steady_prev_streamfunction;
 
-                // Compute relative changes with proper threshold check
-                double vort_norm = vorticity.Norml2();
-                double stream_norm = streamfunction.Norml2();
+                // Global L2 norms via MFEM's parallel norm
                 const double norm_threshold = 1e-12;
+                double vort_norm = mfem::ParNormlp(vorticity, 2.0, MPI_COMM_WORLD);
+                double stream_norm = mfem::ParNormlp(streamfunction, 2.0, MPI_COMM_WORLD);
+                double diff_vort_norm = mfem::ParNormlp(diff_vort, 2.0, MPI_COMM_WORLD);
+                double diff_stream_norm = mfem::ParNormlp(diff_stream, 2.0, MPI_COMM_WORLD);
 
                 double vort_change = (vort_norm > norm_threshold) ?
-                                     diff_vort.Norml2() / vort_norm :
-                                     diff_vort.Norml2();
+                                     diff_vort_norm / vort_norm : diff_vort_norm;
                 double stream_change = (stream_norm > norm_threshold) ?
-                                       diff_stream.Norml2() / stream_norm :
-                                       diff_stream.Norml2();
+                                       diff_stream_norm / stream_norm : diff_stream_norm;
                 double max_change = std::max(vort_change, stream_change);
 
-                // Report progress
-                std::cout << "Step " << time_step << " (t=" << std::fixed
-                        << std::setprecision(6) << current_time
-                        << "): Temporal ‖Δ‖/‖·‖ = " << std::scientific << max_change;
+                if (myid == 0) {
+                    // Report progress
+                    std::cout << "Step " << time_step << " (t=" << std::fixed
+                              << std::setprecision(6) << current_time
+                              << "): Temporal ‖Δ‖/‖·‖ = " << std::scientific << max_change;
 
-                // Show current residuals if available
-                if (params.check_residuals && !residual_history.timesteps.empty()) {
-                    size_t last_idx = residual_history.timesteps.size() - 1;
-                    std::cout << " [ω_RMS=" << residual_history.vorticity_rms[last_idx]
-                            << ", ψ_RMS=" << residual_history.streamfunction_rms[last_idx] << "]";
+                    // Show current residuals if available
+                    if (params.check_residuals && !residual_history.timesteps.empty()) {
+                        size_t last_idx = residual_history.timesteps.size() - 1;
+                        std::cout << " [ω_RMS=" << residual_history.vorticity_rms[last_idx]
+                                  << ", ψ_RMS=" << residual_history.streamfunction_rms[last_idx] << "]";
+                    }
                 }
 
-                // Check convergence
+                // Check convergence (all ranks must agree)
                 if (max_change < params.steady_state_tol) {
                     steady_consecutive_passes++;
-                    std::cout << " ✓ [" << steady_consecutive_passes << "/"
-                            << params.steady_state_checks << "]" << std::endl;
+                    if (myid == 0) {
+                        std::cout << " ✓ [" << steady_consecutive_passes << "/"
+                                  << params.steady_state_checks << "]" << std::endl;
+                    }
 
                     if (steady_consecutive_passes >= params.steady_state_checks) {
-                        std::cout << "\n" << std::string(70, '=') << "\n";
-                        std::cout << "STEADY STATE REACHED\n";
-                        std::cout << "Time: " << GetCurrentDateTime() << "\n";
-                        std::cout << std::string(70, '=') << std::endl;
-                        std::cout << "Final relative change: " << max_change << std::endl;
-                        std::cout << "Convergence tolerance: " << params.steady_state_tol << std::endl;
-                        std::cout << "Total timesteps: " << time_step << std::endl;
-                        std::cout << "Physical time: " << current_time << std::endl;
+                        if (myid == 0) {
+                            std::cout << "\n" << std::string(70, '=') << "\n";
+                            std::cout << "STEADY STATE REACHED\n";
+                            std::cout << "Time: " << GetCurrentDateTime() << "\n";
+                            std::cout << std::string(70, '=') << std::endl;
+                            std::cout << "Final relative change: " << max_change << std::endl;
+                            std::cout << "Convergence tolerance: " << params.steady_state_tol << std::endl;
+                            std::cout << "Total timesteps: " << time_step << std::endl;
+                            std::cout << "Physical time: " << current_time << std::endl;
 
-                        if (params.check_residuals && !residual_history.timesteps.empty()) {
-                            size_t last_idx = residual_history.timesteps.size() - 1;
-                            std::cout << "Final vorticity residual: "
-                                    << residual_history.vorticity_rms[last_idx] << std::endl;
-                            std::cout << "Final streamfunction residual: "
-                                    << residual_history.streamfunction_rms[last_idx] << std::endl;
+                            if (params.check_residuals && !residual_history.timesteps.empty()) {
+                                size_t last_idx = residual_history.timesteps.size() - 1;
+                                std::cout << "Final vorticity residual: "
+                                          << residual_history.vorticity_rms[last_idx] << std::endl;
+                                std::cout << "Final streamfunction residual: "
+                                          << residual_history.streamfunction_rms[last_idx] << std::endl;
+                            }
+
+                            std::cout << std::string(70, '=') << "\n" << std::endl;
                         }
-
-                        std::cout << std::string(70, '=') << "\n" << std::endl;
 
                         // Save final solution before breaking
                         if (save_solutions) {
-                            mfem::Vector v_final = dpsi_dx;
-                            v_final *= -1.0;
-                            SaveSolutionToFile(vorticity, streamfunction,
-                                            dpsi_dy, v_final,
+                            UpdateGridFunctions();
+                            SaveSolutionToFile(vorticity_gf, streamfunction_gf,
+                                            velocity_gf,
                                             params.output_prefix, time_step,
                                             dat_dir, true);
                         }
@@ -1377,7 +1422,9 @@ int main(int argc, char *argv[])
                         break;  // Exit time-stepping loop
                     }
                 } else {
-                    std::cout << " (not converged)" << std::endl;
+                    if (myid == 0) {
+                        std::cout << " (not converged)" << std::endl;
+                    }
                     steady_consecutive_passes = 0; // Reset counter
                 }
 
@@ -1391,14 +1438,23 @@ int main(int argc, char *argv[])
         // SIMPLE REAL-TIME MONITORING
         // ====================================================================
 
-        // Ranges of Vorticity and Streamfunction results
+        // Ranges of Vorticity and Streamfunction results (global min/max)
         if (time_step % 1000 == 0) {
-            std::cout << "\nStep " << time_step
-                    << " | t=" << std::fixed << std::setprecision(2) << current_time
-                    << " | ω: [" << std::setprecision(3) << vorticity.Min()
-                    << ", " << vorticity.Max() << "]"
-                    << " | ψ: [" << streamfunction.Min()
-                    << ", " << streamfunction.Max() << "]" << std::endl;
+            double local_vals[4] = {vorticity.Min(), vorticity.Max(),
+                                    streamfunction.Min(), streamfunction.Max()};
+            double global_min_vort, global_max_vort, global_min_psi, global_max_psi;
+            MPI_Reduce(&local_vals[0], &global_min_vort, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+            MPI_Reduce(&local_vals[1], &global_max_vort, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+            MPI_Reduce(&local_vals[2], &global_min_psi, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+            MPI_Reduce(&local_vals[3], &global_max_psi, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+            if (myid == 0) {
+                std::cout << "\nStep " << time_step
+                          << " | t=" << std::fixed << std::setprecision(2) << current_time
+                          << " | ω: [" << std::setprecision(3) << global_min_vort
+                          << ", " << global_max_vort << "]"
+                          << " | ψ: [" << global_min_psi
+                          << ", " << global_max_psi << "]" << std::endl;
+            }
         }
 
     } // End of time-stepping loop
@@ -1575,63 +1631,28 @@ void IdentifyBoundaryNodes(mfem::Mesh* mesh,
                "for correct DOF ownership.");
 }
 
-void SaveSolutionToFile(const mfem::Vector& vorticity,
-                       const mfem::Vector& streamfunction,
-                       const mfem::Vector& u_velocity,
-                       const mfem::Vector& v_velocity,
-                       const std::string& filename,
+void SaveSolutionToFile(mfem::ParGridFunction& vorticity_gf,
+                       mfem::ParGridFunction& streamfunction_gf,
+                       mfem::ParGridFunction& velocity_gf,
+                       const std::string& prefix,
                        int timestep,
                        const std::string& dat_dir,
                        bool is_final)
 {
-    // Determine suffix based on whether this is final or intermediate save
+    // ParGridFunction::SaveAsOne gathers the full solution to rank 0
+    // and writes a single file in MFEM's native format. This handles
+    // parallel DOF ownership correctly (no duplicates at shared vertices).
     std::string suffix = is_final ? "_final" : "_solution";
 
-    // Save vorticity
-    std::string vort_filename = dat_dir + "/" + filename + "_vorticity" + suffix + ".dat";
-    std::ofstream vort_file(vort_filename);
-    if (vort_file.is_open()) {
-        vort_file.precision(12);
-        for (int i = 0; i < vorticity.Size(); ++i) {
-            vort_file << vorticity[i] << std::endl;
-        }
-        vort_file.close();
-    }
+    vorticity_gf.SaveAsOne(
+        (dat_dir + "/" + prefix + "_vorticity" + suffix + ".gf").c_str());
+    streamfunction_gf.SaveAsOne(
+        (dat_dir + "/" + prefix + "_streamfunction" + suffix + ".gf").c_str());
+    velocity_gf.SaveAsOne(
+        (dat_dir + "/" + prefix + "_velocity" + suffix + ".gf").c_str());
 
-    // Save streamfunction
-    std::string stream_filename = dat_dir + "/" + filename + "_streamfunction" + suffix + ".dat";
-    std::ofstream stream_file(stream_filename);
-    if (stream_file.is_open()) {
-        stream_file.precision(12);
-        for (int i = 0; i < streamfunction.Size(); ++i) {
-            stream_file << streamfunction[i] << std::endl;
-        }
-        stream_file.close();
-    }
-
-    // Save u-velocity
-    std::string u_filename = dat_dir + "/" + filename + "_u_velocity" + suffix + ".dat";
-    std::ofstream u_file(u_filename);
-    if (u_file.is_open()) {
-        u_file.precision(12);
-        for (int i = 0; i < u_velocity.Size(); ++i) {
-            u_file << u_velocity[i] << std::endl;
-        }
-        u_file.close();
-    }
-
-    // Save v-velocity
-    std::string v_filename = dat_dir + "/" + filename + "_v_velocity" + suffix + ".dat";
-    std::ofstream v_file(v_filename);
-    if (v_file.is_open()) {
-        v_file.precision(12);
-        for (int i = 0; i < v_velocity.Size(); ++i) {
-            v_file << v_velocity[i] << std::endl;
-        }
-        v_file.close();
-    }
-
-    if (is_final) {
+    int myid = mfem::Mpi::WorldRank();
+    if (is_final && myid == 0) {
         std::cout << "SaveSolutionToFile: Saved final solution at timestep " << timestep << std::endl;
         std::cout << "  Files saved to: " << dat_dir << std::endl;
     }

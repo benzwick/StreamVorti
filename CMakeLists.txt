@@ -34,6 +34,7 @@ OPTION(STREAMVORTI_BUILD_STATIC_LIBS "Build as static library" ON )
 OPTION(ENABLE_PROFILING "Enable gprof profiling" OFF )
 OPTION(STREAMVORTI_WITH_ECL "Enable ECL (Embeddable Common Lisp) for SDL support" OFF )
 OPTION(STREAMVORTI_BUILD_TESTS "Build unit tests" OFF )
+OPTION(STREAMVORTI_WITH_GMSH "Enable Gmsh mesh generation via gmsh-cl" OFF )
 
 # Set the version of C++.
 SET(CMAKE_CXX_STANDARD 17)
@@ -161,6 +162,18 @@ IF(STREAMVORTI_WITH_ECL)
     add_compile_definitions(STREAMVORTI_WITH_ECL)
 ENDIF()
 
+# Find Gmsh-CL for mesh generation (optional, requires ECL)
+IF(STREAMVORTI_WITH_GMSH)
+    IF(NOT STREAMVORTI_WITH_ECL)
+        MESSAGE(FATAL_ERROR "STREAMVORTI_WITH_GMSH requires STREAMVORTI_WITH_ECL=ON")
+    ENDIF()
+    SET(GMSH_CL_DIR "${CMAKE_SOURCE_DIR}/_reference/gmsh-cl")
+    IF(NOT EXISTS "${GMSH_CL_DIR}/gmsh-cl.asd")
+        MESSAGE(FATAL_ERROR "gmsh-cl not found at ${GMSH_CL_DIR}. "
+            "Run: git submodule update --init _reference/gmsh-cl")
+    ENDIF()
+ENDIF()
+
 # Print compiler information for all components
 message(STATUS "========================================")
 message(STATUS "Compiler Configuration:")
@@ -173,6 +186,9 @@ message(STATUS "  ECL version:              ${ECL_VERSION}")
 message(STATUS "  SDL support:              ENABLED")
 ELSE()
 message(STATUS "  SDL support:              DISABLED (use -DSTREAMVORTI_WITH_ECL=ON)")
+ENDIF()
+IF(STREAMVORTI_WITH_GMSH)
+message(STATUS "  Gmsh support:             ENABLED (gmsh-cl)")
 ENDIF()
 message(STATUS "========================================")
 
@@ -406,6 +422,12 @@ IF(STREAMVORTI_WITH_ECL)
         ${CMAKE_SOURCE_DIR}/demo/meshes/cylinder_in_channel_hex.geo
         ${CMAKE_SOURCE_DIR}/demo/meshes/cavity_quad.mesh
         DESTINATION share/streamvorti/demo/meshes)
+
+    # Install gmsh-cl integration files
+    IF(STREAMVORTI_WITH_GMSH)
+        INSTALL(FILES ${CMAKE_SOURCE_DIR}/lisp/gmsh-init.lisp
+                DESTINATION share/streamvorti/lisp)
+    ENDIF()
 ENDIF()
 
 # -------------------------

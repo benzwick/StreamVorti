@@ -16,6 +16,27 @@ With ECL (enables SDL/Lisp simulation files):
 cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug -DSTREAMVORTI_WITH_ECL=ON ..
 ```
 
+With Gmsh (enables unstructured mesh generation via gmsh-cl, requires ECL):
+```bash
+# 1. Initialize gmsh-cl submodule and install CL dependencies
+git submodule update --init _reference/gmsh-cl
+cd _reference/gmsh-cl && ocicl install
+
+# 2. Build libgmsh from gmsh-cl's Gmsh submodule
+cd _reference/gmsh-cl
+git submodule update --init _reference/gmsh
+cd _reference/gmsh && mkdir build && cd build
+cmake .. -DENABLE_BUILD_SHARED=ON -DCMAKE_BUILD_TYPE=Release
+make -j6
+
+# 3. Build StreamVorti with Gmsh support
+cd $PROJECT_ROOT/build
+cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug \
+      -DSTREAMVORTI_WITH_ECL=ON -DSTREAMVORTI_WITH_GMSH=ON ..
+make -j6
+```
+libgmsh is found automatically from the gmsh-cl submodule build directory.
+
 Run tests:
 ```bash
 cmake -DSTREAMVORTI_BUILD_TESTS=ON ..

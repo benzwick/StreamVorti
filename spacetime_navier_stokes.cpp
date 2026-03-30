@@ -113,6 +113,12 @@ static void LoadSDLConfig(const StreamVorti::Lisp::SimulationConfig &sdl,
     config.reynolds = sdl.physics.reynolds;
     config.density = sdl.physics.density;
 
+    // Mesh (SDL loader builds the mesh; pass it to the solver)
+    if (sdl.mesh)
+    {
+        config.spatial_mesh = sdl.mesh.get();
+    }
+
     // Boundary conditions
     config.boundary_conditions.clear();
     for (const auto &sdl_bc : sdl.boundaries)

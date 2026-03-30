@@ -36,15 +36,33 @@
        (string= (symbol-name (first expr)) "=")
        (symbolp (second expr))))
 
+(defun attribute-predicate-p (expr)
+  "Return T if EXPR is an (attribute N) predicate."
+  (and (listp expr)
+       (= (length expr) 2)
+       (symbolp (first expr))
+       (string= (symbol-name (first expr)) "ATTRIBUTE")
+       (numberp (second expr))))
+
 (defun extract-predicate-axis (expr)
-  "Extract axis string from simple (= coord val) predicate, or nil."
-  (when (simple-equality-predicate-p expr)
-    (string-downcase (symbol-name (second expr)))))
+  "Extract axis string from predicate.
+   Returns \"x\", \"y\", \"z\" for coordinate predicates,
+   \"a\" for attribute predicates, or nil."
+  (cond
+    ((simple-equality-predicate-p expr)
+     (string-downcase (symbol-name (second expr))))
+    ((attribute-predicate-p expr)
+     "a")))
 
 (defun extract-predicate-value (expr)
-  "Extract value from simple (= coord val) predicate, or nil."
-  (when (simple-equality-predicate-p expr)
-    (coerce (third expr) 'double-float)))
+  "Extract value from predicate.
+   Returns coordinate value for equality predicates,
+   attribute number for attribute predicates, or nil."
+  (cond
+    ((simple-equality-predicate-p expr)
+     (coerce (third expr) 'double-float))
+    ((attribute-predicate-p expr)
+     (coerce (second expr) 'double-float))))
 
 ;;; ============================================================
 ;;; Boundary merger
@@ -52,11 +70,102 @@
 
 (defun merge-sim-boundaries (sim)
   "Create merged BC list combining boundary-defs with physics BCs.
-   Returns a proper Lisp list of merged-bc structs."
-  (let ((boundaries (sim-boundaries sim))
-        (physics-list (sim-physics-list sim))
-        (result nil)
-        (attr 1))
+   Returns a proper Lisp list of merged-bc structs.
+
+   When no explicit (boundaries ...) block is defined and the domain
+   has physical groups (from Gmsh), boundary definitions are derived
+   automatically: each physics BC name is matched against physical
+   group names, and the physical group tag becomes the boundary attribute."
+  (let* ((boundaries (sim-boundaries sim))
+         (physics-list (sim-physics-list sim))
+         (domain (sim-domain sim))
+         (phys-groups (when domain (domain-physical-groups domain)))
+         (has-phys-groups (and phys-groups (plusp (length phys-groups))))
+         (result nil)
+         (attr 1))
+
+    ;; --- Error: Gmsh domain, no physical groups, no boundaries ---
+    (when (and domain has-phys-groups  ; physical-groups slot exists
+               (null phys-groups)      ; but is empty
+               (null boundaries))
+      (error "Gmsh domain has no physical groups and no (boundaries ...) ~
+              block. Cannot identify boundaries. ~
+              Add physical groups in the (domain :gmsh ...) body."))
+
+    ;; --- Auto-derive boundaries from physical groups when omitted ---
+    (when (and (null boundaries) has-phys-groups)
+      (let ((all-bcs nil))
+        ;; Collect all BC names from physics
+        (dolist (phys physics-list)
+          (dolist (bc (physics-bcs phys))
+            (push bc all-bcs)))
+        ;; Create boundary-defs from physical groups matching BC names
+        (dolist (bc (nreverse all-bcs))
+          (let* ((bc-name (string-downcase (symbol-name (bc-boundary bc))))
+                 (pg (assoc bc-name phys-groups :test #'string-equal)))
+            (if pg
+                (push (%make-boundary-def
+                       :name (bc-boundary bc)
+                       :predicate (make-predicate (list '= 'x 0))  ; dummy
+                       :predicate-expr (list 'attribute (cdr pg)))
+                      boundaries)
+                (error "BC '~A' does not match any physical group. ~
+                        Available: ~{~A~^, ~}"
+                       bc-name (mapcar #'car phys-groups))))))
+      (setf boundaries (nreverse boundaries)))
+
+    ;; --- Validate explicit boundaries against physical groups ---
+    (when (and boundaries has-phys-groups)
+      (dolist (bdef boundaries)
+        (let* ((bname (string-downcase (symbol-name (boundary-name bdef))))
+               (pexpr (boundary-predicate-expr bdef))
+               (pg (assoc bname phys-groups :test #'string-equal)))
+          (cond
+            ;; (attribute N) matches physical group with same tag — redundant
+            ((and (attribute-predicate-p pexpr) pg
+                  (= (truncate (second pexpr)) (cdr pg)))
+             (format *error-output*
+                     "~&; Note: boundary '~A' (attribute ~D) matches ~
+                      physical group — boundaries block is unnecessary.~%"
+                     bname (cdr pg)))
+            ;; (attribute N) matches physical group but different tag — override
+            ((and (attribute-predicate-p pexpr) pg)
+             (format *error-output*
+                     "~&; Warning: boundary '~A' uses attribute ~D but ~
+                      physical group '~A' has tag ~D — overriding.~%"
+                     bname (truncate (second pexpr)) bname (cdr pg)))
+            ;; (attribute N) with no matching physical group
+            ((attribute-predicate-p pexpr)
+             (format *error-output*
+                     "~&; Warning: boundary '~A' (attribute ~D) not found ~
+                      in physical groups.~%"
+                     bname (truncate (second pexpr))))
+            ;; Coordinate predicate overriding a physical group
+            (pg
+             (format *error-output*
+                     "~&; Warning: boundary '~A' uses coordinate predicate ~
+                      ~S which will override physical group tag ~D.~%"
+                     bname pexpr (cdr pg)))
+            ;; Coordinate predicate, no matching physical group
+            (t
+             (format *error-output*
+                     "~&; Warning: boundary '~A' not found in physical ~
+                      groups. Coordinate predicate may not match curved ~
+                      boundaries.~%"
+                     bname))))))
+
+    ;; --- Warning: no physical groups + coordinate predicates ---
+    (when (and boundaries domain (not has-phys-groups)
+               (domain-physical-groups domain)  ; slot exists (gmsh domain)
+               (some (lambda (b)
+                       (not (attribute-predicate-p
+                              (boundary-predicate-expr b))))
+                     boundaries))
+      (format *error-output*
+              "~&; Warning: no physical groups in Gmsh mesh. Curved ~
+               boundaries cannot be identified with coordinate predicates.~%"))
+
+    ;; --- Build merged BCs ---
     (when boundaries
       ;; Collect all BCs from all physics
       (let ((all-bcs nil))
@@ -74,9 +183,16 @@
                                           (symbol-name (bc-boundary bc)))))
                               all-bcs))
                  (pexpr (boundary-predicate-expr bdef))
+                 (is-attr-pred (attribute-predicate-p pexpr))
+                 ;; For attribute predicates, use the physical group tag
+                 ;; directly as the boundary attribute. For coordinate
+                 ;; predicates, use the auto-incremented counter.
+                 (this-attr (if is-attr-pred
+                                (truncate (second pexpr))
+                                attr))
                  (merged (make-merged-bc
                           :name (string-downcase (symbol-name bname))
-                          :attribute attr
+                          :attribute this-attr
                           :type-str (if bc
                                         (string-downcase
                                          (symbol-name (bc-type bc)))
@@ -110,7 +226,7 @@
                            (declare (ignore x y z))
                            v-val))))))
             (push merged result)
-            (incf attr)))))
+            (unless is-attr-pred (incf attr))))))
     (nreverse result)))
 
 ;;; ============================================================
