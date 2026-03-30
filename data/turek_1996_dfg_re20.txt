@@ -1,0 +1,21 @@
+# DFG benchmark reference values for flow around cylinder, Re = 20
+# Test case 2D-1 (steady)
+#
+# Source: Schäfer & Turek (1996), "Benchmark Computations of Laminar
+# Flow Around a Cylinder", Flow Simulation with High-Performance
+# Computers II, Notes on Numerical Fluid Mechanics, vol. 52, pp. 547-566.
+#
+# Reference values from high-order spectral method (Nabh, 1998):
+# https://www.mathematik.tu-dortmund.de/~featflow/en/benchmarks/cfdbenchmarking/flow/dfg_benchmark1_re20.html
+#
+# Geometry:
+#   Channel: 2.2 x 0.41
+#   Cylinder center: (0.2, 0.2), radius: 0.05
+#   Parabolic inlet: u(y) = 4 * U_max * y * (H - y) / H^2
+#   U_max = 0.3, U_mean = 0.2
+#   Re = U_mean * D / nu = 0.2 * 0.1 / 0.001 = 20
+#
+# parameter  value
+Cd           5.57953523384
+Cl           0.010618948146
+delta_P      0.11752016697
