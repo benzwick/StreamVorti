@@ -297,171 +297,103 @@ void ParSupportDomain::ExchangeGhostCoordinates()
     mfem::StopWatch timer;
     timer.Start();
 
-    // Clear any existing ghost data
     ghost_coords_.clear();
     ghost_node_indices_.clear();
 
-    // Use neighbour-only exchange: communicate only with face-neighbour ranks.
-    // This is correct because support domains in DCPSE are small relative to
-    // partition size, so ghost nodes always come from direct face neighbours.
-    // (Diagonal-neighbour nodes are only needed if the support radius exceeds
-    //  the partition width, which does not occur for typical DCPSE stencils.)
-    mfem::ParMesh* pmesh = par_fespace_->GetParMesh();
-    pmesh->ExchangeFaceNbrData();  // idempotent: sets up face_nbr_group if not done
-    const int nfn = pmesh->GetNFaceNeighbors();
+    int nprocs;
+    MPI_Comm_size(comm_, &nprocs);
 
-    // Identify boundary nodes (local nodes whose support radius may reach a neighbour)
-    std::vector<int> boundary_nodes = IdentifyBoundaryNodes();
-
-    if (rank_ == 0) {
-        std::cout << "  Boundary nodes on rank 0: " << boundary_nodes.size() << std::endl;
-        std::cout << "  Face neighbours on rank 0: " << nfn << std::endl;
-    }
-
-    // Determine MPI type for HYPRE_BigInt
-    MPI_Datatype mpi_hypre_big_int;
-    if (sizeof(HYPRE_BigInt) == sizeof(int)) {
-        mpi_hypre_big_int = MPI_INT;
-    } else if (sizeof(HYPRE_BigInt) == sizeof(long)) {
-        mpi_hypre_big_int = MPI_LONG;
-    } else if (sizeof(HYPRE_BigInt) == sizeof(long long)) {
-        mpi_hypre_big_int = MPI_LONG_LONG;
-    } else {
-        MFEM_ABORT("ParSupportDomain: Unsupported HYPRE_BigInt size");
-    }
-
-    if (nfn == 0) {
-        // Single rank or disconnected partition: no ghost exchange needed
+    if (nprocs == 1) {
         if (rank_ == 0) {
-            std::cout << "  Ghost exchange completed in " << timer.RealTime() << " s"
-                      << " (no face neighbours)" << std::endl;
+            std::cout << "  Ghost exchange: single rank, no exchange needed ("
+                      << timer.RealTime() << " s)" << std::endl;
         }
         return;
     }
 
-    // Prepare local coordinate buffer (always 3D padding).
-    // Format: [x0, y0, z0,  x1, y1, z1,  ...]
-    // Use tdof_to_ldof_: true DOF i → local DOF (vertex) for correct coordinate lookup.
+    // Determine MPI type for HYPRE_BigInt
+    MPI_Datatype mpi_hypre_big_int;
+    if (sizeof(HYPRE_BigInt) == sizeof(int))            mpi_hypre_big_int = MPI_INT;
+    else if (sizeof(HYPRE_BigInt) == sizeof(long))      mpi_hypre_big_int = MPI_LONG;
+    else if (sizeof(HYPRE_BigInt) == sizeof(long long))  mpi_hypre_big_int = MPI_LONG_LONG;
+    else MFEM_ABORT("ParSupportDomain: Unsupported HYPRE_BigInt size");
+
+    // Prepare local data: coordinates (3D-padded) and global IDs
     std::vector<double> send_coords(num_local_nodes_ * 3);
     std::vector<HYPRE_BigInt> send_global_ids(num_local_nodes_);
     for (int i = 0; i < num_local_nodes_; ++i) {
         int ldof = tdof_to_ldof_[i];
-        for (int d = 0; d < dim_; ++d) {
+        for (int d = 0; d < dim_; ++d)
             send_coords[i * 3 + d] = (*local_coords_)(par_fespace_->DofToVDof(ldof, d));
-        }
-        for (int d = dim_; d < 3; ++d) {
+        for (int d = dim_; d < 3; ++d)
             send_coords[i * 3 + d] = 0.0;
-        }
         send_global_ids[i] = local_to_global_[i];
     }
 
-    // Phase A: exchange node counts with each face neighbour
-    std::vector<int> nbr_node_counts(nfn);
+    // Allgather: collect all node coordinates and global IDs from all ranks.
+    // Guarantees every rank has access to every node, producing partition-
+    // independent DCPSE operators identical to serial.
+    // For large-scale runs (>O(10^5) nodes), replace with a neighbor-only
+    // exchange using geometric bounding-box overlap (see issue #45).
+    std::vector<int> all_counts(nprocs);
+    MPI_Allgather(&num_local_nodes_, 1, MPI_INT,
+                  all_counts.data(), 1, MPI_INT, comm_);
+
+    int total_nodes = 0;
+    std::vector<int> coord_counts(nprocs), coord_displs(nprocs);
+    std::vector<int> id_displs(nprocs);
+    for (int r = 0; r < nprocs; ++r) {
+        coord_counts[r] = all_counts[r] * 3;
+        coord_displs[r] = total_nodes * 3;
+        id_displs[r]    = total_nodes;
+        total_nodes     += all_counts[r];
+    }
+
+    std::vector<double>       all_coords(total_nodes * 3);
+    std::vector<HYPRE_BigInt> all_global_ids(total_nodes);
+
+    MPI_Allgatherv(send_coords.data(), num_local_nodes_ * 3, MPI_DOUBLE,
+                   all_coords.data(), coord_counts.data(), coord_displs.data(),
+                   MPI_DOUBLE, comm_);
+    MPI_Allgatherv(send_global_ids.data(), num_local_nodes_, mpi_hypre_big_int,
+                   all_global_ids.data(), all_counts.data(), id_displs.data(),
+                   mpi_hypre_big_int, comm_);
+
+    // Keep ALL remote nodes as ghosts (no distance filtering).
+    // This ensures the extended k-d tree contains the full global point set,
+    // so the fuzzy sphere neighbor search returns identical results to serial
+    // regardless of partition topology.
+    // For large-scale runs, add distance-based filtering with a generous
+    // margin beyond the support radius to avoid borderline exclusions.
+    std::set<HYPRE_BigInt> local_global_set(local_to_global_.begin(),
+                                             local_to_global_.end());
+    for (int i = 0; i < total_nodes; ++i) {
+        HYPRE_BigInt gid = all_global_ids[i];
+        if (local_global_set.count(gid) > 0) continue;  // skip local nodes
+        ghost_coords_.push_back(all_coords[i * 3 + 0]);
+        ghost_coords_.push_back(all_coords[i * 3 + 1]);
+        ghost_coords_.push_back(all_coords[i * 3 + 2]);
+        ghost_node_indices_.push_back(gid);
+    }
+
+    // Sort ghost arrays by global node index (HYPRE requirement)
     {
-        std::vector<MPI_Request> reqs(2 * nfn);
-        for (int fn = 0; fn < nfn; ++fn) {
-            int nbr_rank = pmesh->GetFaceNbrRank(fn);
-            MPI_Irecv(&nbr_node_counts[fn], 1, MPI_INT,
-                      nbr_rank, 10, comm_, &reqs[fn]);
-        }
-        for (int fn = 0; fn < nfn; ++fn) {
-            int nbr_rank = pmesh->GetFaceNbrRank(fn);
-            MPI_Isend(&num_local_nodes_, 1, MPI_INT,
-                      nbr_rank, 10, comm_, &reqs[nfn + fn]);
-        }
-        MPI_Waitall(2 * nfn, reqs.data(), MPI_STATUSES_IGNORE);
-    }
-
-    // Compute receive buffer layout (one contiguous block per neighbour)
-    int total_recv_nodes = 0;
-    std::vector<int> coord_displs(nfn + 1, 0);
-    std::vector<int> id_displs(nfn + 1, 0);
-    for (int fn = 0; fn < nfn; ++fn) {
-        coord_displs[fn + 1] = coord_displs[fn] + nbr_node_counts[fn] * 3;
-        id_displs[fn + 1]    = id_displs[fn]    + nbr_node_counts[fn];
-        total_recv_nodes     += nbr_node_counts[fn];
-    }
-
-    std::vector<double>       recv_coords(total_recv_nodes * 3);
-    std::vector<HYPRE_BigInt> recv_global_ids(total_recv_nodes);
-
-    // Phase B: exchange coordinates and global IDs with each face neighbour
-    {
-        std::vector<MPI_Request> reqs(4 * nfn);
-        for (int fn = 0; fn < nfn; ++fn) {
-            int nbr_rank = pmesh->GetFaceNbrRank(fn);
-            MPI_Irecv(&recv_coords[coord_displs[fn]], nbr_node_counts[fn] * 3,
-                      MPI_DOUBLE, nbr_rank, 11, comm_, &reqs[fn]);
-            MPI_Irecv(&recv_global_ids[id_displs[fn]], nbr_node_counts[fn],
-                      mpi_hypre_big_int, nbr_rank, 12, comm_, &reqs[nfn + fn]);
-        }
-        for (int fn = 0; fn < nfn; ++fn) {
-            int nbr_rank = pmesh->GetFaceNbrRank(fn);
-            MPI_Isend(send_coords.data(), num_local_nodes_ * 3,
-                      MPI_DOUBLE, nbr_rank, 11, comm_, &reqs[2 * nfn + fn]);
-            MPI_Isend(send_global_ids.data(), num_local_nodes_,
-                      mpi_hypre_big_int, nbr_rank, 12, comm_, &reqs[3 * nfn + fn]);
-        }
-        MPI_Waitall(4 * nfn, reqs.data(), MPI_STATUSES_IGNORE);
-    }
-
-    // Filter received nodes: keep only those within support radius of a boundary node
-    typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-    typedef K::Point_3 Point_3d;
-
-    std::set<HYPRE_BigInt> kept_ghosts;
-
-    for (int boundary_idx : boundary_nodes) {
-        int b_ldof = tdof_to_ldof_[boundary_idx];
-        double bx = 0.0, by = 0.0, bz = 0.0;
-        if (dim_ > 0) bx = (*local_coords_)(par_fespace_->DofToVDof(b_ldof, 0));
-        if (dim_ > 1) by = (*local_coords_)(par_fespace_->DofToVDof(b_ldof, 1));
-        if (dim_ > 2) bz = (*local_coords_)(par_fespace_->DofToVDof(b_ldof, 2));
-        Point_3d boundary_pt(bx, by, bz);
-
-        double support_radius = this->SupportRadiuses()[boundary_idx];
-
-        for (int i = 0; i < total_recv_nodes; ++i) {
-            HYPRE_BigInt global_node_idx = recv_global_ids[i];
-            if (kept_ghosts.count(global_node_idx) > 0) continue;
-
-            double gx = recv_coords[i * 3 + 0];
-            double gy = recv_coords[i * 3 + 1];
-            double gz = recv_coords[i * 3 + 2];
-            Point_3d ghost_pt(gx, gy, gz);
-
-            double dist_sq = CGAL::squared_distance(boundary_pt, ghost_pt);
-            if (dist_sq <= support_radius * support_radius) {
-                kept_ghosts.insert(global_node_idx);
-                ghost_coords_.push_back(gx);
-                ghost_coords_.push_back(gy);
-                ghost_coords_.push_back(gz);
-                ghost_node_indices_.push_back(global_node_idx);
-            }
-        }
-    }
-
-    // Sort ghost arrays by global node index (ascending).
-    // HYPRE requires col_map_offd to be strictly ascending; since col_map_offd
-    // is built directly from ghost_node_indices_, those indices must be sorted.
-    {
-        int num_ghosts_sort = static_cast<int>(ghost_node_indices_.size());
-        std::vector<int> perm(num_ghosts_sort);
+        int ng = static_cast<int>(ghost_node_indices_.size());
+        std::vector<int> perm(ng);
         std::iota(perm.begin(), perm.end(), 0);
         std::sort(perm.begin(), perm.end(), [&](int a, int b) {
             return ghost_node_indices_[a] < ghost_node_indices_[b];
         });
-
-        std::vector<HYPRE_BigInt> sorted_indices(num_ghosts_sort);
-        std::vector<double> sorted_coords(num_ghosts_sort * 3);
-        for (int i = 0; i < num_ghosts_sort; ++i) {
-            sorted_indices[i]        = ghost_node_indices_[perm[i]];
-            sorted_coords[i * 3 + 0] = ghost_coords_[perm[i] * 3 + 0];
-            sorted_coords[i * 3 + 1] = ghost_coords_[perm[i] * 3 + 1];
-            sorted_coords[i * 3 + 2] = ghost_coords_[perm[i] * 3 + 2];
+        std::vector<HYPRE_BigInt> si(ng);
+        std::vector<double> sc(ng * 3);
+        for (int i = 0; i < ng; ++i) {
+            si[i]          = ghost_node_indices_[perm[i]];
+            sc[i * 3 + 0]  = ghost_coords_[perm[i] * 3 + 0];
+            sc[i * 3 + 1]  = ghost_coords_[perm[i] * 3 + 1];
+            sc[i * 3 + 2]  = ghost_coords_[perm[i] * 3 + 2];
         }
-        ghost_node_indices_ = std::move(sorted_indices);
-        ghost_coords_ = std::move(sorted_coords);
+        ghost_node_indices_ = std::move(si);
+        ghost_coords_ = std::move(sc);
     }
 
     int num_ghosts = static_cast<int>(ghost_node_indices_.size());
@@ -469,7 +401,8 @@ void ParSupportDomain::ExchangeGhostCoordinates()
     MPI_Reduce(&num_ghosts, &total_ghosts, 1, MPI_INT, MPI_SUM, 0, comm_);
 
     if (rank_ == 0) {
-        std::cout << "  Ghost exchange completed in " << timer.RealTime() << " s" << std::endl;
+        std::cout << "  Ghost exchange (allgather) completed in "
+                  << timer.RealTime() << " s" << std::endl;
         std::cout << "  Total ghost nodes across all ranks: " << total_ghosts << std::endl;
         std::cout << "  Ghost nodes on rank 0: " << num_ghosts << std::endl;
     }
