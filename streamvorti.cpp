@@ -903,7 +903,7 @@ int main(int argc, char *argv[])
     // ====================================================================
     // Create finite element spaces
     mfem::FiniteElementSpace scalar_fes(const_cast<mfem::Mesh*>(mesh), &fec, 1);
-    mfem::FiniteElementSpace vector_fes(const_cast<mfem::Mesh*>(mesh), &fec, mesh->Dimension());
+    mfem::FiniteElementSpace vector_fes(const_cast<mfem::Mesh*>(mesh), &fec, mesh->SpaceDimension());
 
     // Create grid functions
     mfem::GridFunction vorticity_gf(&scalar_fes);
