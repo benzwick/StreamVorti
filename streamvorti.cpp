@@ -452,12 +452,78 @@ int main(int argc, char *argv[])
     std::vector<int> interior_nodes_by_attr;
     IdentifyBoundaryNodesByAttribute(mesh, boundary_nodes_by_attr, interior_nodes_by_attr);
 
-    // Combine all boundary nodes for streamfunction boundary conditions
+#ifdef STREAMVORTI_WITH_ECL
+    // For SDL mode, use attribute-based interior nodes (correct for any geometry).
+    // The hardcoded IdentifyBoundaryNodes only works for unit-square cavity.
+    if (use_sdl_bcs) {
+        interior_nodes = interior_nodes_by_attr;
+    }
+#endif
+
+    // ================================================================
+    // COMPUTE PER-NODE OUTWARD NORMALS FROM MESH GEOMETRY
+    // ================================================================
+    // Uses MFEM's GetBdrFaceTransformations() + CalcOrtho() to compute
+    // proper outward unit normals at each boundary node. Normals are
+    // averaged at nodes shared by multiple boundary elements.
+    // Used for Neumann BCs (∂ψ/∂n = nx·∂ψ/∂x + ny·∂ψ/∂y = 0) and
+    // velocity BCs (ψ integration along boundary tangent).
+    std::map<int, mfem::Vector> node_normals;  // node_id → (nx, ny)
+    {
+        int sdim = mesh->SpaceDimension();
+        for (int be = 0; be < mesh->GetNBE(); ++be) {
+            auto *FTr = mesh->GetBdrFaceTransformations(be);
+            if (!FTr) continue;
+
+            // Evaluate normal at the midpoint of the boundary element
+            const mfem::IntegrationRule &ir =
+                mfem::IntRules.Get(FTr->GetGeometryType(), 1);
+            const mfem::IntegrationPoint &ip = ir.IntPoint(0);
+            FTr->SetAllIntPoints(&ip);
+
+            // CalcOrtho gives outward normal (scaled by element weight)
+            mfem::Vector nor(sdim);
+            mfem::CalcOrtho(FTr->Jacobian(), nor);
+            double len = nor.Norml2();
+            if (len > 1e-15) nor /= len;  // unit normal
+
+            // Accumulate at each vertex of the boundary element
+            mfem::Array<int> verts;
+            mesh->GetBdrElementVertices(be, verts);
+            for (int j = 0; j < verts.Size(); ++j) {
+                if (node_normals.find(verts[j]) == node_normals.end()) {
+                    node_normals[verts[j]].SetSize(sdim);
+                    node_normals[verts[j]] = 0.0;
+                }
+                node_normals[verts[j]] += nor;
+            }
+        }
+        // Normalize averaged normals
+        for (auto& [node, n] : node_normals) {
+            double len = n.Norml2();
+            if (len > 1e-15) n /= len;
+        }
+    }
+
+    // Combine all boundary nodes for streamfunction boundary conditions.
+    // For SDL mode, use attribute-based nodes (includes all boundaries).
+    // For CLI mode, use hardcoded cavity boundary nodes.
     std::vector<int> all_boundary_nodes;
-    all_boundary_nodes.insert(all_boundary_nodes.end(), bottom_nodes.begin(), bottom_nodes.end());
-    all_boundary_nodes.insert(all_boundary_nodes.end(), right_nodes.begin(), right_nodes.end());
-    all_boundary_nodes.insert(all_boundary_nodes.end(), top_nodes.begin(), top_nodes.end());
-    all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
+#ifdef STREAMVORTI_WITH_ECL
+    if (use_sdl_bcs) {
+        std::set<int> bnd_set;
+        for (const auto& [attr, nodes] : boundary_nodes_by_attr) {
+            bnd_set.insert(nodes.begin(), nodes.end());
+        }
+        all_boundary_nodes.assign(bnd_set.begin(), bnd_set.end());
+    } else
+#endif
+    {
+        all_boundary_nodes.insert(all_boundary_nodes.end(), bottom_nodes.begin(), bottom_nodes.end());
+        all_boundary_nodes.insert(all_boundary_nodes.end(), right_nodes.begin(), right_nodes.end());
+        all_boundary_nodes.insert(all_boundary_nodes.end(), top_nodes.begin(), top_nodes.end());
+        all_boundary_nodes.insert(all_boundary_nodes.end(), left_nodes.begin(), left_nodes.end());
+    }
 
     // ================================================================
     // STREAM FUNCTION BOUNDARY CONDITIONS
@@ -684,6 +750,32 @@ int main(int argc, char *argv[])
         dirichlet_psi_nodes = all_boundary_nodes;
     }
 
+    // Pre-classify boundary nodes by BC type for the vorticity step.
+    // This determines how wall vorticity is computed:
+    //   no-slip:  ω = ∂²ψ/∂n²  (Dirichlet ψ, derive ω from ψ field)
+    //   slip:     ω = 0         (Dirichlet ψ, free tangential stress)
+    //   velocity/outflow: ω = ∂v/∂x - ∂u/∂y  (from velocity field)
+    std::map<int, std::string> boundary_node_bc_type;
+#ifdef STREAMVORTI_WITH_ECL
+    if (use_sdl_bcs) {
+        for (const auto& bc : sdl_boundaries) {
+            auto it = boundary_nodes_by_attr.find(bc.attribute);
+            if (it == boundary_nodes_by_attr.end()) continue;
+            for (int ni : it->second) {
+                boundary_node_bc_type[ni] = bc.type;
+            }
+        }
+    } else
+#endif
+    {
+        // CLI mode: top nodes are velocity (lid), rest are no-slip walls
+        std::set<int> top_set(top_nodes.begin(), top_nodes.end());
+        for (int vi : all_boundary_nodes) {
+            boundary_node_bc_type[vi] =
+                (top_set.count(vi) ? "velocity" : "no-slip");
+        }
+    }
+
     // ================================================================
     // LAPLACIAN MATRIX ASSEMBLY
     // ================================================================
@@ -818,6 +910,51 @@ int main(int argc, char *argv[])
     mfem::GridFunction streamfunction_gf(&scalar_fes);
     mfem::GridFunction velocity_gf(&vector_fes);
 
+    // Boundary diagnostic fields (static, written at t=0 for visualization)
+    mfem::GridFunction boundary_normal_gf(&vector_fes);
+    mfem::GridFunction bc_type_gf(&scalar_fes);
+    mfem::GridFunction mesh_bdr_attr_gf(&scalar_fes);
+    boundary_normal_gf = 0.0;
+    bc_type_gf = 0.0;
+    mesh_bdr_attr_gf = 0.0;
+    for (const auto& [node, normal] : node_normals) {
+        boundary_normal_gf(vector_fes.DofToVDof(node, 0)) = normal(0);
+        boundary_normal_gf(vector_fes.DofToVDof(node, 1)) = normal(1);
+    }
+    for (const auto& [node, bc_type] : boundary_node_bc_type) {
+        // Encode: 0=interior, 1=no-slip, 2=slip, 3=velocity, 4=outflow/pressure
+        double val = 0.0;
+        if (bc_type == "no-slip") val = 1.0;
+        else if (bc_type == "slip") val = 2.0;
+        else if (bc_type == "velocity") val = 3.0;
+        else if (bc_type == "outflow" || bc_type == "pressure") val = 4.0;
+        bc_type_gf[node] = val;
+    }
+    // Mesh boundary attribute per node (from boundary_nodes_by_attr).
+    // Nodes shared by multiple boundary elements get the highest attribute.
+    for (const auto& [attr, nodes] : boundary_nodes_by_attr) {
+        for (int node : nodes) {
+            mesh_bdr_attr_gf[node] = static_cast<double>(attr);
+        }
+    }
+
+    // Log boundary diagnostics
+    {
+        int n_noslip = 0, n_slip = 0, n_velocity = 0, n_outflow = 0;
+        for (const auto& [node, bc_type] : boundary_node_bc_type) {
+            if (bc_type == "no-slip") n_noslip++;
+            else if (bc_type == "slip") n_slip++;
+            else if (bc_type == "velocity") n_velocity++;
+            else n_outflow++;
+        }
+        std::cout << "Setup: Boundary node classification:" << std::endl;
+        std::cout << "  no-slip: " << n_noslip << ", slip: " << n_slip
+                  << ", velocity: " << n_velocity << ", outflow/pressure: " << n_outflow
+                  << std::endl;
+        std::cout << "  Boundary normals computed for " << node_normals.size()
+                  << " nodes" << std::endl;
+    }
+
     // Create ParaView data collection
     mfem::ParaViewDataCollection paraview_dc(paraview_filename, mesh);
     if (paraview_output) {
@@ -831,6 +968,9 @@ int main(int argc, char *argv[])
         paraview_dc.RegisterField("Vorticity", &vorticity_gf);
         paraview_dc.RegisterField("StreamFunction", &streamfunction_gf);
         paraview_dc.RegisterField("Velocity", &velocity_gf);
+        paraview_dc.RegisterField("BoundaryNormal", &boundary_normal_gf);
+        paraview_dc.RegisterField("BCType", &bc_type_gf);
+        paraview_dc.RegisterField("MeshBdrAttribute", &mesh_bdr_attr_gf);
         // Set time and cycle, then save
         paraview_dc.SetCycle(0);
         paraview_dc.SetTime(0.0);
