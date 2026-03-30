@@ -729,18 +729,31 @@ int main(int argc, char *argv[])
         }
     }
 
-    // STEP 2: Dirichlet rows — replace with identity (ψ_i = ψ_bc_i).
-    // Row-only elimination (no column elimination) because DCPSE matrices
-    // have non-symmetric sparsity and SparseMatrix::EliminateRowsCols
-    // assumes symmetric sparsity. The parallel solver uses OperatorHandle
-    // with HypreParMatrix::EliminateRowsCols, which handles non-symmetric
-    // matrices correctly.
+    // STEP 2: Dirichlet elimination — zero row AND column, set diagonal to 1.
+    // Matches the parallel code's EliminateRowsCols + EliminateBC.
+    //
+    // Cannot use EliminateRowCol(rc, Ae) here because it assumes symmetric
+    // sparsity (MFEM docs: "assumes element (i,rc) is assembled iff (rc,i)
+    // is assembled"), which DCPSE matrices don't satisfy.
+    //
+    // Instead: EliminateCols zeros all Dirichlet columns in a single O(nnz)
+    // pass and saves the eliminated entries in Ae. Then EliminateRow zeros
+    // Dirichlet rows (no saving needed — rhs is set to psi_bc directly).
+    // Each timestep, the RHS correction rhs -= Ae * psi_bc accounts for
+    // the eliminated column coupling.
+    mfem::Array<int> col_marker(num_nodes);
+    col_marker = 0;
+    for (int idx : dirichlet_psi_nodes) col_marker[idx] = 1;
+
+    mfem::SparseMatrix* Ae = new mfem::SparseMatrix(num_nodes);
+    laplacian_matrix->EliminateCols(col_marker, *Ae);
     for (int idx : dirichlet_psi_nodes) {
         laplacian_matrix->EliminateRow(idx);
         laplacian_matrix->Set(idx, idx, 1.0);
     }
 
     laplacian_matrix->Finalize();
+    Ae->Finalize();
 
     std::cout << "Setup: Created Laplacian matrix with boundary conditions." << std::endl;
 
@@ -912,13 +925,23 @@ int main(int argc, char *argv[])
         // Solve -∇²ψ = ω instead ∇²ψ = -ω, so that RHS stays positive for linear solvers (cg)
         rhs = vorticity;
 
-        // Apply boundary conditions to Poisson RHS (Neumann first, then
-        // Dirichlet, so Dirichlet wins at shared corner nodes):
-        //   Neumann nodes:   rhs = 0 (∂ψ/∂n = 0, natural outflow)
-        //   Dirichlet nodes: rhs = ψ_prescribed (0 for cavity, ∫u dy for inlet)
+        // Apply boundary conditions to Poisson RHS:
+        //   Neumann nodes: rhs = 0 (∂ψ/∂n = 0, natural outflow)
+        //   Dirichlet nodes: rhs = psi_bc, with column correction rhs -= Ae * psi_bc
         for (const auto& [idx, axis] : neumann_psi_info) {
             rhs[idx] = 0.0;
         }
+        // Build psi_bc vector for column correction (only non-zero at Dirichlet nodes)
+        mfem::Vector psi_bc_vec(num_nodes);
+        psi_bc_vec = 0.0;
+        for (int idx : dirichlet_psi_nodes) {
+            psi_bc_vec[idx] = psi_bc[idx];
+        }
+        // Column correction: rhs -= Ae * psi_bc (accounts for eliminated columns)
+        mfem::Vector Ae_corr(num_nodes);
+        Ae->Mult(psi_bc_vec, Ae_corr);
+        rhs -= Ae_corr;
+        // Set Dirichlet RHS
         for (int idx : dirichlet_psi_nodes) {
             rhs[idx] = psi_bc[idx];
         }
@@ -1336,6 +1359,7 @@ int main(int argc, char *argv[])
     delete mesh;
     delete solver_package;  // delete both solver and preconditioner
     delete laplacian_matrix;
+    delete Ae;
 
 #ifdef STREAMVORTI_WITH_ECL
     // Shutdown ECL if it was initialized
