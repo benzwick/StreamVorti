@@ -231,9 +231,15 @@ std::vector<BoundaryCondition> Loader::extractBoundaries(EclObject sim_obj)
         // Extract predicate info for C++ evaluation
         std::string pred_axis = getStringProperty(bc_spec, "predicate-axis", "");
         if (!pred_axis.empty()) {
-            bc.predicate_axis = pred_axis[0];  // 'x', 'y', or 'z'
+            bc.predicate_axis = pred_axis[0];  // 'x', 'y', 'z', or 'a'
             bc.predicate_value = getDoubleProperty(bc_spec, "predicate-value", 0.0);
             bc.predicate_tolerance = getDoubleProperty(bc_spec, "predicate-tolerance", 1e-10);
+        }
+
+        // Extract normal axis for outflow/pressure BCs
+        std::string normal = getStringProperty(bc_spec, "normal-axis", "");
+        if (!normal.empty()) {
+            bc.normal_axis = normal[0];
         }
 
         // Convert type to lowercase for comparison (Lisp keywords are uppercase)

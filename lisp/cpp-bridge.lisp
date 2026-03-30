@@ -22,6 +22,7 @@
 (defstruct (merged-bc (:conc-name merged-bc-))
   name attribute type-str
   predicate-axis predicate-value (predicate-tolerance 1e-10)
+  normal-axis  ; outflow/pressure normal direction: "x" or "y" (nil if N/A)
   function u-function v-function w-function)
 
 ;;; ============================================================
@@ -37,12 +38,23 @@
        (symbolp (second expr))))
 
 (defun attribute-predicate-p (expr)
-  "Return T if EXPR is an (attribute N) predicate."
+  "Return T if EXPR is an (attribute N) or (attribute N :axis x) predicate."
   (and (listp expr)
-       (= (length expr) 2)
+       (>= (length expr) 2)
        (symbolp (first expr))
        (string= (symbol-name (first expr)) "ATTRIBUTE")
        (numberp (second expr))))
+
+(defun extract-attribute-normal-axis (expr)
+  "Extract normal axis from (attribute N :axis x) predicate, or nil."
+  (when (attribute-predicate-p expr)
+    (let ((rest (cddr expr)))
+      (loop while rest
+            do (cond
+                 ((and (symbolp (car rest))
+                       (string= (symbol-name (car rest)) "AXIS"))
+                  (return (string-downcase (symbol-name (cadr rest)))))
+                 (t (setf rest (cddr rest))))))))
 
 (defun extract-predicate-axis (expr)
   "Extract axis string from predicate.
@@ -190,6 +202,14 @@
                  (this-attr (if is-attr-pred
                                 (truncate (second pexpr))
                                 attr))
+                 ;; Normal axis for outflow/pressure BCs:
+                 ;; - coordinate predicates: derived from predicate axis
+                 ;; - attribute predicates: from (attribute N :axis x)
+                 (normal (cond
+                           ((simple-equality-predicate-p pexpr)
+                            (extract-predicate-axis pexpr))
+                           ((attribute-predicate-p pexpr)
+                            (extract-attribute-normal-axis pexpr))))
                  (merged (make-merged-bc
                           :name (string-downcase (symbol-name bname))
                           :attribute this-attr
@@ -198,7 +218,8 @@
                                          (symbol-name (bc-type bc)))
                                         "no-slip")
                           :predicate-axis (extract-predicate-axis pexpr)
-                          :predicate-value (extract-predicate-value pexpr))))
+                          :predicate-value (extract-predicate-value pexpr)
+                          :normal-axis normal)))
             ;; Set up BC functions
             (when bc
               (cond
@@ -398,6 +419,12 @@
   "Get predicate tolerance."
   (typecase obj
     (merged-bc (merged-bc-predicate-tolerance obj))
+    (t nil)))
+
+(defun get-normal-axis (obj)
+  "Get outflow/pressure normal axis string (\"x\" or \"y\"), or nil."
+  (typecase obj
+    (merged-bc (merged-bc-normal-axis obj))
     (t nil)))
 
 (defun get-function (obj)

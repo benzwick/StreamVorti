@@ -381,6 +381,7 @@
    #:get-predicate-axis
    #:get-predicate-value
    #:get-predicate-tolerance
+   #:get-normal-axis
    #:get-function
    #:get-u-function
    #:get-v-function

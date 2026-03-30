@@ -117,7 +117,7 @@
     ((symbolp expr)
      (let ((name (string-upcase (symbol-name expr))))
        (if (member name '("X" "Y" "Z" "=" ">" "<" ">=" "<=" "AND" "OR" "NOT"
-                          "ATTRIBUTE")
+                          "ATTRIBUTE" "AXIS")
                    :test #'string=)
            `',expr
            expr)))

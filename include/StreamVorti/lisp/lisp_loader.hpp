@@ -73,6 +73,13 @@ struct BoundaryCondition {
     double predicate_value = 0.0;
     double predicate_tolerance = 1e-10;
 
+    /// Normal axis for outflow/pressure BCs: 'x' or 'y' (determines ∂ψ/∂n direction)
+    /// For coordinate predicates, derived from predicate_axis.
+    /// For attribute predicates, from (attribute N :axis x).
+    /// NOTE: Currently unused — Neumann directions use mesh normals instead.
+    /// Retained for methods without mesh geometry (e.g. finite differences) (untested).
+    char normal_axis = '\0';
+
     /// Evaluate whether point (x,y,z) matches this BC's predicate
     bool matchesPredicate(double x, double y, double z = 0.0) const {
         switch (predicate_axis) {
