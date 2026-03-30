@@ -96,6 +96,14 @@ public:
     void ComputeSupportRadiuses(const std::size_t &neighs_num) override;
 
     /*!
+     * \brief Recompute support radii using local + ghost nodes.
+     *
+     * Called after ghost exchange to ensure nodes near partition boundaries
+     * get the same k-NN distance as in serial (partition-independent results).
+     */
+    void RecomputeSupportRadiusesExtended(const std::size_t &neighs_num);
+
+    /*!
      * \brief Get neighbor indices using extended k-NN tree (local + ghost).
      *
      * This overrides the serial NeighborIndices() to use the extended

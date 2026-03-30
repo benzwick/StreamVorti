@@ -193,6 +193,70 @@ void ParSupportDomain::ComputeSupportRadiuses(const std::size_t &neighs_num)
 }
 
 
+void ParSupportDomain::RecomputeSupportRadiusesExtended(const std::size_t &neighs_num)
+{
+    // Recompute support radii using ALL nodes (local + ghost) so that
+    // nodes near partition boundaries get the same k-NN distance as in
+    // serial. This ensures partition-independent DCPSE operators.
+    mfem::StopWatch timer;
+    timer.Start();
+
+    typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+    typedef K::Point_3 Point_3d;
+    typedef CGAL::Search_traits_3<K> TreeTraits;
+    typedef CGAL::Orthogonal_k_neighbor_search<TreeTraits> Neighbor_search;
+    typedef Neighbor_search::Tree Tree;
+
+    // Build point cloud from local + ghost coordinates
+    std::vector<Point_3d> all_coords;
+    int num_ghosts = ghost_node_indices_.size();
+    all_coords.reserve(num_local_nodes_ + num_ghosts);
+
+    // Local nodes
+    for (int i = 0; i < num_local_nodes_; ++i) {
+        int ldof = tdof_to_ldof_[i];
+        double x = 0.0, y = 0.0, z = 0.0;
+        if (dim_ > 0) x = (*local_coords_)(par_fespace_->DofToVDof(ldof, 0));
+        if (dim_ > 1) y = (*local_coords_)(par_fespace_->DofToVDof(ldof, 1));
+        if (dim_ > 2) z = (*local_coords_)(par_fespace_->DofToVDof(ldof, 2));
+        all_coords.emplace_back(Point_3d(x, y, z));
+    }
+
+    // Ghost nodes
+    for (int g = 0; g < num_ghosts; ++g) {
+        double x = ghost_coords_[g * 3 + 0];
+        double y = ghost_coords_[g * 3 + 1];
+        double z = ghost_coords_[g * 3 + 2];
+        all_coords.emplace_back(Point_3d(x, y, z));
+    }
+
+    // Build k-NN tree over all nodes
+    Tree tree(all_coords.begin(), all_coords.end());
+
+    // Recompute support radius for each local node
+    this->support_radiuses_.clear();
+    this->support_radiuses_.reserve(num_local_nodes_);
+
+    for (int i = 0; i < num_local_nodes_; ++i) {
+        Point_3d query = all_coords[i];
+        Neighbor_search search(tree, query, neighs_num);
+
+        std::vector<double> distances;
+        distances.reserve(neighs_num);
+        for (auto it = search.begin(); it != search.end(); ++it) {
+            distances.emplace_back(std::sqrt(it->second));
+        }
+        std::sort(distances.begin(), distances.end());
+        this->support_radiuses_.emplace_back(distances.back());
+    }
+
+    if (rank_ == 0) {
+        std::cout << "ParSupportDomain: recomputed support radii with extended nodes in "
+                  << timer.RealTime() << " s" << std::endl;
+    }
+}
+
+
 void ParSupportDomain::Update()
 {
     mfem::StopWatch timer;
@@ -202,14 +266,22 @@ void ParSupportDomain::Update()
         std::cout << "ParSupportDomain::Update: Starting ghost exchange" << std::endl;
     }
 
-    // Step 1: Compute support radiuses using LOCAL nodes only
-    // This determines how far each node's stencil extends
+    // Step 1: Compute support radiuses using LOCAL nodes only.
+    // This gives an upper bound (local-only k-NN distance >= global k-NN
+    // distance) used to determine which ghost nodes to fetch.
     ComputeSupportRadiuses(num_neighbors_);
 
     // Step 2: Exchange ghost node coordinates with neighboring ranks
     ExchangeGhostCoordinates();
 
-    // Step 3: Build extended k-NN tree (local + ghost nodes)
+    // Step 3: Recompute support radiuses using LOCAL + GHOST nodes.
+    // The initial local-only radii overestimate the true support radius
+    // for nodes near partition boundaries (their actual nearest neighbors
+    // are on other ranks). Recomputing with the full extended node set
+    // gives radii identical to serial, ensuring partition-independent results.
+    RecomputeSupportRadiusesExtended(num_neighbors_);
+
+    // Step 4: Build extended k-NN tree (local + ghost nodes)
     BuildExtendedKnnTree();
 
     ghost_exchange_done_ = true;
