@@ -1480,12 +1480,21 @@ int main(int argc, char *argv[])
             MPI_Reduce(&local_vals[2], &global_min_psi, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
             MPI_Reduce(&local_vals[3], &global_max_psi, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
             if (myid == 0) {
+                double elapsed = main_loop_timer.RealTime();
+                double avg_step_time = elapsed / time_step;
+                int remaining_steps = num_timesteps - time_step;
+                double eta_seconds = avg_step_time * remaining_steps;
+
                 std::cout << "\nStep " << time_step
                           << " | t=" << std::fixed << std::setprecision(2) << current_time
                           << " | ω: [" << std::setprecision(3) << global_min_vort
                           << ", " << global_max_vort << "]"
                           << " | ψ: [" << global_min_psi
-                          << ", " << global_max_psi << "]" << std::endl;
+                          << ", " << global_max_psi << "]"
+                          << " | avg/step: " << std::scientific << std::setprecision(2) << avg_step_time << " s"
+                          << " | elapsed: " << std::fixed << std::setprecision(1) << elapsed << " s"
+                          << " | ETA: " << std::setprecision(1) << eta_seconds << " s"
+                          << std::endl;
             }
         }
 
