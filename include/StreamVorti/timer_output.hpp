@@ -249,9 +249,15 @@ public:
         auto it = sections_.find(section_name);
         if (it == sections_.end())
         {
-            // New section — record insertion order
+            // New section — record insertion order and parent
             section_order_.push_back(section_name);
-            sections_.emplace(section_name, Section());
+            Section s;
+            if (!active_sections_.empty())
+            {
+                s.parent = active_sections_.back();
+                s.depth = sections_.at(s.parent).depth + 1;
+            }
+            sections_.emplace(section_name, std::move(s));
         }
 
         sections_.at(section_name).start();
@@ -325,11 +331,14 @@ public:
         std::ios old_state(nullptr);
         old_state.copyfmt(*stream_);
 
-        // Compute column width from longest section name
+        // Compute column width from longest section name (including indentation)
         unsigned int max_width = 32;
         for (const auto &name : section_order_)
+        {
+            unsigned int depth = sections_.at(name).depth;
             max_width = std::max(max_width,
-                                 static_cast<unsigned int>(name.size()) + 1);
+                                 static_cast<unsigned int>(name.size() + depth * 2) + 1);
+        }
 
         const std::string extra_dash(max_width - 32, '-');
         const std::string extra_space(max_width - 32, ' ');
@@ -417,11 +426,15 @@ public:
         if (is_rank_zero_)
             old_state.copyfmt(*stream_);
 
-        // Compute column width
+        // Compute column width (including indentation)
         unsigned int max_width = 32;
         for (const auto &name : section_order_)
+        {
+            auto it = sections_.find(name);
+            unsigned int depth = (it != sections_.end()) ? it->second.depth : 0;
             max_width = std::max(max_width,
-                                 static_cast<unsigned int>(name.size()) + 1);
+                                 static_cast<unsigned int>(name.size() + depth * 2) + 1);
+        }
 
         const std::string extra_dash(max_width - 32, '-');
         const std::string extra_space(max_width - 32, ' ');
@@ -504,7 +517,9 @@ public:
                 for (double t : all_times) avg_time += t;
                 avg_time /= nprocs;
 
-                std::string name_out = name;
+                unsigned int depth = (it != sections_.end()) ?
+                                     it->second.depth : 0;
+                std::string name_out = std::string(depth * 2, ' ') + name;
                 name_out.resize(max_width, ' ');
 
                 *stream_ << "\n| " << name_out << "| "
@@ -595,6 +610,8 @@ private:
         unsigned int n_laps = 0;
         bool running = false;
         std::unique_ptr<mfem::StopWatch> timer;  ///< Used for current lap
+        std::string parent;                       ///< Parent section name ("" = top-level)
+        unsigned int depth = 0;                   ///< Nesting depth (0 = top-level)
 
         Section() : timer(std::make_unique<mfem::StopWatch>()) {}
 
@@ -620,6 +637,43 @@ private:
     // ================================================================
     // Print helpers
     // ================================================================
+
+    /// Get the reference time for computing a section's percentage.
+    /// Top-level sections use total_time; subsections use their parent's time.
+    double get_reference_time(const Section &s, double total_time,
+                              bool use_cpu) const
+    {
+        if (s.parent.empty())
+            return total_time;
+        const Section &parent = sections_.at(s.parent);
+        return use_cpu ? parent.total_cpu_time : parent.total_wall_time;
+    }
+
+    /// Helper: format a percentage into a stream field.
+    void print_percentage(double section_time, double ref_time) const
+    {
+        *stream_ << std::setw(10);
+        if (ref_time != 0)
+        {
+            double fraction = section_time / ref_time;
+            if (fraction > 0.001)
+                *stream_ << std::setprecision(2) << fraction * 100;
+            else
+                *stream_ << 0.0;
+            *stream_ << "% |";
+        }
+        else
+            *stream_ << 0.0 << "% |";
+    }
+
+    /// Check if any section has a parent (i.e., subsections exist).
+    bool has_subsections() const
+    {
+        for (const auto &name : section_order_)
+            if (sections_.at(name).depth > 0)
+                return true;
+        return false;
+    }
 
     /// Print a single-metric table (CPU or wall).
     void print_table(const std::string &time_label,
@@ -661,33 +715,26 @@ private:
             double section_time = use_cpu ? s.total_cpu_time
                                           : s.total_wall_time;
 
-            std::string name_out = name;
+            // Indent name by depth (2 spaces per level)
+            std::string name_out = std::string(s.depth * 2, ' ') + name;
             name_out.resize(max_width, ' ');
 
             *stream_ << "\n| " << name_out << "| "
                       << std::setw(9) << s.n_laps << " |"
                       << std::setw(10) << std::setprecision(3) << std::fixed
-                      << section_time << "s |"
-                      << std::setw(10);
+                      << section_time << "s |";
 
-            if (total_time != 0)
-            {
-                double fraction = section_time / total_time;
-                if (fraction > 0.001)
-                    *stream_ << std::setprecision(2) << fraction * 100;
-                else
-                    *stream_ << 0.0;
-                *stream_ << "% |";
-            }
-            else
-            {
-                *stream_ << 0.0 << "% |";
-            }
+            print_percentage(section_time, total_time);
         }
 
         *stream_ << "\n+---------------------------------" << extra_dash
-                  << "+-----------+------------+------------+\n"
-                  << std::endl;
+                  << "+-----------+------------+------------+\n";
+
+        if (has_subsections())
+            *stream_ << "Indented sections show % of total;"
+                      << " subsections of the same parent sum to ~parent %.\n";
+
+        *stream_ << std::endl;
     }
 
     /// Print a grouped CPU + wall table.
@@ -696,11 +743,13 @@ private:
                              const std::string &extra_space,
                              unsigned int max_width) const
     {
+        // Top border
         *stream_ << "\n\n+---------------------------------------------"
                   << extra_dash << "+"
                   << "------------+------------+"
                   << "------------+------------+\n";
 
+        // Header row
         std::string header = "Total CPU/wall time elapsed since start";
         header.resize(44 + extra_space.size(), ' ');
         *stream_ << "| " << header << "|"
@@ -708,17 +757,20 @@ private:
                   << total_cpu << "s |            |"
                   << std::setw(10) << total_wall << "s |            |\n";
 
+        // Blank row
         *stream_ << "|                                             "
                   << extra_space << "|"
                   << "            |            |"
                   << "            |            |\n";
 
+        // Column headers
         std::string section_header = "Section";
         section_header.resize(max_width, ' ');
         *stream_ << "| " << section_header << "| no. calls |"
                   << "  CPU time  | % of total |"
                   << "  wall time | % of total |\n";
 
+        // Separator
         *stream_ << "+---------------------------------" << extra_dash
                   << "+-----------+"
                   << "------------+------------+"
@@ -727,50 +779,36 @@ private:
         for (const auto &name : section_order_)
         {
             const Section &s = sections_.at(name);
-            std::string name_out = name;
+            std::string name_out = std::string(s.depth * 2, ' ') + name;
             name_out.resize(max_width, ' ');
 
             *stream_ << "| " << name_out << "| "
                       << std::setw(9) << s.n_laps << " |";
 
-            // CPU column
+            // CPU time + % of total
             *stream_ << std::setw(10) << std::setprecision(3) << std::fixed
-                      << s.total_cpu_time << "s |" << std::setw(10);
-            if (total_cpu != 0)
-            {
-                double fraction = s.total_cpu_time / total_cpu;
-                if (fraction > 0.001)
-                    *stream_ << std::setprecision(2) << fraction * 100;
-                else
-                    *stream_ << 0.0;
-                *stream_ << "% |";
-            }
-            else
-                *stream_ << 0.0 << "% |";
+                      << s.total_cpu_time << "s |";
+            print_percentage(s.total_cpu_time, total_cpu);
 
-            // Wall column
+            // Wall time + % of total
             *stream_ << std::setw(10) << std::setprecision(3) << std::fixed
-                      << s.total_wall_time << "s |" << std::setw(10);
-            if (total_wall != 0)
-            {
-                double fraction = s.total_wall_time / total_wall;
-                if (fraction > 0.001)
-                    *stream_ << std::setprecision(2) << fraction * 100;
-                else
-                    *stream_ << 0.0;
-                *stream_ << "% |";
-            }
-            else
-                *stream_ << 0.0 << "% |";
+                      << s.total_wall_time << "s |";
+            print_percentage(s.total_wall_time, total_wall);
 
             *stream_ << "\n";
         }
 
+        // Bottom border
         *stream_ << "+---------------------------------" << extra_dash
                   << "+-----------+"
                   << "------------+------------+"
-                  << "------------+------------+\n"
-                  << std::endl;
+                  << "------------+------------+\n";
+
+        if (has_subsections())
+            *stream_ << "Indented sections show % of total;"
+                      << " subsections of the same parent sum to ~parent %.\n";
+
+        *stream_ << std::endl;
     }
 
     void print_overhead_note(double overhead) const

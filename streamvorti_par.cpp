@@ -602,7 +602,13 @@ int main(int argc, char *argv[])
 
     mfem::ParGridFunction gf(&fes); // Parallel grid function
 
+    // Section timer for profiling the whole program
+    StreamVorti::TimerOutput section_timer(std::cout,
+        StreamVorti::TimerOutput::never,
+        StreamVorti::TimerOutput::cpu_and_wall_times_grouped);
+
     // ================== Timing PHASE 1: DERIVATIVE COMPUTATION ==================
+    section_timer.enter_subsection("DCPSE computation");
     mfem::StopWatch deriv_timer;
     deriv_timer.Start();
 
@@ -644,9 +650,12 @@ int main(int argc, char *argv[])
     }
 
 
+    section_timer.leave_subsection("DCPSE computation");
+
 // ================================================================
 // PART 1: INITIALIZATION
 // ================================================================
+    section_timer.enter_subsection("Preprocessing");
 
     const int num_nodes = fes.GetTrueVSize();
 
@@ -1041,14 +1050,13 @@ int main(int argc, char *argv[])
 // ====================================================================
 // PART 2: TIME-STEPPING LOOP
 // ====================================================================
+    section_timer.leave_subsection("Preprocessing");
+
     // ================== Timing PHASE 3: SIMULATION  ==================
     mfem::StopWatch main_loop_timer;
     main_loop_timer.Start();
 
-    // Section timer for profiling (no MPI barriers — use print_wall_time_statistics for rank stats)
-    StreamVorti::TimerOutput section_timer(std::cout,
-        StreamVorti::TimerOutput::never,
-        StreamVorti::TimerOutput::wall_times);
+    section_timer.enter_subsection("Time stepping");
 
     // Main simulation loop (implementing Algorithm from Bourantas et al. 2019)
 
@@ -1519,11 +1527,7 @@ int main(int argc, char *argv[])
 
     main_loop_timer.Stop();
     double total_solve_time = main_loop_timer.RealTime();
-
-    // Print section timing summary and MPI statistics
-    if (myid == 0)
-        section_timer.print_summary();
-    section_timer.print_wall_time_statistics(MPI_COMM_WORLD);
+    section_timer.leave_subsection("Time stepping");
 
     std::cout << "\nSimulation completed successfully in "
             << main_loop_timer.RealTime() << " seconds." << std::endl;
@@ -1531,6 +1535,7 @@ int main(int argc, char *argv[])
 // ====================================================================
 // PART 3: POST-PROCESSING
 // ====================================================================
+    section_timer.enter_subsection("Post-processing");
 
     // Extract line probe data for validation
 #ifdef STREAMVORTI_WITH_ECL
@@ -1600,6 +1605,13 @@ int main(int argc, char *argv[])
         StreamVorti::Lisp::Runtime::shutdown();
     }
 #endif
+
+    section_timer.leave_subsection("Post-processing");
+
+    // Print section timing summary and MPI statistics
+    if (myid == 0)
+        section_timer.print_summary();
+    section_timer.print_wall_time_statistics(MPI_COMM_WORLD);
 
     if (myid == 0) {
         std::cout << "main: success!" << std::endl;
