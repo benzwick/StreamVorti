@@ -354,7 +354,8 @@ public:
                 double effective_total = total_cpu;
                 double sum_cpu = 0;
                 for (const auto &kv : sections_)
-                    sum_cpu += kv.second.total_cpu_time;
+                    if (kv.second.parent.empty())
+                        sum_cpu += kv.second.total_cpu_time;
                 if (sum_cpu > effective_total)
                     effective_total = sum_cpu;
 
@@ -381,7 +382,8 @@ public:
             double effective_cpu = total_cpu;
             double sum_cpu = 0;
             for (const auto &kv : sections_)
-                sum_cpu += kv.second.total_cpu_time;
+                if (kv.second.parent.empty())
+                    sum_cpu += kv.second.total_cpu_time;
             if (sum_cpu > effective_cpu)
                 effective_cpu = sum_cpu;
 
