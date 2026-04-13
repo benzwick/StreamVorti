@@ -34,6 +34,7 @@
 
 // Related header
 #include <StreamVorti/streamvorti_par.hpp>
+#include <StreamVorti/timer_output.hpp>
 
 // SDL/Lisp support (conditional)
 #ifdef STREAMVORTI_WITH_ECL
@@ -1044,6 +1045,11 @@ int main(int argc, char *argv[])
     mfem::StopWatch main_loop_timer;
     main_loop_timer.Start();
 
+    // Section timer for profiling (no MPI barriers — use print_wall_time_statistics for rank stats)
+    StreamVorti::TimerOutput section_timer(std::cout,
+        StreamVorti::TimerOutput::never,
+        StreamVorti::TimerOutput::wall_times);
+
     // Main simulation loop (implementing Algorithm from Bourantas et al. 2019)
 
     for (int time_step = 1; time_step <= num_timesteps; ++time_step) {
@@ -1055,68 +1061,78 @@ int main(int argc, char *argv[])
         // ================================================================
         // STEP 1: COMPUTE ALL DERIVATIVES (reused by all subsequent steps)
         // ================================================================
-        dy_matrix.Mult(streamfunction, dpsi_dy);      // ∂ψ/∂y = u
-        dx_matrix.Mult(streamfunction, dpsi_dx);      // ∂ψ/∂x = -v (will negate later)
-        dx_matrix.Mult(vorticity, domega_dx);         // ∂ω/∂x
-        dy_matrix.Mult(vorticity, domega_dy);         // ∂ω/∂y
-        dxx_matrix.Mult(vorticity, d2omega_dx2);      // ∂²ω/∂x²
-        dyy_matrix.Mult(vorticity, d2omega_dy2);      // ∂²ω/∂y²
+        {
+            StreamVorti::TimerOutput::Scope t(section_timer, "Derivatives (SpMV)");
+            dy_matrix.Mult(streamfunction, dpsi_dy);      // ∂ψ/∂y = u
+            dx_matrix.Mult(streamfunction, dpsi_dx);      // ∂ψ/∂x = -v (will negate later)
+            dx_matrix.Mult(vorticity, domega_dx);         // ∂ω/∂x
+            dy_matrix.Mult(vorticity, domega_dy);         // ∂ω/∂y
+            dxx_matrix.Mult(vorticity, d2omega_dx2);      // ∂²ω/∂x²
+            dyy_matrix.Mult(vorticity, d2omega_dy2);      // ∂²ω/∂y²
+        }
 
         // ================================================================
         // STEP 2: UPDATE VORTICITY (using derivatives computed above) (interior only)
         // ================================================================
         // Use explicit Euler scheme (Eq. 11)
+        {
+            StreamVorti::TimerOutput::Scope t(section_timer, "Vorticity update");
 #ifdef _OPENMP
-        #pragma omp parallel for schedule(static)
-        for (int i = 0; i < (int)interior_nodes.size(); ++i) {
-            int idx = interior_nodes[i];
-            double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
-            double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
-            if (params.check_residuals) {
-                convection_term[idx] = convection;
-                diffusion_term[idx] = diffusion;
+            #pragma omp parallel for schedule(static)
+            for (int i = 0; i < (int)interior_nodes.size(); ++i) {
+                int idx = interior_nodes[i];
+                double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
+                double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
+                if (params.check_residuals) {
+                    convection_term[idx] = convection;
+                    diffusion_term[idx] = diffusion;
+                }
+                vorticity[idx] += current_dt * (diffusion - convection);
             }
-            vorticity[idx] += current_dt * (diffusion - convection);
-        }
 #else
-        for (int idx : interior_nodes) {
-            double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
-            double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
-            if (params.check_residuals) {
-                convection_term[idx] = convection;
-                diffusion_term[idx] = diffusion;
+            for (int idx : interior_nodes) {
+                double convection = dpsi_dy[idx] * domega_dx[idx] - dpsi_dx[idx] * domega_dy[idx];
+                double diffusion = (1.0 / params.reynolds_number) * (d2omega_dx2[idx] + d2omega_dy2[idx]);
+                if (params.check_residuals) {
+                    convection_term[idx] = convection;
+                    diffusion_term[idx] = diffusion;
+                }
+                vorticity[idx] += current_dt * (diffusion - convection);
             }
-            vorticity[idx] += current_dt * (diffusion - convection);
-        }
 #endif
-
+        }
 
         // ================================================================
         // STEP 3: SOLVE STREAMFUNCTION POISSON EQUATION (Equation 12)
         // ================================================================
-        // Solve -∇²ψ = ω instead ∇²ψ = -ω, so that RHS stays positive for linear solvers (cg)
-        rhs = vorticity;
+        {
+            StreamVorti::TimerOutput::Scope t(section_timer, "Poisson solve");
+            // Solve -∇²ψ = ω instead ∇²ψ = -ω, so that RHS stays positive for linear solvers (cg)
+            rhs = vorticity;
 
-        // Apply boundary conditions to Poisson RHS:
-        //   Neumann nodes: rhs = 0 (∂ψ/∂n = 0, natural outflow)
-        //   Dirichlet nodes: EliminateBC sets rhs = psi_bc and corrects
-        //   interior RHS for eliminated column contributions.
-        for (const auto& [idx, axis] : neumann_psi_info) {
-            rhs[idx] = 0.0;
+            // Apply boundary conditions to Poisson RHS:
+            //   Neumann nodes: rhs = 0 (∂ψ/∂n = 0, natural outflow)
+            //   Dirichlet nodes: EliminateBC sets rhs = psi_bc and corrects
+            //   interior RHS for eliminated column contributions.
+            for (const auto& [idx, axis] : neumann_psi_info) {
+                rhs[idx] = 0.0;
+            }
+            A_h.EliminateBC(Ae_h, ess_tdof_list, psi_bc, rhs);
+
+            linear_solver->Mult(rhs, streamfunction);
         }
-        A_h.EliminateBC(Ae_h, ess_tdof_list, psi_bc, rhs);
-
-        linear_solver->Mult(rhs, streamfunction);
 
         // ================================================================
         // STEP 4: APPLY BOUNDARY CONDITIONS
         // ================================================================
-        // Compute velocities from updated streamfunction:
-        //   u = ∂ψ/∂y   (Eq. 3a)
-        //   v = -∂ψ/∂x  (Eq. 3b)
-        dy_matrix.Mult(streamfunction, u_velocity);  // u = ∂ψ/∂y
-        dx_matrix.Mult(streamfunction, v_velocity);  // temp = ∂ψ/∂x
-        v_velocity *= -1.0;                          // v = -∂ψ/∂x
+        {
+            StreamVorti::TimerOutput::Scope t(section_timer, "Boundary conditions");
+            // Compute velocities from updated streamfunction:
+            //   u = ∂ψ/∂y   (Eq. 3a)
+            //   v = -∂ψ/∂x  (Eq. 3b)
+            dy_matrix.Mult(streamfunction, u_velocity);  // u = ∂ψ/∂y
+            dx_matrix.Mult(streamfunction, v_velocity);  // temp = ∂ψ/∂x
+            v_velocity *= -1.0;                          // v = -∂ψ/∂x
 
 #ifdef STREAMVORTI_WITH_ECL
         if (use_sdl_bcs) {
@@ -1186,6 +1202,7 @@ int main(int argc, char *argv[])
         for (int idx : all_boundary_nodes) {
             vorticity[idx] = dv_dx[idx] - du_dy[idx];
         }
+        } // End Boundary conditions scope
 
         // ================================================================
         // STEP 5: COMPUTE AND LOG RESIDUALS (if enabled)
@@ -1502,6 +1519,11 @@ int main(int argc, char *argv[])
 
     main_loop_timer.Stop();
     double total_solve_time = main_loop_timer.RealTime();
+
+    // Print section timing summary and MPI statistics
+    if (myid == 0)
+        section_timer.print_summary();
+    section_timer.print_wall_time_statistics(MPI_COMM_WORLD);
 
     std::cout << "\nSimulation completed successfully in "
             << main_loop_timer.RealTime() << " seconds." << std::endl;
