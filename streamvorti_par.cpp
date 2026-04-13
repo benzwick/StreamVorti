@@ -887,20 +887,26 @@ int main(int argc, char *argv[])
     mfem::Solver* precond = nullptr;
 
     if (params.solver_type == "cg") {
-        if (myid == 0) std::cout << "Using HyprePCG solver (parallel conjugate gradient)" << std::endl;
+        if (myid == 0) std::cout << "Using HyprePCG solver with BoomerAMG preconditioner" << std::endl;
         mfem::HyprePCG* cg_solver = new mfem::HyprePCG(MPI_COMM_WORLD);
         cg_solver->SetTol(params.solver_rel_tol);
         cg_solver->SetMaxIter(params.solver_max_iter);
         cg_solver->SetPrintLevel(params.solver_print_level);
+        precond = new mfem::HypreBoomerAMG(*laplacian_matrix);
+        static_cast<mfem::HypreBoomerAMG*>(precond)->SetPrintLevel(0);
+        cg_solver->SetPreconditioner(*static_cast<mfem::HypreBoomerAMG*>(precond));
         cg_solver->SetOperator(*laplacian_matrix);
         linear_solver = cg_solver;
     }
     else if (params.solver_type == "gmres") {
-        if (myid == 0) std::cout << "Using HypreGMRES solver (parallel GMRES)" << std::endl;
+        if (myid == 0) std::cout << "Using HypreGMRES solver with BoomerAMG preconditioner" << std::endl;
         mfem::HypreGMRES* gmres_solver = new mfem::HypreGMRES(MPI_COMM_WORLD);
         gmres_solver->SetTol(params.solver_rel_tol);
         gmres_solver->SetMaxIter(params.solver_max_iter);
         gmres_solver->SetPrintLevel(params.solver_print_level);
+        precond = new mfem::HypreBoomerAMG(*laplacian_matrix);
+        static_cast<mfem::HypreBoomerAMG*>(precond)->SetPrintLevel(0);
+        gmres_solver->SetPreconditioner(*static_cast<mfem::HypreBoomerAMG*>(precond));
         gmres_solver->SetOperator(*laplacian_matrix);
         linear_solver = gmres_solver;
     }
@@ -1572,6 +1578,7 @@ int main(int argc, char *argv[])
     delete deriv_op;
     delete laplacian_matrix;
     delete linear_solver;
+    delete precond;
     delete mesh;
 
     MPI_Finalize();
