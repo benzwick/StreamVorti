@@ -336,7 +336,7 @@ int main(int argc, char *argv[])
                    "Safety factor for Gershgorin timestep (default: 5.0).");
     // Solver options
     args.AddOption(&params.solver_type, "-solver", "--linear-solver",
-                   "Linear solver. Parallel: cg, gmres, hypre/amg, mumps, superlu (if MFEM built with them).");
+                   "Linear solver. Parallel: cg, gmres, hypre/amg, mumps, superlu, umfpack (np=1) (if MFEM built with them).");
     args.AddOption(&params.symmetrize_laplacian, "-sym", "--symmetrize",
                    "-no-sym", "--no-symmetrize",
                    "Symmetrize DCPSE Laplacian: L=(L+L^T)/2 (required for CG/PCG solvers).");
@@ -957,6 +957,23 @@ int main(int argc, char *argv[])
         solver_matrix = slu_mat;  // store so we can delete it later
     }
 #endif
+#ifdef MFEM_USE_SUITESPARSE
+    else if (params.solver_type == "umfpack") {
+        if (num_procs > 1) {
+            MFEM_ABORT("UMFPack is a serial solver. Use -np 1 with -solver umfpack, "
+                       "or use mumps/superlu for parallel runs.");
+        }
+        if (myid == 0) std::cout << "Using UMFPack direct solver (serial sparse LU, np=1 only)" << std::endl;
+        // For np=1, the HypreParMatrix's diagonal block is the entire global matrix.
+        // GetDiag returns a non-owning view, so we copy it for UMFPack to factorize.
+        mfem::SparseMatrix diag_view;
+        laplacian_matrix->GetDiag(diag_view);
+        mfem::SparseMatrix* diag_copy = new mfem::SparseMatrix(diag_view);
+        mfem::UMFPackSolver* umf_solver = new mfem::UMFPackSolver(*diag_copy);
+        linear_solver = umf_solver;
+        solver_matrix = diag_copy;  // delete with linear_solver
+    }
+#endif
     else {
         MFEM_ABORT("Parallel solver type '" << params.solver_type
                    << "' not supported. Use: cg, gmres, hypre/amg"
@@ -965,6 +982,9 @@ int main(int argc, char *argv[])
 #endif
 #ifdef MFEM_USE_SUPERLU
                    << ", superlu"
+#endif
+#ifdef MFEM_USE_SUITESPARSE
+                   << ", umfpack (np=1 only)"
 #endif
                    );
     }
