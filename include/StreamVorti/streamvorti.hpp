@@ -117,6 +117,9 @@ struct SimulationParams {
     // Residual monitoring and diagnostics
     bool check_residuals = false;          ///< Enable residual computation and logging
     int residual_check_freq = 100;         ///< Compute residuals every N timesteps
+
+    // Matrix diagnostics
+    bool compute_condition_number = false; ///< Estimate condition number of the Laplacian matrix
 };
 
 /**

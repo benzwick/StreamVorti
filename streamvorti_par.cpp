@@ -352,6 +352,10 @@ int main(int argc, char *argv[])
                 "Enable or disable residual monitoring and logging.");
     args.AddOption(&params.residual_check_freq, "-rcf", "--residual-check-freq",
                 "Frequency of residual checks (default: 100).");
+    args.AddOption(&params.compute_condition_number,
+                "-cond", "--compute-condition-number",
+                "-no-cond", "--no-compute-condition-number",
+                "Estimate condition number of the Laplacian matrix (one-time, after setup).");
     args.Parse();
 
     if (!args.Good()) {
@@ -933,6 +937,60 @@ int main(int argc, char *argv[])
     factor_timer.Stop();
     perf_metrics.factorization_time = factor_timer.RealTime();
     std::cout << "Phase 2 - Solver setup: " << perf_metrics.factorization_time << " s" << std::endl;
+
+    // ================================================================
+    // Estimate condition number of the Laplacian (one-time diagnostic)
+    // ================================================================
+    if (params.compute_condition_number) {
+        if (myid == 0)
+            std::cout << "\nEstimating Laplacian matrix condition number..." << std::endl;
+
+        mfem::StopWatch cond_timer;
+        cond_timer.Start();
+
+        // Largest eigenvalue: power iteration on A
+        mfem::HypreParVector v_max(MPI_COMM_WORLD,
+                                   laplacian_matrix->GetGlobalNumRows(),
+                                   laplacian_matrix->GetRowStarts());
+        mfem::PowerMethod power(MPI_COMM_WORLD);
+        double lambda_max = power.EstimateLargestEigenvalue(
+            *laplacian_matrix, v_max, 100, 1e-6);
+
+        // Smallest eigenvalue: LOBPCG with AMG preconditioner
+        // (LOBPCG finds smallest eigenvalues by default)
+        mfem::HypreBoomerAMG cond_precond(*laplacian_matrix);
+        cond_precond.SetPrintLevel(0);
+
+        mfem::HypreLOBPCG lobpcg(MPI_COMM_WORLD);
+        lobpcg.SetNumModes(1);
+        lobpcg.SetPreconditioner(cond_precond);
+        lobpcg.SetMaxIter(200);
+        lobpcg.SetTol(1e-6);
+        lobpcg.SetPrintLevel(0);
+        lobpcg.SetOperator(*laplacian_matrix);
+        lobpcg.Solve();
+
+        mfem::Array<double> eigs;
+        lobpcg.GetEigenvalues(eigs);
+        double lambda_min = eigs[0];
+
+        cond_timer.Stop();
+
+        if (myid == 0) {
+            double cond = lambda_max / lambda_min;
+            std::cout << "  λ_min = " << std::scientific << std::setprecision(4)
+                      << lambda_min << std::endl;
+            std::cout << "  λ_max = " << lambda_max << std::endl;
+            std::cout << "  cond(A) ≈ " << cond << std::endl;
+            std::cout << "  CG iterations needed for tol ε ~ "
+                      << "0.5 * sqrt(cond) * ln(2/ε)" << std::endl;
+            double iters_1em8 = 0.5 * std::sqrt(cond) * std::log(2.0 / 1e-8);
+            std::cout << "  Estimated CG iters (tol=1e-8, no precond): "
+                      << static_cast<int>(iters_1em8) << std::endl;
+            std::cout << "  Computed in " << std::fixed << std::setprecision(3)
+                      << cond_timer.RealTime() << " s" << std::endl;
+        }
+    }
 
     // Initialize solution vectors
     mfem::Vector vorticity(num_nodes);
