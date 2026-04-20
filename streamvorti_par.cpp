@@ -336,7 +336,7 @@ int main(int argc, char *argv[])
                    "Safety factor for Gershgorin timestep (default: 5.0).");
     // Solver options
     args.AddOption(&params.solver_type, "-solver", "--linear-solver",
-                   "Linear solver: umfpack, cg, gmres, minres, bicgstab, hypre (if available)");
+                   "Linear solver. Parallel: cg, gmres, hypre/amg, mumps, superlu (if MFEM built with them).");
     args.AddOption(&params.symmetrize_laplacian, "-sym", "--symmetrize",
                    "-no-sym", "--no-symmetrize",
                    "Symmetrize DCPSE Laplacian: L=(L+L^T)/2 (required for CG/PCG solvers).");
@@ -899,6 +899,7 @@ int main(int argc, char *argv[])
     // Create parallel Hypre solver (inline for HypreParMatrix compatibility)
     mfem::Solver* linear_solver = nullptr;
     mfem::Solver* precond = nullptr;
+    mfem::Operator* solver_matrix = nullptr;  ///< Auxiliary matrix (e.g., SuperLU format)
 
     if (params.solver_type == "cg") {
         if (myid == 0) std::cout << "Using HyprePCG solver with BoomerAMG preconditioner" << std::endl;
@@ -930,8 +931,42 @@ int main(int argc, char *argv[])
         amg_solver->SetPrintLevel(params.solver_print_level);
         linear_solver = amg_solver;
     }
+#ifdef MFEM_USE_MUMPS
+    else if (params.solver_type == "mumps") {
+        if (myid == 0) std::cout << "Using MUMPS direct solver (parallel sparse LU)" << std::endl;
+        mfem::MUMPSSolver* mumps_solver = new mfem::MUMPSSolver(MPI_COMM_WORLD);
+        mumps_solver->SetPrintLevel(params.solver_print_level);
+        // Use SPD factorization if matrix has been symmetrized; otherwise unsymmetric
+        if (params.symmetrize_laplacian) {
+            mumps_solver->SetMatrixSymType(mfem::MUMPSSolver::SYMMETRIC_POSITIVE_DEFINITE);
+        } else {
+            mumps_solver->SetMatrixSymType(mfem::MUMPSSolver::UNSYMMETRIC);
+        }
+        mumps_solver->SetOperator(*laplacian_matrix);  // performs factorization
+        linear_solver = mumps_solver;
+    }
+#endif
+#ifdef MFEM_USE_SUPERLU
+    else if (params.solver_type == "superlu") {
+        if (myid == 0) std::cout << "Using SuperLU_DIST direct solver (parallel sparse LU)" << std::endl;
+        mfem::SuperLURowLocMatrix* slu_mat = new mfem::SuperLURowLocMatrix(*laplacian_matrix);
+        mfem::SuperLUSolver* slu_solver = new mfem::SuperLUSolver(MPI_COMM_WORLD);
+        slu_solver->SetPrintStatistics(params.solver_print_level > 0);
+        slu_solver->SetOperator(*slu_mat);  // performs factorization
+        linear_solver = slu_solver;
+        solver_matrix = slu_mat;  // store so we can delete it later
+    }
+#endif
     else {
-        MFEM_ABORT("Parallel solver type '" << params.solver_type << "' not supported. Use: cg, gmres, hypre");
+        MFEM_ABORT("Parallel solver type '" << params.solver_type
+                   << "' not supported. Use: cg, gmres, hypre/amg"
+#ifdef MFEM_USE_MUMPS
+                   << ", mumps"
+#endif
+#ifdef MFEM_USE_SUPERLU
+                   << ", superlu"
+#endif
+                   );
     }
 
     factor_timer.Stop();
@@ -1680,6 +1715,7 @@ int main(int argc, char *argv[])
     delete laplacian_matrix;
     delete linear_solver;
     delete precond;
+    delete solver_matrix;
     delete mesh;
 
     MPI_Finalize();
