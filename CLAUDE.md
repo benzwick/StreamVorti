@@ -2,18 +2,47 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build Commands
+## Dependencies — local build in `_reference/`
 
-Build the project using CMake:
+All major dependencies (MFEM, HYPRE) are built locally from the git submodules in `_reference/`. **Do not look in `/opt/mfem/` or other system locations** — the canonical build is local.
+
+### 1. Build HYPRE (one-time)
+
+```bash
+cd _reference/hypre/src/cmbuild
+cmake .. -DHYPRE_WITH_MPI=ON -DCMAKE_BUILD_TYPE=Release
+make -j6
+make install   # installs to _reference/hypre/src/hypre/
+```
+
+### 2. Build MFEM (one-time)
+
+MFEM is built with MPI, MUMPS (parallel direct solver), SuperLU, and SuiteSparse (UMFPack):
+
+```bash
+cd _reference/mfem
+mkdir build && cd build
+cmake .. \
+  -DMFEM_USE_MPI=YES \
+  -DMFEM_USE_MUMPS=YES \
+  -DMFEM_USE_SUPERLU=YES \
+  -DMFEM_USE_SUITESPARSE=YES \
+  -DHYPRE_DIR=$(realpath ../../hypre/src/hypre) \
+  -DCMAKE_BUILD_TYPE=Release
+make -j6
+```
+
+### 3. Build StreamVorti
+
 ```bash
 mkdir build && cd build
-cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug ..
+cmake -DMFEM_DIR=$(realpath ../_reference/mfem/build) -DCMAKE_BUILD_TYPE=Debug ..
 make -j6
 ```
 
 With ECL (enables SDL/Lisp simulation files):
 ```bash
-cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug -DSTREAMVORTI_WITH_ECL=ON ..
+cmake -DMFEM_DIR=$(realpath ../_reference/mfem/build) -DCMAKE_BUILD_TYPE=Debug -DSTREAMVORTI_WITH_ECL=ON ..
 ```
 
 With Gmsh (enables unstructured mesh generation via gmsh-cl, requires ECL):
@@ -31,7 +60,7 @@ make -j6
 
 # 3. Build StreamVorti with Gmsh support
 cd $PROJECT_ROOT/build
-cmake -DMFEM_DIR=/opt/mfem/mfem-4.8 -DCMAKE_BUILD_TYPE=Debug \
+cmake -DMFEM_DIR=$(realpath ../_reference/mfem/build) -DCMAKE_BUILD_TYPE=Debug \
       -DSTREAMVORTI_WITH_ECL=ON -DSTREAMVORTI_WITH_GMSH=ON ..
 make -j6
 ```
@@ -50,13 +79,18 @@ The build produces:
 - `MfemRun` - Derivative export tool (from `mfem_main.cpp`) - outputs DCPSE derivatives for MATLAB/Python
 - `libStreamVorti_static.a` - Static library in `build/lib/StreamVorti/`
 
-## Dependencies
+## System dependencies (apt packages)
 
 **Required:**
-- MFEM library (specify path with `-DMFEM_DIR`)
-- CGAL (Computational Geometry Algorithms Library)
-- Eigen3 (linear algebra library)
-- OpenMP (shared-memory parallelism)
+- `libcgal-dev` — Computational Geometry Algorithms Library
+- `libeigen3-dev` — linear algebra
+- `libopenmpi-dev` — MPI
+- `libsuitesparse-dev` — UMFPack and friends (for MFEM_USE_SUITESPARSE)
+- `libsuperlu-dist-dev` — distributed parallel sparse direct solver (for MFEM_USE_SUPERLU)
+- `libmumps-dev` — parallel sparse direct solver (for MFEM_USE_MUMPS)
+- `libmetis-dev` — mesh partitioning
+
+OpenMP comes with the system compiler.
 
 **Debian Linux Note:** If you encounter `fatal error: Eigen/Dense: No such file or directory`, create symlinks:
 ```bash
