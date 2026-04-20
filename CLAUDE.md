@@ -17,7 +17,14 @@ make install   # installs to _reference/hypre/src/hypre/
 
 ### 2. Build MFEM (one-time)
 
-MFEM is built with MPI, MUMPS (parallel direct solver), SuperLU, and SuiteSparse (UMFPack):
+MFEM is built with MPI, MUMPS (parallel direct solver), SuperLU_DIST, and SuiteSparse (UMFPack).
+
+The Debian system MUMPS does not link against ParMETIS, so we override
+`MUMPS_REQUIRED_PACKAGES` to drop that dependency. Similarly, we provide
+explicit paths for SuperLU_DIST and `MUMPS_LIBRARIES` because MFEM's default
+search paths assume self-built tarballs in sibling directories. The explicit
+`MUMPS_LIBRARIES` list also avoids MFEM's autodetection adding `MPI::MPI_C`
+(unimported) as a transitive ScaLAPACK dependency.
 
 ```bash
 cd _reference/mfem
@@ -28,6 +35,10 @@ cmake .. \
   -DMFEM_USE_SUPERLU=YES \
   -DMFEM_USE_SUITESPARSE=YES \
   -DHYPRE_DIR=$(realpath ../../hypre/src/hypre) \
+  -DSuperLUDist_INCLUDE_DIRS=/usr/include/superlu-dist \
+  -DSuperLUDist_LIBRARIES=/usr/lib/x86_64-linux-gnu/libsuperlu_dist.so \
+  -DMUMPS_REQUIRED_PACKAGES="MPI_Fortran;METIS;LAPACK;BLAS" \
+  -DMUMPS_LIBRARIES="/usr/lib/x86_64-linux-gnu/libdmumps.so;/usr/lib/x86_64-linux-gnu/libmumps_common.so;/usr/lib/x86_64-linux-gnu/libpord.so;/usr/lib/x86_64-linux-gnu/libscalapack-openmpi.so" \
   -DCMAKE_BUILD_TYPE=Release
 make -j6
 ```
@@ -88,7 +99,15 @@ The build produces:
 - `libsuitesparse-dev` — UMFPack and friends (for MFEM_USE_SUITESPARSE)
 - `libsuperlu-dist-dev` — distributed parallel sparse direct solver (for MFEM_USE_SUPERLU)
 - `libmumps-dev` — parallel sparse direct solver (for MFEM_USE_MUMPS)
+- `libscalapack-openmpi-dev` — required by MUMPS
 - `libmetis-dev` — mesh partitioning
+
+Install everything in one go:
+```bash
+sudo apt install libcgal-dev libeigen3-dev libopenmpi-dev libsuitesparse-dev \
+                 libsuperlu-dist-dev libmumps-dev libscalapack-openmpi-dev \
+                 libmetis-dev
+```
 
 OpenMP comes with the system compiler.
 
