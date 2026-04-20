@@ -308,6 +308,7 @@ void ParSupportDomain::ExchangeGhostCoordinates()
             std::cout << "  Ghost exchange: single rank, no exchange needed ("
                       << timer.RealTime() << " s)" << std::endl;
         }
+        ghost_exchange_done_ = true;
         return;
     }
 
